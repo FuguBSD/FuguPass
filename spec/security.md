@@ -41,9 +41,12 @@ Revocation from the plate rests on that property
 - **SAFE-MEMORY-1** — Every exit path that held a secret must clear the secret with
   `explicit_bzero(3)`.
 - **SAFE-MEMORY-2** — Every secret comparison must use `timingsafe_bcmp(3)`.
-- **SAFE-MEMORY-3** — Every FuguPass program must set `RLIMIT_CORE` to zero with
-  `setrlimit(2)`, first in `main()`. A crash must not write a secret to a core file.
-- **SAFE-MEMORY-4** — The passphrase must enter through `readpassphrase(3)`.
+- **SAFE-MEMORY-3** — Every FuguPass C program must set `RLIMIT_CORE` to zero with
+  `setrlimit(2)`, first in `main()`. The interface process inherits the zero limit
+  from the core process ([CLI-IFACE](programs.md#cli-iface)). A crash must not
+  write a secret to a core file.
+- **SAFE-MEMORY-4** — The passphrase must enter through `readpassphrase(3)`, in the
+  core process ([CLI-IFACE](programs.md#cli-iface)).
 - **SAFE-MEMORY-5** — The master must exist in memory only inside a ceremony
   ([KEY-MASTER](keys.md#key-master)).
 - **SAFE-MEMORY-6** — An entry key must exist in memory for seconds only. The client
@@ -53,6 +56,8 @@ OpenBSD encrypts swap by default, and the base clang hardening applies to every
 build.
 These platform properties support the rules above.
 They replace none of them.
+The interface process holds no secret ([CLI-IFACE](programs.md#cli-iface)), so the
+erasure rules bind the C programs.
 
 <a id="safe-floor"></a>
 

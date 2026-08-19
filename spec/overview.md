@@ -9,7 +9,8 @@ This document holds the claims and the accepted limits.
 
 ## Purpose
 
-FuguPass is a password manager, written in C for OpenBSD.
+FuguPass is a password manager for OpenBSD. The vault core is C, and the interface
+program is Perl on the Fugu library (D-16).
 It makes a laptop vault behave like a Blockstream Jade. The vault on disk is the flash.
 An ordered set of blind PIN oracles is the PIN server, with a k-of-n quorum per
 reveal. The SeedQR plate is the recovery phrase.
@@ -85,7 +86,7 @@ The scope covers:
 - Recovery from the plate, with or without vault files
   ([REC-PRINCIPLE](recovery.md#rec-principle)).
 - Revocation of a stolen machine from the plate ([ORC-REVOKE](oracle.md#orc-revoke)).
-- Three sandboxed programs, with SeedQR import and export
+- Four sandboxed programs, with SeedQR import and export
   ([CLI-SPLIT](programs.md#cli-split)).
 
 The non-goals bound every claim in this specification:

@@ -1,47 +1,102 @@
 # Programs
 
-This document specifies the FuguPass programs: the vault program, the scan helper,
-and the QR render helper.
+This document specifies the FuguPass programs: the vault program, the interface
+program, the scan helper, and the QR render helper.
 Each program runs on OpenBSD and restricts itself with `pledge(2)` and `unveil(2)`.
-Each program has a man page in `mdoc(7)`: `fugupass(1)`, `fugupass-scan(1)`, and
-`fugupass-qr(1)`.
+Each program has a man page in `mdoc(7)`: `fugupass(1)`, `fugupass-repl(1)`,
+`fugupass-scan(1)`, and `fugupass-qr(1)`.
+In an interactive session, `fugupass` is the core process, and `fugupass-repl` is
+the interface process.
 
 <a id="cli-split"></a>
 
 ## Program split
 
-- **CLI-SPLIT-1** — FuguPass has exactly three programs. Each program has one job
-  (D-15). `fugupass` holds the vault core, the REPL, and the one-shot subcommands.
-  `fugupass-scan` turns camera frames into decoded QR text on stdout. `fugupass-qr`
-  turns stdin into a QR code on the terminal.
+- **CLI-SPLIT-1** — FuguPass has exactly four programs. Each program has one job
+  (D-15, D-16). `fugupass` holds the vault core, the one-shot subcommands, and the
+  ceremonies. `fugupass-repl` holds the REPL: it reads operator command lines and
+  shows non-secret output ([CLI-IFACE](programs.md#cli-iface)). `fugupass-scan`
+  turns camera frames into decoded QR text on stdout. `fugupass-qr` turns stdin
+  into a QR code on the terminal.
 - **CLI-SPLIT-2** — The vault process must not parse camera data and must not parse
   QR image data (D-15). The camera code and the QR codecs live in the helper
   programs only.
 - **CLI-SPLIT-3** — `fugupass` must make its unveil calls before its pledge call and
   must pledge `stdio rpath wpath cpath flock proc exec inet dns tty`. It must unveil
-  only these paths: the vault directory (`rwc`), `/dev/tty` (`rw`), the two helper
-  programs (`x`), and the resolver files that name lookup needs (`r`).
+  only these paths: the vault directory (`rwc`), `/dev/tty` (`rw`), the three child
+  programs (`x`), the runtime files that the child programs load (`r`), and the
+  resolver files that name lookup needs (`r`).
 - **CLI-SPLIT-4** — `fugupass-scan` must unveil the video devices (`/dev/video*`)
   only and must pledge `stdio video` after it opens the device.
 - **CLI-SPLIT-5** — `fugupass-qr` must pledge `stdio` only.
 - **CLI-SPLIT-6** — FuguPass must not implement an agent process and must not
   implement a network service. The oracle client inside `fugupass` is the only
   network code (D-18).
+- **CLI-SPLIT-7** — `fugupass-repl` is Perl on the Fugu library, and Fugu::REPL is
+  its line editor (D-16). After it loads its modules, it must pledge `stdio tty`.
+  It must not open a file, must not create a process, and must not reach the
+  network.
 
-`fugupass` runs the helpers as child processes and exchanges text over pipes.
-Text crosses the process boundary, never image data.
+`fugupass` runs the interface program and the helpers as child processes and
+exchanges text over pipes.
+Text crosses the process boundary, never image data and never a secret.
 The scan helper carries the camera and codec attack surface and holds no vault key
 and no oracle key.
 The render helper holds only the bytes on its stdin.
+The interface process carries the line editor and the command parser and holds no
+secret ([CLI-IFACE](programs.md#cli-iface)).
+The interface process lives only for its session, so it is not an agent process
+(D-18).
+The runtime files of a child program are its dynamic linker, its shared libraries,
+and, for the interface process, the Perl runtime and the Fugu modules.
+
+<a id="cli-iface"></a>
+
+## The interface boundary
+
+- **CLI-IFACE-1** — A run of `fugupass` with no subcommand must start the
+  interactive session: the core process spawns `fugupass-repl` as a child, with a
+  request pipe and a reply pipe. The interface process reads operator command
+  lines, and the core process executes every command.
+- **CLI-IFACE-2** — The pipe protocol is line-oriented text: one request line per
+  command, then reply lines, then one end line with the outcome. Image data and
+  secret bytes must not cross the pipes.
+- **CLI-IFACE-3** — A secret must not enter the interface process. The core process
+  reads the passphrase with `readpassphrase(3)` from the terminal
+  ([SAFE-MEMORY](security.md#safe-memory)), and it prints each secret to the
+  terminal or pipes it to `fugupass-qr` ([CLI-OUTPUT](programs.md#cli-output)).
+- **CLI-IFACE-4** — One process at a time owns the terminal: the interface process
+  at the prompt, the core process while a command runs. The interface process must
+  restore the terminal state before each request and on every exit path.
+- **CLI-IFACE-5** — The interface process must show core output through the display
+  filter of Fugu::REPL. The filter must replace each byte outside printable ASCII,
+  newline, and tab, must remove `DEL` (0x7F) and the C1 range (0x80–0x9F), and
+  must not break a UTF-8 sequence.
+- **CLI-IFACE-6** — When the core process ends the session, the closed reply pipe
+  must end the interface process. At the prompt, the line editor must watch the
+  reply pipe as a registered handle.
+- **CLI-IFACE-7** — When standard input is not a terminal, the interface process
+  must read plain lines, with no line editing and no escape output. Scripted tests
+  drive the session in this mode.
+
+Entry names and oracle error text carry external bytes, so the display filter
+guards the operator's terminal.
+Fugu::REPL holds the terminal in raw mode only while it reads a line, and it
+restores the terminal state on every exit path.
+The module loads with core Perl only and operates inside the `stdio tty` pledge.
+Its interface contract lives in the Fugu repository.
+FuguTTX builds its operator REPL on the same module, so a change to the contract
+coordinates with FuguTTX through Fugu.
 
 <a id="cli-repl"></a>
 
 ## The REPL
 
-- **CLI-REPL-1** — The REPL must read the passphrase once per session with
-  `readpassphrase(3)` and must verify it against the canary record of each quorum
-  oracle before any entry record of that oracle
-  ([ORC-CANARY](oracle.md#orc-canary), [ORC-QUORUM](oracle.md#orc-quorum), D-08).
+- **CLI-REPL-1** — The session must read the passphrase once, in the core process,
+  with `readpassphrase(3)` ([CLI-IFACE](programs.md#cli-iface)), and must verify it
+  against the canary record of each quorum oracle before any entry record of that
+  oracle ([ORC-CANARY](oracle.md#orc-canary), [ORC-QUORUM](oracle.md#orc-quorum),
+  D-08).
 - **CLI-REPL-2** — When the session quorum covers `k` live index wraps of this
   machine ([ORC-QUORUM](oracle.md#orc-quorum)), the session's canary `get_pin`
   requests must also open the index through those index wraps
@@ -54,7 +109,8 @@ The render helper holds only the bytes on its stdin.
   `totp`, and `audit`. `ls` lists the entries from the open index. `show` reveals
   one entry. `add` imports a stored secret into a pool slot. `gen` creates a derived
   entry from a pool slot. `totp` reveals a totp entry and computes the code locally.
-  `audit` reports stale shadow entries and the last plate verification date.
+  `audit` reports stale shadow entries and the last plate verification date. The
+  interface process adds `help` and `quit`, and they reach no core path.
 - **CLI-REPL-4** — Each `show` and each `totp` is one per-entry quorum event: `k`
   `get_pin` requests ([ORC-QUORUM](oracle.md#orc-quorum), D-07). `add` and `gen`
   consume one pool slot each, with one quorum reveal of the consumed slot
@@ -71,10 +127,17 @@ The render helper holds only the bytes on its stdin.
 - **CLI-REPL-6** — Plate verification and every data-restore path must work without
   the oracle ([CER-VERIFY](ceremonies.md#cer-verify),
   [REC-PRINCIPLE](recovery.md#rec-principle), D-04).
-- **CLI-REPL-7** — The REPL must lock on exit and after an idle timeout, and must
-  erase every session secret with `explicit_bzero(3)`
-  ([SAFE-MEMORY](security.md#safe-memory)). The timeout is a tunable in the config
-  file ([VAULT-CONFIG](vault.md#vault-config)).
+- **CLI-REPL-7** — The core process must lock on the end of the session and after
+  an idle timeout with no request, and must erase every session secret with
+  `explicit_bzero(3)` ([SAFE-MEMORY](security.md#safe-memory)). The lock ends the
+  session and, through the closed reply pipe, the interface process
+  ([CLI-IFACE](programs.md#cli-iface)). The timeout is a tunable in the config file
+  ([VAULT-CONFIG](vault.md#vault-config)).
+- **CLI-REPL-8** — The interface process must read each command line with the
+  Fugu::REPL line editor: emacs-style line editing, tab completion of command names
+  and entry names from the open index listing, and a session history in memory. The
+  interface process must not write a history file, because a history file leaks
+  entry names (D-14).
 
 `ls` reads the open index and sends no entry request.
 The unlock reads the passphrase once and verifies it at the canary record of each
@@ -93,8 +156,9 @@ The reports therefore name different user actions.
 
 - **CLI-ONESHOT-1** — Every REPL command must exist as a one-shot subcommand of
   `fugupass`.
-- **CLI-ONESHOT-2** — A one-shot subcommand must run the same core paths as its REPL
-  command: the same canary check, the same reveal path, and the same output rules.
+- **CLI-ONESHOT-2** — A one-shot subcommand and its REPL command must run the same
+  core paths, in the same core program: the same canary check, the same reveal
+  path, and the same output rules.
 - **CLI-ONESHOT-3** — A one-shot subcommand must write non-secret output to stdout in
   a script-friendly form: one record per line, and no decoration. A secret follows
   [CLI-OUTPUT](programs.md#cli-output).
