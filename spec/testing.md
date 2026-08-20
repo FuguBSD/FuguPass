@@ -34,6 +34,20 @@ OPS-GET-4.
   the reveal on every two-oracle quorum, the decrypt failure with one mask, the
   passphrase change over three oracles, and the provisioning loop
   ([ORC-QUORUM](oracle.md#orc-quorum), [ORC-ENROLL](oracle.md#orc-enroll)).
+- **QA-HARNESS-6** — The harness must start and stop each counterparty with
+  `Fugu::Process`. It must never run a shell: a command is a list. It must wait for
+  readiness with `Fugu::Timeout::wait_until`. It must give each counterparty its
+  own record store, and must remove the store after the run. The start recipe
+  is data, so the suite does not branch on the counterparty (QA-HARNESS-4).
+- **QA-HARNESS-7** — The FuguPass programs run on OpenBSD only, so on an other host
+  every leg of the suite runs in an OpenBSD guest. The `fuguvm` tool must build and
+  operate that guest, as a command only. The harness must copy the build and the
+  vectors in with `fuguvm put`, and must run each step with `fuguvm ssh`. The
+  upstream Python counterparty can run on the host, and the client in the guest
+  reaches it at the QEMU gateway address.
+- **QA-HARNESS-8** — A test of an interactive ceremony must drive the terminal of
+  the guest. `fuguvm expect` runs a caller-supplied expect(1) script against the
+  serial console of the guest, so a test can answer a `readpassphrase(3)` prompt.
 
 FuguPass is a second client of the wire protocol, beside the Blockstream Jade.
 A pass against every counterparty proves the FuguOracle claim that the oracle
@@ -55,6 +69,9 @@ specification (D-02).
 - **QA-MASK-4** — The test must assert that junk answers differ between requests.
 - **QA-MASK-5** — The test must run against the upstream `blind_pin_server` at
   minimum. When a FuguOracle build exists, the test must run against FuguOracle.
+- **QA-MASK-6** — The test must give each run a new record store at the
+  counterparty, because QA-MASK-3 destroys a record. The scaffolding of
+  [QA-HARNESS](testing.md#qa-harness) starts the counterparty and builds the store.
 
 Stability is a consequence of FuguOracle OPS-GET-4, never a stated interface
 guarantee.
@@ -125,6 +142,10 @@ The analysis judges the replacement, and the vectors pin the arithmetic.
 - **QA-CALIBRATE-3** — A scaling check must enroll hundreds of records at a
   flat-file oracle and must record the result against the stated workload posture
   of the oracle ([ORC-RECORDS](oracle.md#orc-records)).
+- **QA-CALIBRATE-4** — The latency measurement of QA-CALIBRATE-1 must run on real
+  OpenBSD hardware. It must not run in an emulated guest, because emulation gives a
+  false round count. The scaling check of QA-CALIBRATE-3 can run in a guest, and a
+  guest snapshot can hold the enrolled record set.
 
 A session computes bcrypt_pbkdf once per quorum canary and `k` times per
 revealed entry, so the round count multiplies into the session latency by `k`.

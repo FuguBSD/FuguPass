@@ -8,6 +8,8 @@ The notation `M`, `root`, `f(k, label)`, `K_e`, `K_idx`, `c_ei`, `share(S, i)`,
 the slot index `e`, the oracle index `i`, and the threshold `k` comes from
 [keys.md](keys.md).
 The recovery procedures are in [recovery.md](recovery.md).
+[CLI-SCAN](programs.md#cli-scan) states the video-device requirement of a plate
+scan.
 
 <a id="cer-dice"></a>
 
@@ -212,6 +214,10 @@ The tool must run these steps in rule order.
   command for the kind `passphrase`, or the ceremony re-run for the kind
   `threshold`. The re-run of an interrupted threshold change (CER-PROVISION-15)
   and the full re-enrollment run (CER-PROVISION-17) are exempt.
+- **CER-PROVISION-19** — A machine of a vault can be a virtual machine. A clone of
+  a virtual machine copies the machine-local set. Two machines must not run from one
+  machine-local set. A clone that runs as a second machine must run this ceremony
+  under a new machine name.
 
 The slot loop and the index registration read the index, so the copy of the shared
 set precedes them.
