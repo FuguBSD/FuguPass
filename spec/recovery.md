@@ -6,6 +6,8 @@ The plate is the recovery root: the SeedQR plate holds the master `M`.
 `K_idx`, the slot index `e`, the oracle count `n`, and the threshold `k`.
 This document cites FuguOracle rules as prose tokens, for example FuguOracle
 OPS-SET-3.
+[CLI-SCAN](programs.md#cli-scan) states the video-device requirement of a plate
+scan.
 
 <a id="rec-principle"></a>
 
@@ -129,6 +131,11 @@ purpose, and no content ([OVW-MODEL](overview.md#ovw-model)).
 - **REC-RESTORE-5** — The index in the copy can be stale. A stale index degrades
   names only: every entry file still matches by `H(K_e)` and still decrypts under
   its `K_e` ([REC-VAULT](recovery.md#rec-vault)).
+- **REC-RESTORE-6** — A rewind of the machine-local set to an older copy leaves an
+  enrollment after the copy date unmatched. The enrollment replaced the record's
+  key material at the oracle, so the older wrap of that record is stale. A stale
+  wrap recovers by a plate ceremony
+  ([CER-PROVISION](ceremonies.md#cer-provision)).
 
 The wraps and the counters of the receiving machine stay valid, because they bind
 to that machine's records, and the copy does not touch them.

@@ -36,6 +36,19 @@ the interface process.
   its line editor (D-16). After it loads its modules, it must pledge `stdio tty`.
   It must not open a file, must not create a process, and must not reach the
   network.
+- **CLI-SPLIT-8** — `fugupass-repl` must make its pledge call with
+  `Fugu::Sandbox->pledge`, with the promises `stdio tty`. Off OpenBSD the method
+  restricts nothing and returns success. `Fugu::Sandbox->is_supported` reports the
+  difference, so a test can tell enforcement from emulation.
+- **CLI-SPLIT-9** — `fugupass-repl` must use `Fugu::Log` in stderr mode or in quiet
+  mode. It must not use syslog mode, because syslog mode opens a socket. The
+  `stdio tty` promise set holds no socket.
+- **CLI-SPLIT-10** — The build must derive the unveil list of the interface
+  process from `Fugu::Sandbox->perl_lib_dirs` and `Fugu::Sandbox->system_paths`, and
+  `fugupass` must carry the derived list. The first method names the library
+  directories of the perl that runs. The second method names `/dev/urandom`, the
+  resolver files, the service tables and the time zone file. Neither method calls a
+  syscall, so a test can prove the list off OpenBSD.
 
 `fugupass` runs the interface program and the helpers as child processes and
 exchanges text over pipes.
@@ -78,6 +91,15 @@ and, for the interface process, the Perl runtime and the Fugu modules.
 - **CLI-IFACE-7** — When standard input is not a terminal, the interface process
   must read plain lines, with no line editing and no escape output. Scripted tests
   drive the session in this mode.
+- **CLI-IFACE-8** — Fugu::REPL must read one line in raw mode, and must restore the
+  terminal state on every exit path. It must accept one extra read handle, and
+  that handle must end the read when it becomes readable. It must load with core Perl
+  only, and it must operate inside the `stdio tty` pledge. The `.pod` sidecar of
+  the module in the Fugu repository is its interface contract.
+- **CLI-IFACE-9** — The interface process must install its interrupt handlers with
+  one `Fugu::Signal` manager: it must build the manager, and it must then call
+  `setup_interrupt_flag` on it. The signal path is one exit path, so the process must
+  restore the terminal state.
 
 Entry names and oracle error text carry external bytes, so the display filter
 guards the operator's terminal.
@@ -138,6 +160,9 @@ coordinates with FuguTTX through Fugu.
   and entry names from the open index listing, and a session history in memory. The
   interface process must not write a history file, because a history file leaks
   entry names (D-14).
+- **CLI-REPL-9** — Fugu::REPL must take each completion candidate from a caller
+  callback. The interface process gives the command names and the entry names of the
+  open index listing, as CLI-REPL-8 states.
 
 `ls` reads the open index and sends no entry request.
 The unlock reads the passphrase once and verifies it at the canary record of each
@@ -208,6 +233,9 @@ keyboard.
   one line of text.
 - **CLI-SCAN-6** — The program must apply the sandbox of
   [CLI-SPLIT](programs.md#cli-split).
+- **CLI-SCAN-7** — A plate scan needs a video device on the machine. A machine with
+  no video device cannot run a ceremony that scans the plate. A virtual machine
+  needs host device passthrough for that device.
 
 <a id="cli-qr"></a>
 

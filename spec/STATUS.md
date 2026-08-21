@@ -71,8 +71,8 @@ before that phase. An `n-a` unit has no “Done by” value.
 | [REC-WIPE](recovery.md#rec-wipe) | open | P3 | — |
 | [REC-RESTORE](recovery.md#rec-restore) | open | P3 | — |
 | [CLI-SPLIT](programs.md#cli-split) | open | P3 | — |
-| [CLI-IFACE](programs.md#cli-iface) | open | P3 | The Fugu::REPL module does not exist in the Fugu repository. Its interface contract lands there with the implementation. |
-| [CLI-REPL](programs.md#cli-repl) | open | P2 | — |
+| [CLI-IFACE](programs.md#cli-iface) | open | P3 | The Fugu::REPL module does not exist in the Fugu repository. Its interface contract lands there with the implementation, and the `.pod` sidecar of the module is the contract of record. |
+| [CLI-REPL](programs.md#cli-repl) | open | P2 | The Fugu::REPL module does not exist in the Fugu repository. Its interface contract lands there with the implementation, and the `.pod` sidecar of the module is the contract of record. |
 | [CLI-ONESHOT](programs.md#cli-oneshot) | open | P2 | — |
 | [CLI-OUTPUT](programs.md#cli-output) | open | P2 | — |
 | [CLI-SCAN](programs.md#cli-scan) | open | P3 | — |
