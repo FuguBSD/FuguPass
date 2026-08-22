@@ -12,23 +12,25 @@ The wire protocol is version 2 of the Blockstream `blind_pin_server` protocol.
 [FuguOracle](https://github.com/FuguBSD/FuguOracle) is the reference oracle
 deployment.
 
-## Quick start
-
-```sh
-just spec-check
-```
-
 The project is specification-first: the code follows the specification.
 
 ## Documentation
 
-The specification in [spec/](spec/index.md) is the authoritative reference.
-Read [spec/decisions.md](spec/decisions.md) before you make a plan.
+The specification in [spec/](spec/index.md) is the authoritative reference. Read
+[spec/DECISIONS.md](spec/DECISIONS.md) before you make a plan. Research notes
+live in `docs/research/`.
 
-## Development
+## Commands
 
-See [CLAUDE.md](CLAUDE.md) for the development guide: the specification
-process and the writing standard.
+```sh
+make check       # spec-check + ste-lint + test
+make spec-check  # validate the specification and the plans
+make prettier    # Markdown formatting check
+```
+
+## Commit scopes
+
+`spec`, `docs`, `ci`.
 
 ## License
 
