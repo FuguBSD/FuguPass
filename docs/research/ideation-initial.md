@@ -1,10 +1,10 @@
 # FuguPass vault design — ideation notes
 
-|           |                                                                                     |
-| --------- | ----------------------------------------------------------------------------------- |
-| Status    | Research notes, round 1. Not normative.                                             |
-| Purpose   | Input for `spec/DECISIONS.md` and the first specification documents.                |
-| Companion | [FuguOracle specification](../../../FuguOracle/spec/index.md) (separate repository) |
+|           |                                                                                                                 |
+| --------- | --------------------------------------------------------------------------------------------------------------- |
+| Status    | Research notes, round 1. Not normative.                                                                         |
+| Purpose   | Input for `spec/DECISIONS.md` and the first specification documents.                                            |
+| Companion | [FuguOracle specification](https://github.com/FuguBSD/FuguOracle/blob/main/spec/index.md) (separate repository) |
 
 These notes record an ideation round. They flesh out the directional ideas for
 FuguPass and test them against the FuguOracle protocol, the SeedQR ecosystem,
@@ -108,7 +108,7 @@ scanning a SeedQR": the scan is the restore and provisioning ceremony, and
 FuguOracle is the daily unlock.
 
 The daily path transplants the Jade model, and it conforms to
-[CLIENT-MODEL](../../../FuguOracle/spec/clients.md#client-model):
+[CLIENT-MODEL](https://github.com/FuguBSD/FuguOracle/blob/main/spec/clients.md#client-model):
 
 - At vault creation, FuguPass generates a client keypair, independent of the
   unlock passphrase, and stores it on disk. Possession of this key is the client

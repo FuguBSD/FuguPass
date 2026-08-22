@@ -51,10 +51,10 @@ states what this limit costs.
 ## 2. The primitive: blind share masking
 
 One protocol fact carries the whole design.
-[OPS-GET-4](../../../FuguOracle/spec/operations.md#ops-get) makes the oracle
-answer a correct PIN with `HMAC(key = saved aes_key, msg = pin_secret)`. For an
-unchanged record, this value is **stable**: the same 32 bytes on every correct
-request.
+[OPS-GET-4](https://github.com/FuguBSD/FuguOracle/blob/main/spec/operations.md#ops-get)
+makes the oracle answer a correct PIN with
+`HMAC(key = saved aes_key, msg = pin_secret)`. For an unchanged record, this
+value is **stable**: the same 32 bytes on every correct request.
 
 So one v2 record is, as-is, a **PIN-gated, three-strike, remotely-wipeable cell
 that stores one stable 32-byte secret**, and the oracle that serves it cannot
@@ -228,8 +228,8 @@ Either way, the audience's existing signers become per-entry hardware factors:
 Everything above runs on the unmodified v2 wire protocol. One further class of
 value needs FuguOracle spec evolution, so it is strictly phase-gated and needs a
 decision-change proposal there first (it collides with
-[OPS-GET-4](../../../FuguOracle/spec/operations.md#ops-get) semantics and D-02's
-spirit):
+[OPS-GET-4](https://github.com/FuguBSD/FuguOracle/blob/main/spec/operations.md#ops-get)
+semantics and D-02's spirit):
 
 - **Delayed reveal.** A record flagged "notify, then wait" answers junk (without
   counting an attempt) until the delay passes, and notifies the operator
