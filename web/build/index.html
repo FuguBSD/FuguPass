@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home — FuguPass</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="banner"><a href="index.html">FuguPass</a></header>
+<nav>
+<a href="index.html">Home</a>
+</nav>
+<hr>
+<main>
+<h1>FuguPass</h1>
+
+<p>FuguPass is a password manager for operators of air-gapped Bitcoin
+custody. FuguPass derives every vault key from one master: a BIP39
+mnemonic of 12 words on a SeedQR plate. It seals every entry as one
+flat ciphertext file. Per-entry records at an ordered set of blind
+PIN oracles gate each reveal: the passphrase plus any k of the n
+oracle masks open one entry. No key material leaves the device, and
+no network service holds a secret.</p>
+
+<p>The wire protocol is version 2 of the Blockstream
+<code>blind_pin_server</code> protocol.
+<a href="https://oracle.fugubsd.org/">FuguOracle</a> is the reference
+oracle deployment.</p>
+
+<h2>Documentation</h2>
+
+<ul>
+<li>The <a href="https://github.com/FuguBSD/FuguPass">source repository</a>
+and the <a href="https://github.com/FuguBSD/FuguPass/blob/main/spec/index.md">specification</a></li>
+</ul>
+</main>
+<hr>
+<footer>
+<p>Copyright © 2026 Dick Olsson. ISC license.</p>
+</footer>
+</body>
+</html>
