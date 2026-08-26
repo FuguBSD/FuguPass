@@ -7,7 +7,7 @@ FuguPass derives every vault key from one master: a BIP39 mnemonic of 12 words
 on a SeedQR plate. It seals every entry as one flat ciphertext file. Per-entry
 records at an ordered set of blind PIN oracles gate each reveal: the passphrase
 plus any k of the n oracle masks open one entry. No key material leaves the
-device, and no network service holds a secret.
+device.
 
 The wire protocol is version 2 of the Blockstream `blind_pin_server` protocol.
 [FuguOracle](https://github.com/FuguBSD/FuguOracle) is the reference oracle
