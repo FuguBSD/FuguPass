@@ -88,7 +88,7 @@ verifier case (SAFE-FLOOR-2) assumes this breach at one oracle, and the loss
 case (SAFE-FLOOR-3) assumes the same breach at `k` oracles. A breached record of
 a retired or removed oracle counts toward the `k`-breach bound until the owner
 destroys it by the revocation paths ([ORC-REVOKE](oracle.md#orc-revoke)). A
-breached record of a retired position still serves as a passphrase verifier.
+breached record of a retired position is still a passphrase verifier.
 `bcrypt_pbkdf(3)` sets the cost of one guess, with the tunable round count of
 [KEY-PIN](keys.md#key-pin). The round-count calibration is a test duty
 ([QA-CALIBRATE](testing.md#qa-calibrate)).
