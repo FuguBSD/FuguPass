@@ -1,16 +1,16 @@
 # FuguPass specification
 
-FuguPass is a password manager for operators of air-gapped Bitcoin custody. It
-derives every vault key from one master: a BIP39 mnemonic of 12 words on a
-SeedQR plate. It seals every entry as one flat ciphertext file. Per-entry
-records at an ordered set of blind PIN oracles gate each reveal: the passphrase
-plus any k of the n oracle masks open one entry. The wire protocol is version 2
-of the Blockstream `blind_pin_server` protocol, and FuguOracle is the reference
-oracle deployment. No theft of data at rest exposes a secret. An attacker also
-needs the passphrase and k queries to live oracles per entry. Each request
-leaves one log line at its oracle. The plate alone restores every derived and
-sovereign entry, so the oracle gates reveals, never recovery. The master appears
-only during ceremonies.
+FuguPass is a password manager for any secret, built on proven seed-phrase
+standards and air-gapped custody patterns. It derives every vault key from one
+master: a BIP39 mnemonic of 12 words on a SeedQR plate. It seals every entry as
+one flat ciphertext file. Per-entry records at an ordered set of blind PIN
+oracles gate each reveal: the passphrase plus any k of the n oracle masks open
+one entry. The wire protocol is version 2 of the Blockstream `blind_pin_server`
+protocol, and FuguOracle is the reference oracle deployment. No theft of data at
+rest exposes a secret. An attacker also needs the passphrase and k queries to
+live oracles per entry. Each request leaves one log line at its oracle. The
+plate alone restores every derived and sovereign entry, so the oracle gates
+reveals, never recovery. The master appears only during ceremonies.
 
 This document is the entry point of the specification. It holds the plan
 contract, the ID conventions, and the document tables.

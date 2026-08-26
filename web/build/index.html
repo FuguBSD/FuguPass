@@ -15,13 +15,14 @@
 <main>
 <h1>FuguPass</h1>
 
-<p>FuguPass is a password manager for operators of air-gapped Bitcoin
-custody. FuguPass derives every vault key from one master: a BIP39
-mnemonic of 12 words on a SeedQR plate. It seals every entry as one
-flat ciphertext file. Per-entry records at an ordered set of blind
-PIN oracles gate each reveal: the passphrase plus any k of the n
-oracle masks open one entry. No key material leaves the device, and
-no network service holds a secret.</p>
+<p>FuguPass is a password manager for any secret, built on proven
+seed-phrase standards and air-gapped custody patterns. FuguPass
+derives every vault key from one master: a BIP39 mnemonic of 12 words
+on a SeedQR plate. It seals every entry as one flat ciphertext file.
+Per-entry records at an ordered set of blind PIN oracles gate each
+reveal: the passphrase plus any k of the n oracle masks open one
+entry. No key material leaves the device, and no network service
+holds a secret.</p>
 
 <p>The wire protocol is version 2 of the Blockstream
 <code>blind_pin_server</code> protocol.

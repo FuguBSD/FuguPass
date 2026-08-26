@@ -1,6 +1,7 @@
 # FuguPass
 
-A password manager for operators of air-gapped Bitcoin custody.
+A password manager for any secret, built on proven seed-phrase standards and
+air-gapped custody patterns.
 
 FuguPass derives every vault key from one master: a BIP39 mnemonic of 12 words
 on a SeedQR plate. It seals every entry as one flat ciphertext file. Per-entry

@@ -16,8 +16,9 @@ SeedQR plate is the recovery phrase. The oracle speaks version 2 of the
 Blockstream `blind_pin_server` protocol. FuguOracle is the reference deployment,
 not a requirement (D-02).
 
-- **OVW-PURPOSE-1** — FuguPass serves operators of air-gapped Bitcoin custody:
-  multisig wallets, SeedQR metal plates, dice entropy, and open source signers.
+- **OVW-PURPOSE-1** — FuguPass serves any user with secrets to keep. The design
+  adopts the standards and the tools of air-gapped custody: BIP39 mnemonics,
+  SeedQR metal plates, dice entropy, and blind PIN oracles.
 - **OVW-PURPOSE-2** — Derivation answers backup. Every vault key derives from
   one 12-word BIP39 master, so one plate restores the vault
   ([KEY-MASTER](keys.md#key-master)).
