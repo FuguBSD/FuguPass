@@ -91,7 +91,7 @@ renders as a SeedQR code for a signer to scan ([CLI-QR](programs.md#cli-qr)).
 - **ENTRY-ROTATION-4** — Rotation of a stored entry seals the new secret in
   place, in the entry's own slot.
 
-Rotation of a derived entry is entry creation on a new slot: it consumes the
+Rotation of a derived entry is entry creation on a new slot. It consumes the
 lowest free slot, and it performs one reveal of that slot
 ([ENTRY-POOL](entries.md#entry-pool)). An old version restores like any derived
 secret: the plate re-derives the old slot's key and candidates
@@ -104,17 +104,17 @@ secret: the plate re-derives the old slot's key and candidates
 - **ENTRY-POOL-1** — Each ceremony pre-derives a pool of future slots on the
   ceremony machine ([CER-CREATE](ceremonies.md#cer-create),
   [CER-REFILL](ceremonies.md#cer-refill)). A pooled slot consists of a reserved
-  slot index, a sealed slot file with both materialized candidates
-  ([KEY-BIP85](keys.md#key-bip85)), an enrolled record at each oracle
-  ([ORC-ENROLL](oracle.md#orc-enroll)), and this machine's wraps, one per oracle
-  ([KEY-MASK](keys.md#key-mask)). The slot index is also the BIP85 index.
+  slot index, and a sealed slot file with both materialized candidates
+  ([KEY-BIP85](keys.md#key-bip85)). It also holds an enrolled record at each
+  oracle ([ORC-ENROLL](oracle.md#orc-enroll)), and this machine's wraps, one per
+  oracle ([KEY-MASK](keys.md#key-mask)). The slot index is also the BIP85 index.
 - **ENTRY-POOL-2** — The default pool size is 64 slots. The pool size is tunable
   (D-12).
 - **ENTRY-POOL-3** — Every new entry, of any origin class, consumes the lowest
-  free slot for which this machine holds wraps at `k` or more live oracles
-  ([KEY-MASK](keys.md#key-mask), [ORC-QUORUM](oracle.md#orc-quorum)). When free
-  slots remain and no such slot exists on this machine, the tool must refuse the
-  entry, and the refusal must name machine provisioning
+  free slot. This machine must hold wraps at `k` or more live oracles for that
+  slot ([KEY-MASK](keys.md#key-mask), [ORC-QUORUM](oracle.md#orc-quorum)). When
+  free slots remain and no such slot exists on this machine, the tool must
+  refuse the entry. The refusal must name machine provisioning
   ([CER-PROVISION](ceremonies.md#cer-provision)) or the refill ceremony
   ([CER-REFILL](ceremonies.md#cer-refill)).
 - **ENTRY-POOL-4** — Entry creation performs one reveal of the consumed slot

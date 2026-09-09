@@ -2,8 +2,9 @@
 
 This document specifies the on-disk format of a FuguPass vault.
 [keys.md](keys.md) defines the notation `H(x)`, the entry key `K_e`, the index
-key `K_idx`, the device factor `X`, the oracle index `i`, the oracle count `n`,
-the threshold `k`, the wraps `c_ei`, and the per-oracle index wraps `c_idx_i`.
+key `K_idx`, and the device factor `X`. It also defines the oracle index `i`,
+the oracle count `n`, the threshold `k`, the wraps `c_ei`, and the per-oracle
+index wraps `c_idx_i`.
 
 <a id="vault-layout"></a>
 
@@ -23,9 +24,9 @@ One vault is one directory. The file paths inside it are:
 | `machine/config`            | the config file, plaintext                | machine-local |
 | `machine/change`            | the change marker, plaintext              | machine-local |
 
-In a file name, `<e>` is the unpadded decimal ASCII of the slot index, and `<i>`
-is the unpadded decimal ASCII of the oracle index, the same encodings as in a
-label ([keys.md](keys.md)).
+In a file name, `<e>` is the unpadded decimal ASCII of the slot index. `<i>` is
+the unpadded decimal ASCII of the oracle index. These are the same encodings as
+in a label ([keys.md](keys.md)).
 
 - **VAULT-LAYOUT-1** — A vault is one directory of flat files, with no database.
   One sealed file holds one entry (D-13).
@@ -34,14 +35,15 @@ label ([keys.md](keys.md)).
 - **VAULT-LAYOUT-3** — The shared set holds the entry files and the index file.
   It lives at the vault root.
 - **VAULT-LAYOUT-4** — The machine-local set holds the device factor `X`, the
-  wraps `c_ei`, the index wraps `c_idx_i`, the canary check seals, the counters
-  file, the config file, and the change marker. It lives in the `machine/`
-  subdirectory.
+  wraps `c_ei`, and the index wraps `c_idx_i`. It also holds the canary check
+  seals, the counters file, the config file, and the change marker. It lives in
+  the `machine/` subdirectory.
 - **VAULT-LAYOUT-5** — The name of the entry file of slot `e` must be the
   lowercase hex of `H(K_e)`, with no suffix.
-- **VAULT-LAYOUT-6** — The index file, the config file, the counters file, the
-  factor file, the wrap files, the index wrap files, the canary check seals, and
-  the change marker must use the fixed paths of the table above.
+- **VAULT-LAYOUT-6** — These files must use the fixed paths of the table above.
+  They are the index file, the config file, the counters file, and the factor
+  file. The other files are the wrap files, the index wrap files, the canary
+  check seals, and the change marker.
 - **VAULT-LAYOUT-7** — A directory listing must reveal nothing about entry names
   or sites (D-14).
 
@@ -94,14 +96,14 @@ The client can never learn the cause from the seal
   feed.
 - **VAULT-FORMAT-3** — A field name holds lowercase ASCII letters, digits, and
   hyphens only. [ENTRY-TYPES](entries.md#entry-types) defines the field names of
-  each entry type. The tables of this unit define the field names of the slot
-  file, of the index, of the counters file, and of the change marker.
+  each entry type. The tables of this unit define the field names. They cover
+  the slot file, the index, the counters file, and the change marker.
   [VAULT-CONFIG](vault.md#vault-config) defines the config fields.
 - **VAULT-FORMAT-4** — A sealed file that holds a secret places the secret block
   first: the secret fields, then the metadata fields.
 - **VAULT-FORMAT-5** — A line has at most 4096 bytes. The reader must reject a
   longer line.
-- **VAULT-FORMAT-6** — The reader must be a strict scanner: it must reject an
+- **VAULT-FORMAT-6** — The reader must be a strict scanner. It must reject an
   unknown field, and it must not use a YAML or a JSON library.
 - **VAULT-FORMAT-7** — A value must not hold a line feed. A slot index in a
   field name or in a value is unpadded decimal ASCII. A slot list is slot
@@ -109,8 +111,8 @@ The client can never learn the cause from the seal
   `YYYY-MM-DD`.
 - **VAULT-FORMAT-8** — The field tables of this unit are complete. The `entry`
   and the `machine` fields of the index and the `done` field of the marker
-  repeat: one line per entry, one line per machine, and one line per re-enrolled
-  record. Every other field must appear at most once in its file.
+  repeat. There is one line per entry, one line per machine, and one line per
+  re-enrolled record. Every other field must appear at most once in its file.
 
 The slot file fields are:
 
@@ -171,17 +173,17 @@ scanner discipline of the oracle service.
   provisioned machine names.
 - **VAULT-INDEX-3** — A daily read unwraps `k` index shares through this
   machine's index wraps and reconstructs `K_idx`
-  ([KEY-SHARE](keys.md#key-share), [KEY-MASK](keys.md#key-mask)), so the read
-  uses the session's canary masks and sends no extra oracle request
+  ([KEY-SHARE](keys.md#key-share), [KEY-MASK](keys.md#key-mask)). The read uses
+  the session's canary masks and sends no extra oracle request
   ([ORC-CANARY](oracle.md#orc-canary)).
 - **VAULT-INDEX-4** — A plate ceremony re-derives `K_idx` directly from `root`
   ([KEY-MASK](keys.md#key-mask)).
 - **VAULT-INDEX-5** — The loss of the index degrades convenience only. No
   recovery path depends on the index ([REC-VAULT](recovery.md#rec-vault)).
 - **VAULT-INDEX-6** — An index decrypt failure after a successful canary check
-  must stop the session with a report that names the index file and this
-  machine's index wraps of the quorum as the possible causes. The tool must not
-  report this failure as a junk answer.
+  must stop the session with a report. The report must name the index file and
+  this machine's index wraps of the quorum as the possible causes. The tool must
+  not report this failure as a junk answer.
 
 The index plaintext uses the line format
 ([VAULT-FORMAT](vault.md#vault-format)).
@@ -211,10 +213,10 @@ The config fields are:
 - **VAULT-CONFIG-3** — The config file must hold no secret.
 - **VAULT-CONFIG-4** — `X` and the wraps live in their own machine-local files
   and must not appear in the config.
-- **VAULT-CONFIG-5** — The documentation must state that a copy of the config
-  file leaks the oracle list, the threshold, the machine name, the plate check
-  value, and the tunables. A holder of the plate check value can confirm that a
-  candidate plate belongs to this vault.
+- **VAULT-CONFIG-5** — The documentation must state what a copy of the config
+  file leaks. The copy leaks the oracle list, the threshold, the machine name,
+  the plate check value, and the tunables. A holder of the plate check value can
+  confirm that a candidate plate belongs to this vault.
 - **VAULT-CONFIG-6** — Oracle positions are 1 to `n` with no gap. The position
   is the field name, so the line order carries no meaning. The value of a
   position can change to a replacement oracle or to the word `retired`. A
@@ -234,10 +236,11 @@ threshold. [KEY-PIN](keys.md#key-pin) governs the round count, and
 ## Atomic writes
 
 - **VAULT-ATOMIC-1** — Every vault write must be atomic. This rule covers an
-  entry file, the index, a wrap, an index wrap, the device factor, a canary
-  check seal, the counters file, the config file, and the change marker. The
-  atomic sequence is: `mkstemp(3)` in the target directory, write, `fsync(2)`,
-  `rename(2)` over the target, then `fsync(2)` of the directory file descriptor.
+  entry file, the index, a wrap, an index wrap, and the device factor. It also
+  covers a canary check seal, the counters file, the config file, and the change
+  marker. The atomic sequence is: `mkstemp(3)` in the target directory, write,
+  `fsync(2)`, `rename(2)` over the target, then `fsync(2)` of the directory file
+  descriptor.
 - **VAULT-ATOMIC-2** — A crashed write must not leave a torn file.
 
 The discipline mirrors the atomic record write of the oracle store (FuguOracle

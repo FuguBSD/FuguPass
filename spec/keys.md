@@ -43,12 +43,12 @@ Every derivation label is unique and carries the prefix `fugupass/v1/`:
 | `fugupass/v1/canary-check`  | the canary check seal key of oracle `i` | `i`                                                       |
 | `fugupass/v1/plate-check`   | the plate check value                   | none                                                      |
 
-Exact label strings, fully expanded, for slot 17 at oracle 2, with threshold 3
-and coefficient 1: `fugupass/v1/client-key` ‖ `2/17`, `fugupass/v1/pin-salt` ‖
-`2/17` (canary: `2/canary`), `fugupass/v1/wrap` ‖ `2/17`,
-`fugupass/v1/wrap-index` ‖ `2`, `fugupass/v1/canary-check` ‖ `2`,
-`fugupass/v1/shamir/` ‖ `3/1`. `e`, `i`, `j`, and `k` are unpadded decimal
-ASCII. `i` is 1-based.
+These are the exact label strings, fully expanded, for slot 17 at oracle 2, with
+threshold 3 and coefficient 1. The entry labels are `fugupass/v1/client-key` ‖
+`2/17`, `fugupass/v1/pin-salt` ‖ `2/17` (canary: `2/canary`), and
+`fugupass/v1/wrap` ‖ `2/17`. The other labels are `fugupass/v1/wrap-index` ‖
+`2`, `fugupass/v1/canary-check` ‖ `2`, and `fugupass/v1/shamir/` ‖ `3/1`. `e`,
+`i`, `j`, and `k` are unpadded decimal ASCII. `i` is 1-based.
 
 <a id="key-master"></a>
 
@@ -70,7 +70,7 @@ The dice-rolled master is the documented default. A BIP85 child of an existing
 cold seed is a supported alternative, and the tool stays neutral between the two
 input paths. BIP85 derivation is one-way: a vault compromise reveals nothing
 about the parent seed. The master and the vault passphrase are different
-secrets: `M` is the recovery root on the plate, and the passphrase is the daily
+secrets. `M` is the recovery root on the plate, and the passphrase is the daily
 reveal secret ([KEY-PIN](keys.md#key-pin)).
 
 <a id="key-derive"></a>
@@ -126,7 +126,7 @@ oracle and no passphrase. The entry file name is the lowercase hex of `H(K_e)`
 - **KEY-DEVICE-4** — The plate regenerates `X` for any machine name.
 
 KEY-DEVICE-4 carries provisioning and revocation (D-10). A plate ceremony
-re-derives a stolen machine's `X` and client keys on a surviving machine, so the
+re-derives a stolen machine's `X` and client keys on a surviving machine. The
 owner revokes the stolen machine's records from the plate alone
 ([ORC-REVOKE](oracle.md#orc-revoke)).
 
@@ -136,9 +136,9 @@ owner revokes the stolen machine's records from the plate alone
 
 - **KEY-CLIENT-1** — The client key material of the record for slot `e` at
   oracle `i` is `t_ei = f(X, "fugupass/v1/client-key" ‖ i/e)`.
-- **KEY-CLIENT-2** — The client must interpret `t_ei` as a big-endian integer
-  and must compute the secp256k1 private key as
-  `ck_ei = (t_ei mod (q − 1)) + 1`, where `q` is the secp256k1 group order.
+- **KEY-CLIENT-2** — The client must interpret `t_ei` as a big-endian integer.
+  It must compute the secp256k1 private key as `ck_ei = (t_ei mod (q − 1)) + 1`,
+  where `q` is the secp256k1 group order.
 - **KEY-CLIENT-3** — The canary client key of oracle `i` uses the label suffix
   `i/canary`.
 - **KEY-CLIENT-4** — A client key must not depend on the passphrase.
@@ -168,10 +168,10 @@ secret, or the attempt counter never moves (FuguOracle CLIENT-MODEL).
 The oracle payload requires a 32-byte `pin_secret`, which matches the
 bcrypt_pbkdf output length. KEY-PIN-4 keeps the disk free of an offline
 passphrase verifier: no stored value verifies the passphrase without the oracle.
-Each record has its own salt, so a session computes bcrypt_pbkdf once per canary
-record of the quorum and once per oracle for each revealed entry: `k` runs per
-revealed entry. [QA-CALIBRATE](testing.md#qa-calibrate) records the round-count
-calibration.
+Each record has its own salt. A session computes bcrypt_pbkdf once per canary
+record of the quorum, and once per oracle for each revealed entry. That is `k`
+runs per revealed entry. [QA-CALIBRATE](testing.md#qa-calibrate) records the
+round-count calibration.
 
 <a id="key-share"></a>
 
@@ -187,10 +187,10 @@ calibration.
   reduced modulo the field polynomial. Division is multiplication by the
   multiplicative inverse.
 - **KEY-SHARE-3** — Coefficient `j` of the split of a secret `S` at threshold
-  `k` is the 32-byte value `A_j = f(S, "fugupass/v1/shamir/" ‖ k ‖ "/" ‖ j)`,
-  for `j` = 1 to `k − 1`, with `k` and `j` as unpadded decimal ASCII. The
-  coefficients are deterministic. The tool must not draw a coefficient from the
-  system RNG ([SAFE-ENTROPY](security.md#safe-entropy)).
+  `k` is the 32-byte value `A_j = f(S, "fugupass/v1/shamir/" ‖ k ‖ "/" ‖ j)`.
+  This holds for `j` = 1 to `k − 1`, with `k` and `j` as unpadded decimal ASCII.
+  The coefficients are deterministic. The tool must not draw a coefficient from
+  the system RNG ([SAFE-ENTROPY](security.md#safe-entropy)).
 - **KEY-SHARE-4** — Byte `b` of the secret splits under the polynomial
   `p_b(x) = S[b] ⊕ A_1[b]·x ⊕ … ⊕ A_{k−1}[b]·x^{k−1}`, in GF(256). The secret
   sits at `x = 0`: `p_b(0) = S[b]`.
@@ -199,7 +199,7 @@ calibration.
   oracle index, 1-based ([ORC-PROVISION](oracle.md#orc-provision)). The share
   size equals the secret size: 32 bytes.
 - **KEY-SHARE-6** — The reconstruction takes any `k` shares with distinct
-  indexes, from an index set `Q`, and interpolates at `x = 0`, byte-wise:
+  indexes, from an index set `Q`. It interpolates at `x = 0`, byte-wise:
   `S[b] = ⊕_{i∈Q} share(S, i)[b] · L_i`, with `L_i = Π_{m∈Q, m≠i} m / (m ⊕ i)`
   in GF(256).
 - **KEY-SHARE-7** — With `k = 1`, the polynomial is the constant `S[b]`, and
@@ -254,8 +254,8 @@ own analysis ([QA-SPLIT](testing.md#qa-split)).
 
 `c_ei` alone is ciphertext, and `s_ei` alone is a meaningless string at the
 oracle (D-06). A daily index read unwraps `k` index shares through the session's
-canary masks, so the read needs no oracle request beyond the session's `k`
-canary `get_pin` requests ([ORC-CANARY](oracle.md#orc-canary)). The composition
+canary masks. The read needs no oracle request beyond the session's `k` canary
+`get_pin` requests ([ORC-CANARY](oracle.md#orc-canary)). The composition
 `c_ei = share(K_e, i) ⊕ wk_ei` uses the oracle answer beyond the protocol's
 analyzed purpose, and the deterministic split replaces the uniform-coefficient
 assumption. A written analysis gates each construction
@@ -272,7 +272,7 @@ assumption. A written analysis gates each construction
 - **KEY-BIP85-3** — Both applications take `root` as the BIP32 seed.
 - **KEY-BIP85-4** — The BIP85 index of a slot is the slot index `e`.
 - **KEY-BIP85-5** — A ceremony materializes, for every new slot, the PWD BASE64
-  password and the BIP39 child mnemonic, and seals both candidates in the slot
+  password and the BIP39 child mnemonic. It seals both candidates in the slot
   file under `K_e`.
 - **KEY-BIP85-6** — Entry creation keeps the candidate that the entry type
   needs. A derived passphrase entry consumes the PWD BASE64 candidate.

@@ -32,7 +32,7 @@ data with no oracle. The reveal flow returns by re-enrollment at a live oracle
 Plate-alone recovery starts from the plate and nothing else.
 
 - **REC-PLATE-1** — From the plate, the tool must re-derive the entry key of
-  every slot from 0 up to the scan ceiling ([KEY-ENTRY](keys.md#key-entry)) and
+  every slot from 0 up to the scan ceiling ([KEY-ENTRY](keys.md#key-entry)). It
   must re-materialize every derived secret from BIP85
   ([KEY-BIP85](keys.md#key-bip85)).
 - **REC-PLATE-2** — The scan ceiling is 1024 slots. The tool must report the
@@ -57,7 +57,7 @@ promiscuous backup of the shared set answer metadata loss
 Plate-plus-files recovery starts from the plate and a copy of the shared set.
 
 - **REC-VAULT-1** — For each slot in the scanned range, the tool must derive
-  `K_e`, must compute `H(K_e)`, and must match the entry file by its name
+  `K_e` and must compute `H(K_e)`. It must match the entry file by its name
   ([VAULT-LAYOUT](vault.md#vault-layout)). The match needs no index.
 - **REC-VAULT-2** — Every matched entry file decrypts under its re-derived `K_e`
   ([VAULT-SEAL](vault.md#vault-seal)).
@@ -81,17 +81,17 @@ This unit covers a record wipe, an oracle host loss or seizure, and a rotation
 of the oracle static key.
 
 - **REC-WIPE-1** — After any oracle loss, every affected mask is dead, and no
-  data is lost: the plate restores every entry with no oracle
+  data is lost. The plate restores every entry with no oracle
   ([REC-PLATE](recovery.md#rec-plate), [REC-VAULT](recovery.md#rec-vault)).
 - **REC-WIPE-2** — The reveal flow of an affected record returns by a plate
-  ceremony: the tool re-enrolls this machine's records at the affected position,
-  or at a replacement oracle in that position, and recomputes the wraps, in the
+  ceremony. The tool re-enrolls this machine's records at the affected position,
+  or at a replacement oracle in that position. It recomputes the wraps, in the
   loop of [CER-PROVISION](ceremonies.md#cer-provision).
 - **REC-WIPE-3** — A fresh `set_pin` creates a fresh record with fresh key
   material, and no old mask returns (FuguOracle OPS-SET-3 and FuguOracle
   OPS-SET-4).
 - **REC-WIPE-4** — A rotation of an oracle's static key orphans every record of
-  every machine at that oracle and forces this ceremony on each machine
+  every machine at that oracle. It forces this ceremony on each machine
   (FuguOracle DEPLOY-BACKUP-5). The other oracles are untouched, and reveals
   continue while `k` oracles of the set stay live and reachable.
 - **REC-WIPE-5** — Reveals continue while `k` oracles of the set stay live and
@@ -107,7 +107,7 @@ of the oracle static key.
   redundancy.
 
 After a host loss, the ceremony can enroll at a replacement oracle in the lost
-oracle's position: the ceremony writes the replacement's URL and static public
+oracle's position. The ceremony writes the replacement's URL and static public
 key to that position in the config file
 ([ORC-PROVISION](oracle.md#orc-provision),
 [VAULT-CONFIG](vault.md#vault-config)). The masks of a seized oracle are
@@ -121,8 +121,8 @@ meaningless alone: a record holds no name, no purpose, and no content
 - **REC-RESTORE-1** — Any copy of the shared set restores by file copy onto a
   machine that keeps its own machine-local state
   ([VAULT-BACKUP](vault.md#vault-backup)).
-- **REC-RESTORE-2** — A restored vault stays able to address its oracle records:
-  the counter policy takes the wall clock, and the wall clock exceeds any stale
+- **REC-RESTORE-2** — A restored vault stays able to address its oracle records.
+  The counter policy takes the wall clock, and the wall clock exceeds any stale
   stored counter ([ORC-COUNTER](oracle.md#orc-counter)).
 - **REC-RESTORE-3** — A restore onto a fresh machine is machine provisioning: a
   plate ceremony ([CER-PROVISION](ceremonies.md#cer-provision)).
@@ -140,7 +140,7 @@ meaningless alone: a record holds no name, no purpose, and no content
   ([CER-PROVISION](ceremonies.md#cer-provision)).
 
 The wraps and the counters of the receiving machine stay valid, because they
-bind to that machine's records, and the copy does not touch them. A copied slot
-file without a record on this machine does not reveal on this machine until its
-next plate ceremony, and it still recovers from the plate
+bind to that machine's records. The copy does not touch them. A copied slot file
+without a record on this machine does not reveal on this machine until its next
+plate ceremony. It still recovers from the plate
 ([CER-PROVISION](ceremonies.md#cer-provision)).

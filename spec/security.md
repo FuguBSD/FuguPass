@@ -65,7 +65,7 @@ them. The interface process holds no secret
   attacker who holds every file on the disk cannot test a passphrase guess
   offline ([KEY-PIN](keys.md#key-pin)).
 - **SAFE-FLOOR-2** — The man pages and the documentation must state the verifier
-  case: an attacker with the machine's disk and one breached oracle record, with
+  case. An attacker with the machine's disk and one breached oracle record, with
   that oracle's static key, can search the passphrase offline. The record stores
   the hash of that record's pin secret, and the disk holds every salt. The KDF
   cost and the passphrase quality are the floor of the scheme in that case.
@@ -73,16 +73,16 @@ them. The interface process holds no secret
   `k` breached oracles yields full offline loss of the covered entries. The
   attacker searches the passphrase against one record hash, then unmasks `k`
   shares per entry and reconstructs every entry key with no live oracle.
-- **SAFE-FLOOR-4** — The documentation must state the middle case: an attacker
-  with the disk, the passphrase, and `j` breached oracles, with `j` less than
-  `k`, must query the remaining live oracles, online and logged: `k − j`
-  requests per entry.
+- **SAFE-FLOOR-4** — The documentation must state the middle case. An attacker
+  holds the disk, the passphrase, and `j` breached oracles, with `j` less than
+  `k`. That attacker must query the remaining live oracles, online and logged,
+  at `k − j` requests per entry.
 
 The positive claim covers the disk alone. An oracle record stores the hash of
-that record's pin secret, encrypted under keys that derive from that oracle's
-static key and the client public key (FuguOracle OPS-SET-4, FuguOracle
+that record's pin secret. Keys that derive from that oracle's static key and the
+client public key encrypt that hash (FuguOracle OPS-SET-4, FuguOracle
 STORE-KEYS). An attacker who takes the machine's disk, one oracle's records, and
-that oracle's static key gains a verifier: the device factor derives every salt
+that oracle's static key gains a verifier. The device factor derives every salt
 and the client public keys, and one decrypted record hash tests every guess. The
 verifier case (SAFE-FLOOR-2) assumes this breach at one oracle, and the loss
 case (SAFE-FLOOR-3) assumes the same breach at `k` oracles. A breached record of
@@ -98,8 +98,8 @@ breached record of a retired position is still a passphrase verifier.
 ## Detection duties
 
 - **SAFE-DETECT-1** — The detection story must rest only on the guarantees of
-  the FuguOracle specification: one log line per request with the outcome class,
-  and a prominent wipe log (FuguOracle SEC-LOGGING-2).
+  the FuguOracle specification. The guarantees are one log line per request with
+  the outcome class, and a prominent wipe log (FuguOracle SEC-LOGGING-2).
 - **SAFE-DETECT-2** — The specification and the documentation must not promise
   per-record log attribution. Record names at `LOG_DEBUG` are a permission of
   the oracle, never a promise (FuguOracle SEC-LOGGING-3).
@@ -107,10 +107,11 @@ breached record of a retired position is still a passphrase verifier.
   must read the oracle logs, or revocation never happens.
 - **SAFE-DETECT-4** — The documentation must state this limit: malware that
   reveals a few entries per day looks like the owner in the logs.
-- **SAFE-DETECT-5** — The documentation must ship an operator runbook that
-  covers the provisioning of each oracle of the set, the example 2-of-3
-  topology, log reading at each oracle, the log coverage of every possible
-  quorum (SAFE-DETECT-6), and revocation ([ORC-REVOKE](oracle.md#orc-revoke)).
+- **SAFE-DETECT-5** — The documentation must ship an operator runbook. The
+  runbook must cover the provisioning of each oracle of the set, the example
+  2-of-3 topology, and log reading at each oracle. It must also cover the log
+  coverage of every possible quorum (SAFE-DETECT-6), and revocation
+  ([ORC-REVOKE](oracle.md#orc-revoke)).
 - **SAFE-DETECT-6** — The documentation must state the coverage bound: an
   attacker with the machine's disk and the passphrase selects its own quorum.
   Guaranteed log coverage therefore needs logs at enough live oracles that every
@@ -119,9 +120,9 @@ breached record of a retired position is still a passphrase verifier.
 
 The observable signals are the request count and the wipe events. Each entry
 reveal is one `get_pin` request at each of `k` quorum oracles
-([ORC-QUORUM](oracle.md#orc-quorum)), so each quorum oracle's daily log volume
-tracks the full reveal volume. An oracle outside the session quorum sees
-nothing. A prominent wipe line marks a burned record.
+([ORC-QUORUM](oracle.md#orc-quorum)). Each quorum oracle's daily log volume
+therefore tracks the full reveal volume. An oracle outside the session quorum
+sees nothing. A prominent wipe line marks a burned record.
 
 <a id="safe-claims"></a>
 

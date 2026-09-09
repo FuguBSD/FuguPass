@@ -22,9 +22,10 @@ page in `mdoc(7)`: `fugupass(1)`, `fugupass-repl(1)`, `fugupass-scan(1)`, and
   helper programs only.
 - **CLI-SPLIT-3** — `fugupass` must make its unveil calls before its pledge call
   and must pledge `stdio rpath wpath cpath flock proc exec inet dns tty`. It
-  must unveil only these paths: the vault directory (`rwc`), `/dev/tty` (`rw`),
-  the three child programs (`x`), the runtime files that the child programs load
-  (`r`), and the resolver files that name lookup needs (`r`).
+  must unveil only these paths. They are the vault directory (`rwc`), `/dev/tty`
+  (`rw`), and the three child programs (`x`). The other paths are the runtime
+  files that the child programs load (`r`), and the resolver files that name
+  lookup needs (`r`).
 - **CLI-SPLIT-4** — `fugupass-scan` must unveil the video devices
   (`/dev/video*`) only and must pledge `stdio video` after it opens the device.
 - **CLI-SPLIT-5** — `fugupass-qr` must pledge `stdio` only.
@@ -56,15 +57,16 @@ and holds no vault key and no oracle key. The render helper holds only the bytes
 on its stdin. The interface process carries the line editor and the command
 parser and holds no secret ([CLI-IFACE](programs.md#cli-iface)). The interface
 process lives only for its session, so it is not an agent process (D-18). The
-runtime files of a child program are its dynamic linker, its shared libraries,
-and, for the interface process, the Perl runtime and the Fugu modules.
+runtime files of a child program are its dynamic linker and its shared
+libraries. The interface process also loads the Perl runtime and the Fugu
+modules.
 
 <a id="cli-iface"></a>
 
 ## The interface boundary
 
 - **CLI-IFACE-1** — A run of `fugupass` with no subcommand must start the
-  interactive session: the core process spawns `fugupass-repl` as a child, with
+  interactive session. The core process spawns `fugupass-repl` as a child, with
   a request pipe and a reply pipe. The interface process reads operator command
   lines, and the core process executes every command.
 - **CLI-IFACE-2** — The pipe protocol is line-oriented text: one request line
@@ -72,16 +74,16 @@ and, for the interface process, the Perl runtime and the Fugu modules.
   and secret bytes must not cross the pipes.
 - **CLI-IFACE-3** — A secret must not enter the interface process. The core
   process reads the passphrase with `readpassphrase(3)` from the terminal
-  ([SAFE-MEMORY](security.md#safe-memory)), and it prints each secret to the
-  terminal or pipes it to `fugupass-qr` ([CLI-OUTPUT](programs.md#cli-output)).
+  ([SAFE-MEMORY](security.md#safe-memory)). It prints each secret to the
+  terminal, or pipes it to `fugupass-qr` ([CLI-OUTPUT](programs.md#cli-output)).
 - **CLI-IFACE-4** — One process at a time owns the terminal: the interface
   process at the prompt, the core process while a command runs. The interface
   process must restore the terminal state before each request and on every exit
   path.
 - **CLI-IFACE-5** — The interface process must show core output through the
   display filter of Fugu::REPL. The filter must replace each byte outside
-  printable ASCII, newline, and tab, must remove `DEL` (0x7F) and the C1 range
-  (0x80–0x9F), and must not break a UTF-8 sequence.
+  printable ASCII, newline, and tab. It must remove `DEL` (0x7F) and the C1
+  range (0x80–0x9F). It must not break a UTF-8 sequence.
 - **CLI-IFACE-6** — When the core process ends the session, the closed reply
   pipe must end the interface process. At the prompt, the line editor must watch
   the reply pipe as a registered handle.
@@ -94,7 +96,7 @@ and, for the interface process, the Perl runtime and the Fugu modules.
   core Perl only, and it must operate inside the `stdio tty` pledge. The `.pod`
   sidecar of the module in the Fugu repository is its interface contract.
 - **CLI-IFACE-9** — The interface process must install its interrupt handlers
-  with one `Fugu::Signal` manager: it must build the manager, and it must then
+  with one `Fugu::Signal` manager. It must build the manager, and it must then
   call `setup_interrupt_flag` on it. The signal path is one exit path, so the
   process must restore the terminal state.
 
@@ -111,17 +113,17 @@ through Fugu.
 ## The REPL
 
 - **CLI-REPL-1** — The session must read the passphrase once, in the core
-  process, with `readpassphrase(3)` ([CLI-IFACE](programs.md#cli-iface)), and
-  must verify it against the canary record of each quorum oracle before any
-  entry record of that oracle ([ORC-CANARY](oracle.md#orc-canary),
+  process, with `readpassphrase(3)` ([CLI-IFACE](programs.md#cli-iface)). It
+  must verify the passphrase against the canary record of each quorum oracle,
+  before any entry record of that oracle ([ORC-CANARY](oracle.md#orc-canary),
   [ORC-QUORUM](oracle.md#orc-quorum), D-08).
-- **CLI-REPL-2** — When the session quorum covers `k` live index wraps of this
-  machine ([ORC-QUORUM](oracle.md#orc-quorum)), the session's canary `get_pin`
-  requests must also open the index through those index wraps
-  ([KEY-MASK](keys.md#key-mask), [VAULT-INDEX](vault.md#vault-index)). When the
-  session quorum cannot cover `k` live index wraps of this machine
-  ([ORC-CANARY](oracle.md#orc-canary)), the tool must report each dead or
-  unreachable index wrap and must name the provisioning ceremony
+- **CLI-REPL-2** — The session quorum can cover `k` live index wraps of this
+  machine ([ORC-QUORUM](oracle.md#orc-quorum)). The session's canary `get_pin`
+  requests must then also open the index through those index wraps
+  ([KEY-MASK](keys.md#key-mask), [VAULT-INDEX](vault.md#vault-index)). The
+  session quorum can also fail to cover `k` live index wraps of this machine
+  ([ORC-CANARY](oracle.md#orc-canary)). The tool must then report each dead or
+  unreachable index wrap, and must name the provisioning ceremony
   ([CER-PROVISION](ceremonies.md#cer-provision)).
 - **CLI-REPL-3** — The REPL must provide six commands: `ls`, `show`, `add`,
   `gen`, `totp`, and `audit`. `ls` lists the entries from the open index. `show`
@@ -137,26 +139,26 @@ through Fugu.
   quorum reveals ([ENTRY-SHADOW](entries.md#entry-shadow)).
 - **CLI-REPL-5** — With fewer than `k` reachable oracles, the tool must perform
   no reveal and must report the state of each oracle
-  ([ORC-QUORUM](oracle.md#orc-quorum)). On an HTTP error or a transport failure
-  at a quorum oracle, the tool can substitute the next reachable oracle after
-  that oracle's canary check, and must refuse the reveal only when no untried
-  quorum remains (ORC-QUORUM-5). The report uses the distinct HTTP-error and
-  transport-failure states of [ORC-REVEAL](oracle.md#orc-reveal), and both are
-  distinct from the junk report.
+  ([ORC-QUORUM](oracle.md#orc-quorum)). An HTTP error or a transport failure can
+  happen at a quorum oracle. The tool can then substitute the next reachable
+  oracle, after that oracle's canary check. It must refuse the reveal only when
+  no untried quorum remains (ORC-QUORUM-5). The report uses the distinct
+  HTTP-error and transport-failure states of [ORC-REVEAL](oracle.md#orc-reveal),
+  and both are distinct from the junk report.
 - **CLI-REPL-6** — Plate verification and every data-restore path must work
   without the oracle ([CER-VERIFY](ceremonies.md#cer-verify),
   [REC-PRINCIPLE](recovery.md#rec-principle), D-04).
-- **CLI-REPL-7** — The core process must lock on the end of the session and
-  after an idle timeout with no request, and must erase every session secret
-  with `explicit_bzero(3)` ([SAFE-MEMORY](security.md#safe-memory)). The lock
-  ends the session and, through the closed reply pipe, the interface process
+- **CLI-REPL-7** — The core process must lock on the end of the session, and
+  after an idle timeout with no request. It must erase every session secret with
+  `explicit_bzero(3)` ([SAFE-MEMORY](security.md#safe-memory)). The lock ends
+  the session and, through the closed reply pipe, the interface process
   ([CLI-IFACE](programs.md#cli-iface)). The timeout is a tunable in the config
   file ([VAULT-CONFIG](vault.md#vault-config)).
 - **CLI-REPL-8** — The interface process must read each command line with the
-  Fugu::REPL line editor: emacs-style line editing, tab completion of command
-  names and entry names from the open index listing, and a session history in
-  memory. The interface process must not write a history file, because a history
-  file leaks entry names (D-14).
+  Fugu::REPL line editor. The editor gives emacs-style line editing, and tab
+  completion of command names and entry names from the open index listing. It
+  also gives a session history in memory. The interface process must not write a
+  history file, because a history file leaks entry names (D-14).
 - **CLI-REPL-9** — Fugu::REPL must take each completion candidate from a caller
   callback. The interface process gives the command names and the entry names of
   the open index listing, as CLI-REPL-8 states.
@@ -164,9 +166,9 @@ through Fugu.
 `ls` reads the open index and sends no entry request. The unlock reads the
 passphrase once and verifies it at the canary record of each quorum oracle. Each
 reveal in the session computes one `pin_ei` per quorum oracle
-([KEY-PIN](keys.md#key-pin)), so a session that reveals many entries pays the
-KDF cost `k` times per entry. An HTTP error is not an attempt and is retryable.
-A transport failure is ambiguous, and a junk answer can burn a strike
+([KEY-PIN](keys.md#key-pin)). A session that reveals many entries pays the KDF
+cost `k` times per entry. An HTTP error is not an attempt and is retryable. A
+transport failure is ambiguous, and a junk answer can burn a strike
 ([ORC-REVEAL](oracle.md#orc-reveal)). The reports therefore name different user
 actions.
 
@@ -177,18 +179,18 @@ actions.
 - **CLI-ONESHOT-1** — Every REPL command must exist as a one-shot subcommand of
   `fugupass`.
 - **CLI-ONESHOT-2** — A one-shot subcommand and its REPL command must run the
-  same core paths, in the same core program: the same canary check, the same
-  reveal path, and the same output rules.
+  same core paths, in the same core program. The paths are the same canary
+  check, the same reveal path, and the same output rules.
 - **CLI-ONESHOT-3** — A one-shot subcommand must write non-secret output to
   stdout in a script-friendly form: one record per line, and no decoration. A
   secret follows [CLI-OUTPUT](programs.md#cli-output).
-- **CLI-ONESHOT-4** — Each ceremony of [ceremonies.md](ceremonies.md), each
-  recovery path of [recovery.md](recovery.md), the passphrase change
-  ([ORC-ENROLL](oracle.md#orc-enroll)), the canary re-enrollment
-  ([ORC-CANARY](oracle.md#orc-canary)), and the revocation paths
-  ([ORC-REVOKE](oracle.md#orc-revoke)) must each run as a `fugupass` subcommand.
-  The six REPL commands are the complete REPL command list, and the subcommand
-  list extends it.
+- **CLI-ONESHOT-4** — Each ceremony of [ceremonies.md](ceremonies.md) and each
+  recovery path of [recovery.md](recovery.md) must run as a `fugupass`
+  subcommand. The passphrase change ([ORC-ENROLL](oracle.md#orc-enroll)), the
+  canary re-enrollment ([ORC-CANARY](oracle.md#orc-canary)), and the revocation
+  paths ([ORC-REVOKE](oracle.md#orc-revoke)) must each run as one too. The six
+  REPL commands are the complete REPL command list, and the subcommand list
+  extends it.
 
 <a id="cli-output"></a>
 
@@ -203,8 +205,8 @@ actions.
 - **CLI-OUTPUT-4** — FuguPass must not write a secret to a file and must not
   write a secret to an environment variable.
 
-The QR display serves the signer flows ([ENTRY-TYPES](entries.md#entry-types)):
-a signer scans the mnemonic from the screen, and the secret touches no cable and
+The QR display serves the signer flows ([ENTRY-TYPES](entries.md#entry-types)).
+A signer scans the mnemonic from the screen, and the secret touches no cable and
 no keyboard.
 
 <a id="cli-scan"></a>
@@ -214,10 +216,10 @@ no keyboard.
 - **CLI-SCAN-1** — `fugupass-scan` must decode QR codes from camera frames and
   must write the decoded payload as text to stdout. The program must write no
   other data to stdout.
-- **CLI-SCAN-2** — The program must decode the standard SeedQR form: the
-  concatenation of the zero-based BIP39 wordlist indexes of the mnemonic, each
-  zero-padded to four decimal digits, in QR numeric mode. A 12-word mnemonic is
-  48 digits, and a 24-word mnemonic is 96 digits.
+- **CLI-SCAN-2** — The program must decode the standard SeedQR form. The form is
+  the concatenation of the zero-based BIP39 wordlist indexes of the mnemonic.
+  Each index is zero-padded to four decimal digits, in QR numeric mode. A
+  12-word mnemonic is 48 digits, and a 24-word mnemonic is 96 digits.
 - **CLI-SCAN-3** — The program must decode the CompactSeedQR form: the raw
   entropy bytes, without checksum bits, in QR byte mode. A 12-word mnemonic is
   16 bytes, and a 24-word mnemonic is 32 bytes. The program computes the BIP39
@@ -239,11 +241,11 @@ no keyboard.
 - **CLI-QR-1** — `fugupass-qr` must read stdin and must render one QR code on
   the terminal, in UTF-8 half blocks.
 - **CLI-QR-2** — The program must render a mnemonic export in the standard
-  SeedQR form or in the CompactSeedQR form ([CLI-SCAN](programs.md#cli-scan)),
-  for the signer scan flow ([ENTRY-TYPES](entries.md#entry-types)).
+  SeedQR form or in the CompactSeedQR form ([CLI-SCAN](programs.md#cli-scan)).
+  This serves the signer scan flow ([ENTRY-TYPES](entries.md#entry-types)).
 - **CLI-QR-3** — The program must render a vault file up to the one-code QR
   capacity as one QR code for the paper backup
-  ([VAULT-BACKUP](vault.md#vault-backup)), and must report a file that exceeds
+  ([VAULT-BACKUP](vault.md#vault-backup)). It must report a file that exceeds
   the capacity.
 - **CLI-QR-4** — The program must apply the sandbox of
   [CLI-SPLIT](programs.md#cli-split).

@@ -43,10 +43,11 @@ not a requirement (D-02).
 
 ## System model
 
-- **OVW-MODEL-1** — A vault has one master plate, one ordered oracle set of `n`
-  oracles and one threshold `k`, with `1 ≤ k ≤ n ≤ 255` (D-20), and one or more
-  machines. Each machine holds one vault directory: the shared ciphertext set
-  plus that machine's machine-local set ([VAULT-LAYOUT](vault.md#vault-layout)).
+- **OVW-MODEL-1** — A vault has one master plate, and one ordered oracle set of
+  `n` oracles with one threshold `k`. The bounds are `1 ≤ k ≤ n ≤ 255` (D-20). A
+  vault also has one or more machines. Each machine holds one vault directory:
+  the shared ciphertext set plus that machine's machine-local set
+  ([VAULT-LAYOUT](vault.md#vault-layout)).
 - **OVW-MODEL-2** — The parts of a reveal live apart. Each oracle holds the mask
   of one share. The device factor, the wraps, and the ciphertext live on disk.
   The passphrase lives with the user.
@@ -81,8 +82,8 @@ The scope covers:
   slots ([ENTRY-MODEL](entries.md#entry-model),
   [ENTRY-POOL](entries.md#entry-pool)).
 - Per-entry records at each oracle of one ordered set of `n` blind PIN oracles,
-  with a vault-wide threshold `k` and `1 ≤ k ≤ n ≤ 255`, over unmodified
-  protocol v2, with a canary record per oracle
+  with a vault-wide threshold `k` and `1 ≤ k ≤ n ≤ 255`. The records run over
+  unmodified protocol v2, with a canary record per oracle
   ([ORC-CONFORM](oracle.md#orc-conform), [ORC-QUORUM](oracle.md#orc-quorum),
   [ORC-CANARY](oracle.md#orc-canary)).
 - Ceremonies for vault creation, pool refill, machine provisioning, and plate
@@ -114,10 +115,11 @@ The non-goals bound every claim in this specification:
 
 ## Attacker outcomes
 
-Each row names the artifacts that the attacker holds. Five artifacts exist: a
-copy of the shared ciphertext set; a machine's disk with the device factor `X`
-([KEY-DEVICE](keys.md#key-device)) and the wraps; the passphrase; the records of
-one or more oracles, each with that oracle's static key; and the master plate.
+Each row names the artifacts that the attacker holds. Five artifacts exist. They
+are a copy of the shared ciphertext set, and a machine's disk with the device
+factor `X` ([KEY-DEVICE](keys.md#key-device)) and the wraps. The other artifacts
+are the passphrase, the records of one or more oracles, each with that oracle's
+static key, and the master plate.
 
 | The attacker holds                                                                                             | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

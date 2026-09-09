@@ -29,9 +29,9 @@ tokens, for example FuguOracle OPS-GET-4.
   suite must not branch on the counterparty.
 - **QA-HARNESS-5** — The suite must run one leg against the documented example
   topology: three oracle instances with a threshold of two. The leg must prove
-  the reveal on every two-oracle quorum, the decrypt failure with one mask, the
-  passphrase change over three oracles, and the provisioning loop
-  ([ORC-QUORUM](oracle.md#orc-quorum), [ORC-ENROLL](oracle.md#orc-enroll)).
+  the reveal on every two-oracle quorum, and the decrypt failure with one mask.
+  It must prove the passphrase change over three oracles, and the provisioning
+  loop ([ORC-QUORUM](oracle.md#orc-quorum), [ORC-ENROLL](oracle.md#orc-enroll)).
 - **QA-HARNESS-6** — The harness must start and stop each counterparty with
   `Fugu::Process`. It must never run a shell: a command is a list. It must wait
   for readiness with `Fugu::Timeout::wait_until`. It must give each counterparty
@@ -51,8 +51,8 @@ tokens, for example FuguOracle OPS-GET-4.
 
 FuguPass is a second client of the wire protocol, beside the Blockstream Jade. A
 pass against every counterparty proves the FuguOracle claim that the oracle
-serves any conforming client, and it touches nothing in the FuguOracle
-specification (D-02).
+serves any conforming client. It touches nothing in the FuguOracle specification
+(D-02).
 
 <a id="qa-mask"></a>
 
@@ -63,9 +63,9 @@ specification (D-02).
   on every request.
 - **QA-MASK-2** — The test must assert that a `set_pin` re-enrollment changes
   the answer.
-- **QA-MASK-3** — The test must drive a record to the third-strike wipe and must
-  assert that every later request receives junk: no later answer equals the old
-  mask.
+- **QA-MASK-3** — The test must drive a record to the third-strike wipe. It must
+  assert that every later request receives junk, and that no later answer equals
+  the old mask.
 - **QA-MASK-4** — The test must assert that junk answers differ between
   requests.
 - **QA-MASK-5** — The test must run against the upstream `blind_pin_server` at
@@ -107,23 +107,25 @@ over that behavior.
 
 - **QA-SPLIT-1** — A written soundness analysis of the deterministic Shamir
   coefficients must exist in the repository ([KEY-SHARE](keys.md#key-share)).
-  The analysis must cover the derived-versus-uniform coefficient question, the
-  domain separation of the coefficient labels, the non-reuse of coefficients
-  across entries and against the index key, and the independence of coefficients
-  across threshold values and across re-enrollments of one secret.
+  The analysis must cover the derived-versus-uniform coefficient question, and
+  the domain separation of the coefficient labels. It must cover the non-reuse
+  of coefficients across entries and against the index key. It must also cover
+  the independence of coefficients across threshold values and across
+  re-enrollments of one secret.
 - **QA-SPLIT-2** — The analysis must have human approval.
 - **QA-SPLIT-3** — Acceptance of the custody layer includes this analysis, as a
   sibling of the mask-composition analysis
   ([QA-ANALYSIS](testing.md#qa-analysis), D-19).
 - **QA-SPLIT-4** — Known-answer vectors from an independent reference
-  implementation must pin the share arithmetic: the field operations, the
-  coefficient derivation, the share evaluation, the reconstruction, and the
-  `k = 1` reduction ([KEY-SHARE](keys.md#key-share)). The coefficient label
-  carries the threshold, so the vectors must cover more than one threshold
-  value.
+  implementation must pin the share arithmetic. The parts are the field
+  operations, the coefficient derivation, and the share evaluation. The other
+  parts are the reconstruction and the `k = 1` reduction
+  ([KEY-SHARE](keys.md#key-share)). The coefficient label carries the threshold,
+  so the vectors must cover more than one threshold value.
 - **QA-SPLIT-5** — The repository must record the source evaluation of the
-  share-arithmetic implementation: the evaluated candidates, the licenses, the
-  timing behavior of the arithmetic, and the choice (D-15).
+  share-arithmetic implementation. The record must hold the evaluated
+  candidates, the licenses, the timing behavior of the arithmetic, and the
+  choice (D-15).
 - **QA-SPLIT-6** — The share-split known-answer tests must run offline, with no
   oracle and no network.
 
@@ -142,7 +144,7 @@ The analysis judges the replacement, and the vectors pin the arithmetic.
 - **QA-CALIBRATE-2** — The repository must record the calibration: the measured
   latency, the assumed attack hardware, and the chosen default round count.
 - **QA-CALIBRATE-3** — A scaling check must enroll hundreds of records at a
-  flat-file oracle and must record the result against the stated workload
+  flat-file oracle. It must record the result against the stated workload
   posture of the oracle ([ORC-RECORDS](oracle.md#orc-records)).
 - **QA-CALIBRATE-4** — The latency measurement of QA-CALIBRATE-1 must run on
   real OpenBSD hardware. It must not run in an emulated guest, because emulation
@@ -150,10 +152,10 @@ The analysis judges the replacement, and the vectors pin the arithmetic.
   guest, and a guest snapshot can hold the enrolled record set.
 
 A session computes bcrypt_pbkdf once per quorum canary and `k` times per
-revealed entry, so the round count multiplies into the session latency by `k`. A
-ceremony enrolls one record per slot ([ENTRY-POOL](entries.md#entry-pool)), so
-the record count at the oracle grows with the pool size and with the machine
-count.
+revealed entry. The round count therefore multiplies into the session latency by
+`k`. A ceremony enrolls one record per slot
+([ENTRY-POOL](entries.md#entry-pool)). The record count at the oracle grows with
+the pool size and with the machine count.
 
 <a id="qa-kat"></a>
 
