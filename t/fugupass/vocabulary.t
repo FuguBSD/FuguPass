@@ -2,14 +2,17 @@
 # ex:ts=8 sw=4:
 # The vocabulary gate (OVW-VOCABULARY). No file that this repository
 # owns names one application of the standards. The words come from
-# spec/overview.md, so this file names none of them.
+# spec/overview.md, so this file names none of them. The three
+# repositories FuguSeed, FuguPass, and FuguOracle carry this one file.
 
 use v5.36;
 use Test::More;
-use FindBin qw($RealBin);
+use FindBin qw($RealBin $RealScript);
+use File::Spec ();
 
 my $root = "$RealBin/../..";
 chdir $root or BAIL_OUT("chdir $root: $!");
+my $self = File::Spec->abs2rel( "$RealBin/$RealScript", $root );
 
 # _slurp($path):
 #	The whole file as text, or undef when it does not open.
@@ -38,11 +41,11 @@ is( scalar @words, 4, 'spec/overview.md names four banned words' );
 
 # Each word matches whole, in any letter case, as itself and as a
 # plural: the word plus s, and for a word that ends in y, the stem
-# plus ies.
+# plus ies (currency, currencies; money, monies).
 my @forms;
 for my $word (@words) {
 	push @forms, $word, "${word}s";
-	push @forms, ( $word =~ s/y\z//r ) . 'ies' if $word =~ /y\z/;
+	push @forms, ( $word =~ s/e?y\z/ies/r ) if $word =~ /y\z/;
 }
 my $alt    = join '|', map { quotemeta } @forms;
 my $banned = qr/\b(?:$alt)\b/i;
@@ -58,7 +61,6 @@ sub _synced ($path)
 	return $head =~ /pack of FuguBSD\/Tooling owns this file/;
 }
 
-my $self = 't/fugupass/vocabulary.t';
 my @hits;
 for my $path (`git ls-files --cached --others --exclude-standard`) {
 	chomp $path;
