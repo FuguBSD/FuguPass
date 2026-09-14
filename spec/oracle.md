@@ -88,7 +88,7 @@ The interop harness proves conformance against every available conforming oracle
 - **ORC-RECORDS-2** — Each machine must hold one canary record at each oracle
   ([ORC-CANARY](oracle.md#orc-canary)).
 - **ORC-RECORDS-3** — To the oracle, every record is an independent client.
-  FuguOracle OVR-PURPOSE-4 permits many clients on one instance. Each record
+  FuguOracle OVW-PURPOSE-4 permits many clients on one instance. Each record
   burns its own three strikes, so a wipe destroys one record and touches no
   other. A record holds no entry name, no purpose, and no content.
 - **ORC-RECORDS-4** — The documentation must state the load that FuguPass
