@@ -1,44 +1,13 @@
 # Ceremonies
 
-This document specifies the ceremonies: the dice ceremony, vault creation, pool
-refill, machine provisioning, and plate verification. A ceremony is a procedure
-with the master present. Between ceremonies the master exists only on plates
-(D-12). The notation `M`, `root`, `f(k, label)`, `K_e`, `K_idx`, `c_ei`,
-`share(S, i)`, the slot index `e`, the oracle index `i`, and the threshold `k`
-comes from [keys.md](keys.md). The recovery procedures are in
-[recovery.md](recovery.md). [CLI-SCAN](programs.md#cli-scan) states the
-video-device requirement of a plate scan.
-
-<a id="cer-dice"></a>
-
-## The dice ceremony
-
-The dice ceremony generates the master `M` (D-11). Dice `a` and `b` are two d16
-of different colors, and die `c` is one d8. All die values are 1-based. The two
-d16 must stay distinguishable through every roll, because the order of `a` and
-`b` matters.
-
-- **CER-DICE-1** — One roll of `a`, `b`, and `c` must select one BIP39 word by
-  `index = (a-1)·128 + (b-1)·8 + (c-1)`.
-- **CER-DICE-2** — The ceremony must select eleven words by eleven rolls. One
-  final roll of `a` and `c` must give the 7 final entropy bits:
-  `r = (a-1)·8 + (c-1)`.
-- **CER-DICE-3** — The tool must compute only the 4-bit checksum and must show
-  the final word as `wordlist[r·16 + checksum]`.
-- **CER-DICE-4** — A printed lookup card must let the user verify every word by
-  hand against the rolls.
-- **CER-DICE-5** — Verification must close the ceremony. The user must load the
-  twelve words into an air-gapped signer. The user must confirm that the signer
-  accepts the checksum. The user must stamp the plate. The user must verify the
-  plate by a scan against the rolled words.
-- **CER-DICE-6** — No d6 code path exists. A signer with d6 support is an equal
-  entropy source through a SeedQR import ([KEY-MASTER](keys.md#key-master)).
-- **CER-DICE-7** — The tool must erase `M` and `root` with `explicit_bzero(3)`
-  at the end of the ceremony.
-
-One roll has 2048 outcomes, which map one-to-one to the BIP39 wordlist, with no
-rejection and no modulo bias. Eleven rolls plus the final roll give the full 128
-entropy bits, and the tool contributes no entropy.
+This document specifies the ceremonies: vault creation, pool refill, machine
+provisioning, and plate verification. A ceremony is a procedure with the master
+present. Between ceremonies the master exists only on plates (D-12). The
+notation `M`, `root`, `f(k, label)`, `K_e`, `K_idx`, `c_ei`, `share(S, i)`, the
+slot index `e`, the oracle index `i`, and the threshold `k` comes from
+[keys.md](keys.md). The recovery procedures are in [recovery.md](recovery.md).
+[CLI-SCAN](programs.md#cli-scan) states the video-device requirement of a plate
+scan.
 
 <a id="cer-create"></a>
 
@@ -47,9 +16,9 @@ entropy bits, and the tool contributes no entropy.
 Vault creation makes a new vault on its first machine. The rules of this unit
 are the steps of the ceremony. The tool must run the steps in rule order.
 
-- **CER-CREATE-1** — The ceremony must obtain the master by the dice ceremony,
-  or by a SeedQR scan. It can also scan a BIP85 child of an external seed
-  ([KEY-MASTER](keys.md#key-master)).
+- **CER-CREATE-1** — The ceremony must obtain the master by a SeedQR scan of a
+  plate made outside FuguPass. It can also scan a BIP85 child of an external
+  seed ([KEY-MASTER](keys.md#key-master)). FuguPass makes no seed.
 - **CER-CREATE-2** — The tool must derive this machine's device factor `X` from
   its machine name ([KEY-DEVICE](keys.md#key-device)) and must persist it in the
   machine-local set ([VAULT-LAYOUT](vault.md#vault-layout)).

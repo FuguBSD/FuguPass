@@ -164,8 +164,6 @@ the pool size and with the machine count.
 - **QA-KAT-1** — Known-answer vectors from a reference implementation must gate
   the BIP85 implementation: the PWD BASE64 application and the BIP39 application
   ([KEY-BIP85](keys.md#key-bip85), D-17).
-- **QA-KAT-2** — Dice-mapping vectors must cover the word mapping of the dice
-  ceremony and the final-word checksum ([CER-DICE](ceremonies.md#cer-dice)).
 - **QA-KAT-3** — Seal round-trip vectors must cover the seal format: a seal, a
   decrypt, and a decrypt failure on a modified byte
   ([VAULT-SEAL](vault.md#vault-seal)).

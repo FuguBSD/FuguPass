@@ -10,12 +10,12 @@ This document cites it and does not restate it.
 
 ## Origin classes
 
-| Class     | Secret origin          | Backup medium              | Restore path                 |
-| --------- | ---------------------- | -------------------------- | ---------------------------- |
-| derived   | BIP85 from the master  | the master plate           | re-derivation from the plate |
-| stored    | an import from outside | any copy of the shared set | the plate plus a copy        |
-| sovereign | its own dice ceremony  | its own plate              | its own plate                |
-| shadow    | none; metadata only    | any copy of the shared set | the plate plus a copy        |
+| Class     | Secret origin                       | Backup medium              | Restore path                 |
+| --------- | ----------------------------------- | -------------------------- | ---------------------------- |
+| derived   | BIP85 from the master               | the master plate           | re-derivation from the plate |
+| stored    | an import from outside              | any copy of the shared set | the plate plus a copy        |
+| sovereign | its own seed, made outside FuguPass | its own plate              | its own plate                |
+| shadow    | none; metadata only                 | any copy of the shared set | the plate plus a copy        |
 
 - **ENTRY-MODEL-1** — Each entry has exactly one origin class: derived, stored,
   sovereign, or shadow (D-05). The default class is derived.

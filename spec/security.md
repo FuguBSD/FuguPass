@@ -10,8 +10,10 @@ are in [OVW-LIMITS](overview.md#ovw-limits).
 ## Entropy policy
 
 - **SAFE-ENTROPY-1** — The system RNG must not generate a stored secret.
-- **SAFE-ENTROPY-2** — Long-term secrets must come from dice or from derivation
-  ([KEY-MASTER](keys.md#key-master), [KEY-DERIVE](keys.md#key-derive)).
+- **SAFE-ENTROPY-2** — A long-term secret must enter from outside, or must
+  derive from the master ([KEY-MASTER](keys.md#key-master),
+  [KEY-DERIVE](keys.md#key-derive)). A secret from outside is the master or an
+  import. FuguPass generates none.
 - **SAFE-ENTROPY-3** — The device factor must derive from the master
   ([KEY-DEVICE](keys.md#key-device)). The tool must not create a device factor
   from the system RNG.

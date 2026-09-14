@@ -58,7 +58,6 @@ that phase. An `n-a` unit has no "Done by" value.
 | [ORC-QUORUM](oracle.md#orc-quorum)           | open  | P2      | —                                                                                                                          |
 | [ORC-CANARY](oracle.md#orc-canary)           | open  | P2      | —                                                                                                                          |
 | [ORC-REVOKE](oracle.md#orc-revoke)           | open  | P2      | —                                                                                                                          |
-| [CER-DICE](ceremonies.md#cer-dice)           | open  | P1      | —                                                                                                                          |
 | [CER-CREATE](ceremonies.md#cer-create)       | open  | P3      | —                                                                                                                          |
 | [CER-REFILL](ceremonies.md#cer-refill)       | open  | P3      | —                                                                                                                          |
 | [CER-PROVISION](ceremonies.md#cer-provision) | open  | P3      | —                                                                                                                          |
@@ -109,7 +108,7 @@ repository root.
 | vault.md      | `src/vault.c`, `src/seal.c`                                                       |
 | entries.md    | `src/entry.c`                                                                     |
 | oracle.md     | `src/oracle.c`, `src/envelope.c`                                                  |
-| ceremonies.md | `src/ceremony.c`, `src/dice.c`                                                    |
+| ceremonies.md | `src/ceremony.c`                                                                  |
 | recovery.md   | `src/recover.c`                                                                   |
 | programs.md   | `src/fugupass.c`, `bin/fugupass-repl`, `src/fugupass-scan.c`, `src/fugupass-qr.c` |
 | security.md   | `src/`                                                                            |
@@ -117,5 +116,6 @@ repository root.
 
 ## Retired IDs
 
-| ID  | Unit |
-| --- | ---- |
+| ID       | Unit                                                |
+| -------- | --------------------------------------------------- |
+| CER-DICE | ceremonies.md; the seed procedure lives in FuguSeed |
