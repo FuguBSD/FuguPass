@@ -28,7 +28,7 @@ prose tokens, for example FuguOracle OPS-GET-4.
   fresh entropy from `arc4random(3)` (FuguOracle OPS-SET-1).
 
 The interop harness proves conformance against every available conforming oracle
-([QA-HARNESS](testing.md#qa-harness)).
+([TEST-HARNESS](testing.md#test-harness)).
 
 <a id="orc-provision"></a>
 
@@ -101,7 +101,7 @@ request to each quorum oracle. One oracle instance sees one request per event;
 the multiplier spreads across instances. This load can exceed the oracle
 workload assumption of a few requests per day (FuguOracle D-04). This is a
 posture mismatch on a self-hosted oracle, not a correctness problem. The scaling
-check in [QA-CALIBRATE](testing.md#qa-calibrate) records the result.
+check in [TEST-CALIBRATE](testing.md#test-calibrate) records the result.
 
 <a id="orc-counter"></a>
 
@@ -137,7 +137,7 @@ and the request takes the junk path. The honest residual is cause ambiguity, not
 a strike. Junk is uniform (FuguOracle OPS-JUNK-2): a counter desync, a wrong
 passphrase, and a wiped record look identical by response bytes. The runbook
 states what to check before the operator concludes a wipe
-([SAFE-DETECT](security.md#safe-detect)). Envelopes captured before a
+([SEC-DETECT](security.md#sec-detect)). Envelopes captured before a
 re-enrollment stay replayable until the stored counter passes their values. This
 is an accepted FuguOracle transport risk, and TLS mitigates it.
 
@@ -158,7 +158,7 @@ is an accepted FuguOracle transport risk, and TLS mitigates it.
   ([KEY-SHARE](keys.md#key-share), [KEY-MASK](keys.md#key-mask)). It must
   persist the wrap in the machine-local set. It must then erase `s_ei` and the
   share from memory. The client must erase `K_e` directly after its last use
-  ([SAFE-MEMORY](security.md#safe-memory)).
+  ([SEC-MEMORY](security.md#sec-memory)).
 - **ORC-ENROLL-4** — A passphrase change must re-enroll every record of the
   machine at every live oracle, without the master. For each slot, `get_pin`
   with the old pins at any `k` oracles unmasks `k` shares, and the
@@ -217,7 +217,7 @@ is an accepted FuguOracle transport risk, and TLS mitigates it.
   With a live oracle unreachable, the change stays incomplete, and the marker
   stays. Sessions refuse reveals until the change completes, or until a plate
   ceremony removes the marker (ORC-ENROLL-12). The quorum availability claim
-  covers reveals only ([OVW-LIMITS](overview.md#ovw-limits)).
+  covers reveals only ([OVW-RISKS](overview.md#ovw-risks)).
 - **ORC-ENROLL-12** — A plate ceremony that re-enrolls every record of this
   machine under one passphrase must remove the change marker. The ceremony
   report must name the removal (CER-PROVISION-17). This ceremony is the recovery
@@ -245,7 +245,7 @@ record at one oracle.
 - **ORC-REVEAL-2** — On a correct pin, the answer is the mask `s_ei`, stable for
   an unchanged record: identical bytes on every correct request. Stability is a
   consequence of FuguOracle OPS-GET-4, never a stated interface guarantee.
-  [QA-MASK](testing.md#qa-mask) pins it by test.
+  [TEST-MASK](testing.md#test-mask) pins it by test.
 - **ORC-REVEAL-3** — The client must unmask oracle `i`'s share as
   `share(K_e, i) = c_ei ⊕ f(s_ei, "fugupass/v1/wrap" ‖ i/e)`
   ([KEY-MASK](keys.md#key-mask)). [ORC-QUORUM](oracle.md#orc-quorum) governs the
@@ -267,7 +267,7 @@ record at one oracle.
   client must report an HTTP error, a transport failure, and a junk answer as
   distinct states, with distinct user reports.
 - **ORC-REVEAL-7** — `K_e` must exist in memory for seconds only, and `M` must
-  not appear in a reveal ([SAFE-MEMORY](security.md#safe-memory)).
+  not appear in a reveal ([SEC-MEMORY](security.md#sec-memory)).
 - **ORC-REVEAL-8** — A `200` response whose envelope MAC or decrypt fails is an
   oracle-authentication failure. It is a distinct client state: it is not a junk
   answer, and it does not prove that the oracle skipped the attempt. The tool

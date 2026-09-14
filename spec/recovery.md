@@ -5,8 +5,8 @@ recovery root: the SeedQR plate holds the master `M`. [keys.md](keys.md) defines
 the notation `M`, `root`, `f(k, label)`, `H(x)`, `K_e`, `K_idx`, the slot index
 `e`, the oracle count `n`, and the threshold `k`. This document cites FuguOracle
 rules as prose tokens, for example FuguOracle OPS-SET-3.
-[CLI-SCAN](programs.md#cli-scan) states the video-device requirement of a plate
-scan.
+[PROG-SCAN](programs.md#prog-scan) states the video-device requirement of a
+plate scan.
 
 <a id="rec-principle"></a>
 

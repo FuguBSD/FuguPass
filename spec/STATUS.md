@@ -15,9 +15,8 @@ reference to an earlier state. A note can carry the date of a recorded fact.
 | done    | Code implements the full unit. The note links the code or the tests. |
 | n-a     | No code can implement the unit. It exists for citation only.         |
 
-The "Done by" column names a phase of the [roadmap](ROADMAP.md). At the exit of
-that phase, the unit must have the state `done`. A unit can reach `done` before
-that phase. An `n-a` unit has no "Done by" value.
+The "Done by" column names a phase of the [roadmap](ROADMAP.md), or "—" when no
+phase applies.
 
 ## Units
 
@@ -26,8 +25,8 @@ that phase. An `n-a` unit has no "Done by" value.
 | [OVW-PURPOSE](overview.md#ovw-purpose)       | n-a   | —       | Citation only.                                                                                                             |
 | [OVW-MODEL](overview.md#ovw-model)           | n-a   | —       | Citation only.                                                                                                             |
 | [OVW-SCOPE](overview.md#ovw-scope)           | n-a   | —       | Citation only.                                                                                                             |
-| [OVW-ATTACKS](overview.md#ovw-attacks)       | n-a   | —       | Citation only.                                                                                                             |
-| [OVW-LIMITS](overview.md#ovw-limits)         | n-a   | —       | Citation only.                                                                                                             |
+| [OVW-VOCABULARY](overview.md#ovw-vocabulary) | done  | —       | [t/fugupass/vocabulary.t](../t/fugupass/vocabulary.t) scans every tracked file for the banned words.                       |
+| [OVW-RISKS](overview.md#ovw-risks)           | n-a   | —       | Citation only.                                                                                                             |
 | [KEY-MASTER](keys.md#key-master)             | open  | P1      | —                                                                                                                          |
 | [KEY-DERIVE](keys.md#key-derive)             | open  | P1      | —                                                                                                                          |
 | [KEY-ENTRY](keys.md#key-entry)               | open  | P1      | —                                                                                                                          |
@@ -67,24 +66,24 @@ that phase. An `n-a` unit has no "Done by" value.
 | [REC-VAULT](recovery.md#rec-vault)           | open  | P3      | —                                                                                                                          |
 | [REC-WIPE](recovery.md#rec-wipe)             | open  | P3      | —                                                                                                                          |
 | [REC-RESTORE](recovery.md#rec-restore)       | open  | P3      | —                                                                                                                          |
-| [CLI-SPLIT](programs.md#cli-split)           | open  | P3      | —                                                                                                                          |
-| [CLI-IFACE](programs.md#cli-iface)           | open  | P3      | Fugu LIB-REPL supplies the line editor, and its `.pod` sidecar is the contract of record. The interface program is absent. |
-| [CLI-REPL](programs.md#cli-repl)             | open  | P2      | Fugu LIB-REPL supplies the line editor, and its `.pod` sidecar is the contract of record. The interface program is absent. |
-| [CLI-ONESHOT](programs.md#cli-oneshot)       | open  | P2      | —                                                                                                                          |
-| [CLI-OUTPUT](programs.md#cli-output)         | open  | P2      | —                                                                                                                          |
-| [CLI-SCAN](programs.md#cli-scan)             | open  | P3      | —                                                                                                                          |
-| [CLI-QR](programs.md#cli-qr)                 | open  | P3      | —                                                                                                                          |
-| [SAFE-ENTROPY](security.md#safe-entropy)     | open  | P1      | —                                                                                                                          |
-| [SAFE-MEMORY](security.md#safe-memory)       | open  | P1      | —                                                                                                                          |
-| [SAFE-FLOOR](security.md#safe-floor)         | open  | P4      | —                                                                                                                          |
-| [SAFE-DETECT](security.md#safe-detect)       | open  | P4      | —                                                                                                                          |
-| [SAFE-CLAIMS](security.md#safe-claims)       | open  | P4      | —                                                                                                                          |
-| [QA-HARNESS](testing.md#qa-harness)          | open  | P2      | —                                                                                                                          |
-| [QA-MASK](testing.md#qa-mask)                | open  | P2      | —                                                                                                                          |
-| [QA-ANALYSIS](testing.md#qa-analysis)        | open  | P2      | —                                                                                                                          |
-| [QA-SPLIT](testing.md#qa-split)              | open  | P2      | —                                                                                                                          |
-| [QA-CALIBRATE](testing.md#qa-calibrate)      | open  | P4      | —                                                                                                                          |
-| [QA-KAT](testing.md#qa-kat)                  | open  | P1      | —                                                                                                                          |
+| [PROG-SPLIT](programs.md#prog-split)         | open  | P3      | —                                                                                                                          |
+| [PROG-IFACE](programs.md#prog-iface)         | open  | P3      | Fugu LIB-REPL supplies the line editor, and its `.pod` sidecar is the contract of record. The interface program is absent. |
+| [PROG-REPL](programs.md#prog-repl)           | open  | P2      | Fugu LIB-REPL supplies the line editor, and its `.pod` sidecar is the contract of record. The interface program is absent. |
+| [PROG-ONESHOT](programs.md#prog-oneshot)     | open  | P2      | —                                                                                                                          |
+| [PROG-OUTPUT](programs.md#prog-output)       | open  | P2      | —                                                                                                                          |
+| [PROG-SCAN](programs.md#prog-scan)           | open  | P3      | —                                                                                                                          |
+| [PROG-QR](programs.md#prog-qr)               | open  | P3      | —                                                                                                                          |
+| [SEC-ENTROPY](security.md#sec-entropy)       | open  | P1      | —                                                                                                                          |
+| [SEC-MEMORY](security.md#sec-memory)         | open  | P1      | —                                                                                                                          |
+| [SEC-FLOOR](security.md#sec-floor)           | open  | P4      | —                                                                                                                          |
+| [SEC-DETECT](security.md#sec-detect)         | open  | P4      | —                                                                                                                          |
+| [SEC-CLAIMS](security.md#sec-claims)         | open  | P4      | —                                                                                                                          |
+| [TEST-HARNESS](testing.md#test-harness)      | open  | P2      | —                                                                                                                          |
+| [TEST-MASK](testing.md#test-mask)            | open  | P2      | —                                                                                                                          |
+| [TEST-ANALYSIS](testing.md#test-analysis)    | open  | P2      | —                                                                                                                          |
+| [TEST-SPLIT](testing.md#test-split)          | open  | P2      | —                                                                                                                          |
+| [TEST-CALIBRATE](testing.md#test-calibrate)  | open  | P4      | —                                                                                                                          |
+| [TEST-KAT](testing.md#test-kat)              | open  | P1      | —                                                                                                                          |
 
 ## Update protocol
 
@@ -99,11 +98,11 @@ that phase. An `n-a` unit has no "Done by" value.
 
 ## Code roots
 
-The roots are the code paths that implement a document, relative to the
-repository root.
+The drift gate maps each document to the code that implements it.
 
 | Document      | Roots                                                                             |
 | ------------- | --------------------------------------------------------------------------------- |
+| overview.md   | `t/fugupass/vocabulary.t`                                                         |
 | keys.md       | `src/derive.c`, `src/bip85.c`                                                     |
 | vault.md      | `src/vault.c`, `src/seal.c`                                                       |
 | entries.md    | `src/entry.c`                                                                     |
@@ -113,9 +112,3 @@ repository root.
 | programs.md   | `src/fugupass.c`, `bin/fugupass-repl`, `src/fugupass-scan.c`, `src/fugupass-qr.c` |
 | security.md   | `src/`                                                                            |
 | testing.md    | `tests/`                                                                          |
-
-## Retired IDs
-
-| ID       | Unit                                                |
-| -------- | --------------------------------------------------- |
-| CER-DICE | ceremonies.md; the seed procedure lives in FuguSeed |
