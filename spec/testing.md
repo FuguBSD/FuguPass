@@ -174,6 +174,9 @@ the pool size and with the machine count.
   label in [keys.md](keys.md).
 - **QA-KAT-6** — The repository must hold the vectors. The known-answer tests
   must run offline, with no oracle and no network.
+- **QA-KAT-7** — Negative vectors must cover the master gate of KEY-MASTER-6: a
+  24-word SeedQR, and a 12-word SeedQR with a wrong checksum
+  ([KEY-MASTER](keys.md#key-master)).
 
 The test master is a public constant for tests only. Its vectors pin the whole
 derivation tree, so a derivation defect fails a test before it corrupts a vault.
