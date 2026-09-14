@@ -7,6 +7,8 @@ document that repeats a formula must cite the defining unit in this document.
 Notation, defined here and used across the specification:
 
 - `M` is the master mnemonic.
+- A plate is any physical carrier of the master SeedQR: a metal plate, or the
+  paper drawing of the FuguSeed procedure.
 - `root` is the BIP39 seed of `M` with an empty BIP39 passphrase.
 - `f(k, label)` is HMAC-SHA256 with key `k` and message `label`. The output is
   32 bytes.
@@ -64,6 +66,9 @@ threshold 3 and coefficient 1. The entry labels are `fugupass/v1/client-key` ‖
 - **KEY-MASTER-5** — The plate check value is
   `f(root, "fugupass/v1/plate-check")`. This one-way 32-byte value can persist
   on disk. `M` and `root` must not persist on disk.
+- **KEY-MASTER-6** — The tool must reject a scanned master that is not 12 words,
+  and a scanned master with a wrong BIP39 checksum. The rejection must name the
+  count or the checksum, never a word.
 
 The documented default is a master made outside FuguPass with the FuguSeed
 procedure. It enters by a plate scan. A BIP85 child of an existing cold seed is

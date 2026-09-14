@@ -159,8 +159,8 @@ beyond them.
   entry, and one `set_pin` request per live oracle for each slot of each machine
   at enrollment. One oracle instance sees one request per event; the multiplier
   spreads across instances. This load can exceed the FuguOracle workload
-  assumption of a few requests per day. This is a posture mismatch on a
-  self-hosted oracle, not a correctness problem
+  assumption of a few requests per day (FuguOracle D-04). This is a posture
+  mismatch on a self-hosted oracle, not a correctness problem
   ([ORC-RECORDS](oracle.md#orc-records),
   [QA-CALIBRATE](testing.md#qa-calibrate)).
 - **OVW-LIMITS-7** — The master plate is a single point of catastrophic theft.

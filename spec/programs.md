@@ -223,7 +223,8 @@ no keyboard.
 - **CLI-SCAN-3** — The program must decode the CompactSeedQR form: the raw
   entropy bytes, without checksum bits, in QR byte mode. A 12-word mnemonic is
   16 bytes, and a 24-word mnemonic is 32 bytes. The program computes the BIP39
-  checksum to rebuild the final word.
+  checksum to rebuild the final word. This is the one BIP39 checksum computation
+  of FuguPass, and it serves the codec only (D-11).
 - **CLI-SCAN-4** — Both codecs follow the SeedSigner SeedQR specification.
   Known-answer vectors pin both codecs ([QA-KAT](testing.md#qa-kat)).
 - **CLI-SCAN-5** — The program must emit a decoded mnemonic as the mnemonic

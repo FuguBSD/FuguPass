@@ -18,7 +18,7 @@ are the steps of the ceremony. The tool must run the steps in rule order.
 
 - **CER-CREATE-1** — The ceremony must obtain the master by a SeedQR scan of a
   plate made outside FuguPass. It can also scan a BIP85 child of an external
-  seed ([KEY-MASTER](keys.md#key-master)). FuguPass makes no seed.
+  seed ([KEY-MASTER](keys.md#key-master)).
 - **CER-CREATE-2** — The tool must derive this machine's device factor `X` from
   its machine name ([KEY-DEVICE](keys.md#key-device)) and must persist it in the
   machine-local set ([VAULT-LAYOUT](vault.md#vault-layout)).
