@@ -25,7 +25,7 @@ prose tokens, for example FuguOracle OPS-GET-4.
   not the authenticator.
 - **ORC-CONFORM-5** — Every request must use a fresh ephemeral keypair and a
   fresh IV from `arc4random(3)`. Every `set_pin` request must carry 32 bytes of
-  fresh entropy from `arc4random(3)`.
+  fresh entropy from `arc4random(3)` (FuguOracle OPS-SET-1).
 
 The interop harness proves conformance against every available conforming oracle
 ([QA-HARNESS](testing.md#qa-harness)).
@@ -99,17 +99,18 @@ The interop harness proves conformance against every available conforming oracle
 A session that reveals ten entries sends ten entry requests plus one canary
 request to each quorum oracle. One oracle instance sees one request per event;
 the multiplier spreads across instances. This load can exceed the oracle
-workload assumption of a few requests per day. This is a posture mismatch on a
-self-hosted oracle, not a correctness problem. The scaling check in
-[QA-CALIBRATE](testing.md#qa-calibrate) records the result.
+workload assumption of a few requests per day (FuguOracle D-04). This is a
+posture mismatch on a self-hosted oracle, not a correctness problem. The scaling
+check in [QA-CALIBRATE](testing.md#qa-calibrate) records the result.
 
 <a id="orc-counter"></a>
 
 ## Replay counters
 
 - **ORC-COUNTER-1** — The counter sent for a record must be
-  `max(wall-clock Unix seconds, stored + 1)`, encoded as uint32 LE. A revocation
-  request is the one exception ([ORC-REVOKE](oracle.md#orc-revoke)).
+  `max(wall-clock Unix seconds, stored + 1)`, encoded as uint32 LE (FuguOracle
+  PROTO-ENVELOPE). A revocation request is the one exception
+  ([ORC-REVOKE](oracle.md#orc-revoke)).
 - **ORC-COUNTER-2** — The client must persist the last-sent counter of each
   record in the plaintext counters file, keyed by record name. The record names
   are `<e>-<i>` and `canary-<i>` ([VAULT-FORMAT](vault.md#vault-format)). The

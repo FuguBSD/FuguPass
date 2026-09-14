@@ -18,7 +18,7 @@ not a requirement (D-02).
 
 - **OVW-PURPOSE-1** — FuguPass serves any user with secrets to keep. The design
   adopts the standards and the tools of air-gapped custody: BIP39 mnemonics,
-  SeedQR metal plates, dice entropy, and blind PIN oracles.
+  SeedQR metal plates, and blind PIN oracles.
 - **OVW-PURPOSE-2** — Derivation answers backup. Every vault key derives from
   one 12-word BIP39 master, so one plate restores the vault
   ([KEY-MASTER](keys.md#key-master)).
@@ -71,9 +71,9 @@ topology is 2-of-3: a home box, a VPS, and a friend's box. One oracle with
 
 The scope covers:
 
-- One 12-word BIP39 master on a SeedQR plate. The master enters by the dice
-  ceremony, by a SeedQR scan, or as a BIP85 child of an external seed
-  ([KEY-MASTER](keys.md#key-master), [CER-DICE](ceremonies.md#cer-dice)).
+- One 12-word BIP39 master on a SeedQR plate. The master enters by a SeedQR
+  scan, or as a BIP85 child of an external seed
+  ([KEY-MASTER](keys.md#key-master)).
 - BIP85 derivation of passwords and child mnemonics
   ([KEY-BIP85](keys.md#key-bip85)).
 - A flat-file vault of sealed entries, with an encrypted index and a strict
@@ -105,6 +105,7 @@ The non-goals bound every claim in this specification:
 | No-oracle reveals         | FuguPass does not implement a no-oracle reveal path: the plate ceremony is the only no-oracle path (D-06).                                                                            |
 | Signer factors            | FuguPass does not use a hardware signer as a reveal factor.                                                                                                                           |
 | Sharded master            | FuguPass does not shard the master (D-01).                                                                                                                                            |
+| Seed generation           | FuguPass generates no seed and holds no dice code. FuguSeed makes the master.                                                                                                         |
 | Inheritance               | FuguPass does not implement inheritance policies.                                                                                                                                     |
 | Traffic shaping           | FuguPass does not send decoy traffic and does not integrate an onion transport.                                                                                                       |
 | QR-relayed envelopes      | FuguPass does not relay oracle envelopes over QR codes.                                                                                                                               |
@@ -158,8 +159,8 @@ beyond them.
   entry, and one `set_pin` request per live oracle for each slot of each machine
   at enrollment. One oracle instance sees one request per event; the multiplier
   spreads across instances. This load can exceed the FuguOracle workload
-  assumption of a few requests per day. This is a posture mismatch on a
-  self-hosted oracle, not a correctness problem
+  assumption of a few requests per day (FuguOracle D-04). This is a posture
+  mismatch on a self-hosted oracle, not a correctness problem
   ([ORC-RECORDS](oracle.md#orc-records),
   [QA-CALIBRATE](testing.md#qa-calibrate)).
 - **OVW-LIMITS-7** — The master plate is a single point of catastrophic theft.

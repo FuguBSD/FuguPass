@@ -7,6 +7,8 @@ document that repeats a formula must cite the defining unit in this document.
 Notation, defined here and used across the specification:
 
 - `M` is the master mnemonic.
+- A plate is any physical carrier of the master SeedQR: a metal plate, or the
+  paper drawing of the FuguSeed procedure.
 - `root` is the BIP39 seed of `M` with an empty BIP39 passphrase.
 - `f(k, label)` is HMAC-SHA256 with key `k` and message `label`. The output is
   32 bytes.
@@ -56,22 +58,25 @@ threshold 3 and coefficient 1. The entry labels are `fugupass/v1/client-key` ‖
 
 - **KEY-MASTER-1** — One vault has one master `M`: a BIP39 mnemonic of 12 words
   (D-01).
-- **KEY-MASTER-2** — The master enters a vault by the dice ceremony
-  ([CER-DICE](ceremonies.md#cer-dice)), by a SeedQR scan, or as a BIP85 child of
-  an external seed.
+- **KEY-MASTER-2** — The master enters a vault by a SeedQR scan, or as a BIP85
+  child of an external seed.
 - **KEY-MASTER-3** — The master appears only during ceremonies and must not
   persist on disk.
 - **KEY-MASTER-4** — Every vault key derives from `root`.
 - **KEY-MASTER-5** — The plate check value is
   `f(root, "fugupass/v1/plate-check")`. This one-way 32-byte value can persist
   on disk. `M` and `root` must not persist on disk.
+- **KEY-MASTER-6** — The tool must reject a scanned master that is not 12 words,
+  and a scanned master with a wrong BIP39 checksum. The rejection must name the
+  count or the checksum, never a word.
 
-The dice-rolled master is the documented default. A BIP85 child of an existing
-cold seed is a supported alternative, and the tool stays neutral between the two
-input paths. BIP85 derivation is one-way: a vault compromise reveals nothing
-about the parent seed. The master and the vault passphrase are different
-secrets. `M` is the recovery root on the plate, and the passphrase is the daily
-reveal secret ([KEY-PIN](keys.md#key-pin)).
+The documented default is a master made outside FuguPass with the FuguSeed
+procedure. It enters by a plate scan. A BIP85 child of an existing cold seed is
+a supported alternative, and the tool stays neutral between the two input paths.
+BIP85 derivation is one-way: a vault compromise reveals nothing about the parent
+seed. The master and the vault passphrase are different secrets. `M` is the
+recovery root on the plate, and the passphrase is the daily reveal secret
+([KEY-PIN](keys.md#key-pin)).
 
 <a id="key-derive"></a>
 
