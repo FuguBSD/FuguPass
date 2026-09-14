@@ -27,7 +27,7 @@ contract, the ID conventions, and the document tables.
 - A plan must cite each unit that it touches but neither implements nor extends,
   for example `Defers: ORC-REVOKE`.
 - A plan must cite each `done` unit that it extends, for example
-  `Extends: KEY-MASTER`.
+  `Extends: OVW-VOCABULARY`.
 - The change that implements a unit, or a part of one, must set the unit state
   in [STATUS.md](STATUS.md) in the same change.
 

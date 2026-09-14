@@ -1,8 +1,8 @@
 # Overview
 
-This document states what FuguPass is, what the design defends, and what the
-design does not claim. The other area documents hold the mechanics. This
-document holds the claims and the accepted limits.
+This document specifies the purpose, the system model, the scope, the
+vocabulary, and the accepted limits of FuguPass. The other area documents hold
+the mechanics.
 
 <a id="ovw-purpose"></a>
 
@@ -18,7 +18,7 @@ not a requirement (D-02).
 
 - **OVW-PURPOSE-1** — FuguPass serves any user with secrets to keep. The design
   adopts the standards and the tools of air-gapped custody: BIP39 mnemonics,
-  SeedQR metal plates, and blind PIN oracles.
+  SeedQR plates, and blind PIN oracles.
 - **OVW-PURPOSE-2** — Derivation answers backup. Every vault key derives from
   one 12-word BIP39 master, so one plate restores the vault
   ([KEY-MASTER](keys.md#key-master)).
@@ -119,9 +119,9 @@ The non-goals bound every claim in this specification:
 The project implements public standards, and its words must not narrow them to
 one use (D-21).
 
-- **OVW-VOCABULARY-1** — Every artifact names the standards that it implements,
-  for example BIP39 and SeedQR. Those standards serve more than one use, and
-  every artifact stays neutral between the uses.
+- **OVW-VOCABULARY-1** — Every artifact names the standards that it implements.
+  Those standards serve more than one use, and every artifact stays neutral
+  between the uses.
 - **OVW-VOCABULARY-2** — No file that this repository owns holds the word
   `bitcoin`, the word `crypto`, the word `cryptocurrency`, or the word `money`.
   The rule covers every letter case, singular and plural. A technical name that

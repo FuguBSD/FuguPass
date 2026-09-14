@@ -89,8 +89,8 @@ recovery root on the plate, and the passphrase is the daily reveal secret
 - **KEY-DERIVE-3** — Every input key of `f` must be high-entropy. This rule has
   no exception.
 - **KEY-DERIVE-4** — A typed passphrase must not enter `f`. A typed passphrase
-  passes through `bcrypt_pbkdf(3)` only, and the bcrypt_pbkdf output serves only
-  as the oracle `pin_secret` ([KEY-PIN](keys.md#key-pin), D-09).
+  passes through `bcrypt_pbkdf(3)` only, and the `bcrypt_pbkdf(3)` output serves
+  only as the oracle `pin_secret` ([KEY-PIN](keys.md#key-pin), D-09).
 
 The passphrase rule keeps the disk free of an offline passphrase verifier.
 [SEC-FLOOR](security.md#sec-floor) states the offline search floor for the case
@@ -171,12 +171,12 @@ secret, or the attempt counter never moves (FuguOracle CLIENT-MODEL).
   ([VAULT-CONFIG](vault.md#vault-config)).
 
 The oracle payload requires a 32-byte `pin_secret`, which matches the
-bcrypt_pbkdf output length. KEY-PIN-4 keeps the disk free of an offline
+`bcrypt_pbkdf(3)` output length. KEY-PIN-4 keeps the disk free of an offline
 passphrase verifier: no stored value verifies the passphrase without the oracle.
-Each record has its own salt. A session computes bcrypt_pbkdf once per canary
-record of the quorum, and once per oracle for each revealed entry. That is `k`
-runs per revealed entry. [TEST-CALIBRATE](testing.md#test-calibrate) records the
-round-count calibration.
+Each record has its own salt. A session computes `bcrypt_pbkdf(3)` once per
+canary record of the quorum, and once per oracle for each revealed entry. That
+is `k` runs per revealed entry. [TEST-CALIBRATE](testing.md#test-calibrate)
+records the round-count calibration.
 
 <a id="key-share"></a>
 

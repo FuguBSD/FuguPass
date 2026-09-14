@@ -32,10 +32,10 @@ page in `mdoc(7)`: `fugupass(1)`, `fugupass-repl(1)`, `fugupass-scan(1)`, and
 - **PROG-SPLIT-6** — FuguPass must not implement an agent process and must not
   implement a network service. The oracle client inside `fugupass` is the only
   network code (D-18).
-- **PROG-SPLIT-7** — `fugupass-repl` is Perl on the Fugu library, and Fugu::REPL
-  is its line editor (D-16). After it loads its modules, it must pledge
-  `stdio tty`. It must not open a file, must not create a process, and must not
-  reach the network.
+- **PROG-SPLIT-7** — `fugupass-repl` is Perl on the Fugu library, and
+  `Fugu::REPL` is its line editor (D-16). After it loads its modules, it must
+  pledge `stdio tty`. It must not open a file, must not create a process, and
+  must not reach the network.
 - **PROG-SPLIT-8** — `fugupass-repl` must make its pledge call with
   `Fugu::Sandbox->pledge`, with the promises `stdio tty`. Off OpenBSD the method
   restricts nothing and returns success. `Fugu::Sandbox->is_supported` reports
@@ -81,7 +81,7 @@ modules.
   process must restore the terminal state before each request and on every exit
   path.
 - **PROG-IFACE-5** — The interface process must show core output through the
-  display filter of Fugu::REPL. The filter must replace each byte outside
+  display filter of `Fugu::REPL`. The filter must replace each byte outside
   printable ASCII, newline, and tab. It must remove `DEL` (0x7F) and the C1
   range (0x80–0x9F). It must not break a UTF-8 sequence.
 - **PROG-IFACE-6** — When the core process ends the session, the closed reply
@@ -90,18 +90,19 @@ modules.
 - **PROG-IFACE-7** — When standard input is not a terminal, the interface
   process must read plain lines, with no line editing and no escape output.
   Scripted tests drive the session in this mode.
-- **PROG-IFACE-8** — Fugu::REPL must read one line in raw mode, and must restore
-  the terminal state on every exit path. It must accept one extra read handle,
-  and that handle must end the read when it becomes readable. It must load with
-  core Perl only, and it must operate inside the `stdio tty` pledge. The `.pod`
-  sidecar of the module in the Fugu repository is its interface contract.
+- **PROG-IFACE-8** — `Fugu::REPL` must read one line in raw mode, and must
+  restore the terminal state on every exit path. It must accept one extra read
+  handle, and that handle must end the read when it becomes readable. It must
+  load with core Perl only, and it must operate inside the `stdio tty` pledge.
+  The `.pod` sidecar of the module in the Fugu repository is its interface
+  contract.
 - **PROG-IFACE-9** — The interface process must install its interrupt handlers
   with one `Fugu::Signal` manager. It must build the manager, and it must then
   call `setup_interrupt_flag` on it. The signal path is one exit path, so the
   process must restore the terminal state.
 
 Entry names and oracle error text carry external bytes, so the display filter
-guards the operator's terminal. Fugu::REPL holds the terminal in raw mode only
+guards the operator's terminal. `Fugu::REPL` holds the terminal in raw mode only
 while it reads a line, and it restores the terminal state on every exit path.
 The module loads with core Perl only and operates inside the `stdio tty` pledge.
 Its interface contract lives in the Fugu repository. FuguTTX builds its operator
@@ -155,13 +156,13 @@ through Fugu.
   ([PROG-IFACE](programs.md#prog-iface)). The timeout is a tunable in the config
   file ([VAULT-CONFIG](vault.md#vault-config)).
 - **PROG-REPL-8** — The interface process must read each command line with the
-  Fugu::REPL line editor. The editor gives emacs-style line editing, and tab
+  `Fugu::REPL` line editor. The editor gives emacs-style line editing, and tab
   completion of command names and entry names from the open index listing. It
   also gives a session history in memory. The interface process must not write a
   history file, because a history file leaks entry names (D-14).
-- **PROG-REPL-9** — Fugu::REPL must take each completion candidate from a caller
-  callback. The interface process gives the command names and the entry names of
-  the open index listing, as PROG-REPL-8 states.
+- **PROG-REPL-9** — `Fugu::REPL` must take each completion candidate from a
+  caller callback. The interface process gives the command names and the entry
+  names of the open index listing, as PROG-REPL-8 states.
 
 `ls` reads the open index and sends no entry request. The unlock reads the
 passphrase once and verifies it at the canary record of each quorum oracle. Each

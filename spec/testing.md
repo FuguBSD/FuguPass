@@ -137,8 +137,8 @@ The analysis judges the replacement, and the vectors pin the arithmetic.
 
 ## Calibration and scaling
 
-- **TEST-CALIBRATE-1** — A calibration must set the default bcrypt_pbkdf round
-  count ([KEY-PIN](keys.md#key-pin), D-09). The calibration weighs unlock
+- **TEST-CALIBRATE-1** — A calibration must set the default `bcrypt_pbkdf(3)`
+  round count ([KEY-PIN](keys.md#key-pin), D-09). The calibration weighs unlock
   latency on target laptops against offline search cost on current attack
   hardware.
 - **TEST-CALIBRATE-2** — The repository must record the calibration: the
@@ -152,7 +152,7 @@ The analysis judges the replacement, and the vectors pin the arithmetic.
   gives a false round count. The scaling check of TEST-CALIBRATE-3 can run in a
   guest, and a guest snapshot can hold the enrolled record set.
 
-A session computes bcrypt_pbkdf once per quorum canary and `k` times per
+A session computes `bcrypt_pbkdf(3)` once per quorum canary and `k` times per
 revealed entry. The round count therefore multiplies into the session latency by
 `k`. A ceremony enrolls one record per slot
 ([ENTRY-POOL](entries.md#entry-pool)). The record count at the oracle grows with
