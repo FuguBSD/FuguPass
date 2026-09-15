@@ -51,7 +51,7 @@ and the oracles are all gone.
 - **ENTRY-TYPES-2** — Every type uses the same seal and the same custody
   mechanics ([VAULT-SEAL](vault.md#vault-seal), [KEY-MASK](keys.md#key-mask)).
 - **ENTRY-TYPES-3** — A totp entry is stored-origin. The tool computes TOTP
-  codes offline, with HMAC from libcrypto.
+  codes offline, with HMAC from `libcrypto`.
 - **ENTRY-TYPES-4** — A derived password entry and a derived passphrase entry
   consume the PWD BASE64 candidate of their slot. A derived mnemonic entry
   consumes the BIP39 child candidate ([KEY-BIP85](keys.md#key-bip85)).
@@ -73,7 +73,7 @@ and the oracles are all gone.
 A site can reject the PWD BASE64 character set. The site policy transform in the
 password metadata maps the derived password onto the site's rules. As an
 alternative, the user creates the entry as stored-origin. A mnemonic entry
-renders as a SeedQR code for a signer to scan ([CLI-QR](programs.md#cli-qr)).
+renders as a SeedQR code for a signer to scan ([PROG-QR](programs.md#prog-qr)).
 [ENTRY-SHADOW](entries.md#entry-shadow) specifies shadow entries and the audit.
 
 <a id="entry-rotation"></a>
@@ -158,7 +158,7 @@ it discards both candidates.
   reachable oracle quorum.
 - **ENTRY-SHADOW-4** — The audit command lists the shadow entries whose
   verification date is older than a tunable age
-  ([CLI-REPL](programs.md#cli-repl)).
+  ([PROG-REPL](programs.md#prog-repl)).
 - **ENTRY-SHADOW-5** — The audit reads shadow metadata only.
 
 Shadow entries are the catalog of the user's plates: locations, custodians, and

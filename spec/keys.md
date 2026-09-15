@@ -89,12 +89,12 @@ recovery root on the plate, and the passphrase is the daily reveal secret
 - **KEY-DERIVE-3** — Every input key of `f` must be high-entropy. This rule has
   no exception.
 - **KEY-DERIVE-4** — A typed passphrase must not enter `f`. A typed passphrase
-  passes through `bcrypt_pbkdf(3)` only, and the bcrypt_pbkdf output serves only
-  as the oracle `pin_secret` ([KEY-PIN](keys.md#key-pin), D-09).
+  passes through `bcrypt_pbkdf(3)` only, and the `bcrypt_pbkdf(3)` output serves
+  only as the oracle `pin_secret` ([KEY-PIN](keys.md#key-pin), D-09).
 
 The passphrase rule keeps the disk free of an offline passphrase verifier.
-[SAFE-FLOOR](security.md#safe-floor) states the offline search floor for the
-case where an attacker holds both the disk and the oracle record.
+[SEC-FLOOR](security.md#sec-floor) states the offline search floor for the case
+where an attacker holds both the disk and the oracle record.
 
 <a id="key-entry"></a>
 
@@ -171,12 +171,12 @@ secret, or the attempt counter never moves (FuguOracle CLIENT-MODEL).
   ([VAULT-CONFIG](vault.md#vault-config)).
 
 The oracle payload requires a 32-byte `pin_secret`, which matches the
-bcrypt_pbkdf output length. KEY-PIN-4 keeps the disk free of an offline
+`bcrypt_pbkdf(3)` output length. KEY-PIN-4 keeps the disk free of an offline
 passphrase verifier: no stored value verifies the passphrase without the oracle.
-Each record has its own salt. A session computes bcrypt_pbkdf once per canary
-record of the quorum, and once per oracle for each revealed entry. That is `k`
-runs per revealed entry. [QA-CALIBRATE](testing.md#qa-calibrate) records the
-round-count calibration.
+Each record has its own salt. A session computes `bcrypt_pbkdf(3)` once per
+canary record of the quorum, and once per oracle for each revealed entry. That
+is `k` runs per revealed entry. [TEST-CALIBRATE](testing.md#test-calibrate)
+records the round-count calibration.
 
 <a id="key-share"></a>
 
@@ -195,7 +195,7 @@ round-count calibration.
   `k` is the 32-byte value `A_j = f(S, "fugupass/v1/shamir/" ‖ k ‖ "/" ‖ j)`.
   This holds for `j` = 1 to `k − 1`, with `k` and `j` as unpadded decimal ASCII.
   The coefficients are deterministic. The tool must not draw a coefficient from
-  the system RNG ([SAFE-ENTROPY](security.md#safe-entropy)).
+  the system RNG ([SEC-ENTROPY](security.md#sec-entropy)).
 - **KEY-SHARE-4** — Byte `b` of the secret splits under the polynomial
   `p_b(x) = S[b] ⊕ A_1[b]·x ⊕ … ⊕ A_{k−1}[b]·x^{k−1}`, in GF(256). The secret
   sits at `x = 0`: `p_b(0) = S[b]`.
@@ -216,7 +216,8 @@ round-count calibration.
   ([ORC-ENROLL](oracle.md#orc-enroll),
   [CER-PROVISION](ceremonies.md#cer-provision)).
 - **KEY-SHARE-9** — A written soundness analysis of the deterministic
-  coefficients gates the custody layer ([QA-SPLIT](testing.md#qa-split), D-19).
+  coefficients gates the custody layer ([TEST-SPLIT](testing.md#test-split),
+  D-19).
 
 The deterministic split keeps the entropy rule exact: the system RNG stores no
 secret, and the plate re-derives every share through `K_e`
@@ -226,7 +227,7 @@ entries or against the index key. The coefficient label carries the threshold,
 so a threshold change derives a fresh coefficient set
 ([CER-PROVISION](ceremonies.md#cer-provision)). The standard Shamir argument
 assumes uniformly random coefficients, so the derived coefficients need their
-own analysis ([QA-SPLIT](testing.md#qa-split)).
+own analysis ([TEST-SPLIT](testing.md#test-split)).
 
 <a id="key-mask"></a>
 
@@ -234,7 +235,7 @@ own analysis ([QA-SPLIT](testing.md#qa-split)).
 
 - **KEY-MASK-1** — The mask `s_ei` is the 32-byte answer of oracle `i` for the
   record of slot `e`. The mask is stable for an unchanged record. Stability is a
-  consequence of FuguOracle OPS-GET-4, and [QA-MASK](testing.md#qa-mask)
+  consequence of FuguOracle OPS-GET-4, and [TEST-MASK](testing.md#test-mask)
   verifies it by test.
 - **KEY-MASK-2** — The client must not store a mask. This rule covers every
   `s_ei` and every `s_canary_i`.
@@ -264,7 +265,8 @@ canary masks. The read needs no oracle request beyond the session's `k` canary
 `c_ei = share(K_e, i) ⊕ wk_ei` uses the oracle answer beyond the protocol's
 analyzed purpose, and the deterministic split replaces the uniform-coefficient
 assumption. A written analysis gates each construction
-([QA-ANALYSIS](testing.md#qa-analysis), [QA-SPLIT](testing.md#qa-split), D-19).
+([TEST-ANALYSIS](testing.md#test-analysis), [TEST-SPLIT](testing.md#test-split),
+D-19).
 
 <a id="key-bip85"></a>
 
@@ -282,7 +284,7 @@ assumption. A written analysis gates each construction
 - **KEY-BIP85-6** — Entry creation keeps the candidate that the entry type
   needs. A derived passphrase entry consumes the PWD BASE64 candidate.
 - **KEY-BIP85-7** — Known-answer vectors from a reference implementation gate
-  the implementation ([QA-KAT](testing.md#qa-kat)).
+  the implementation ([TEST-KAT](testing.md#test-kat)).
 - **KEY-BIP85-8** — The PWD BASE64 derivation must use the fixed password length
   of 21 characters. The BIP39 derivation must use the English wordlist and 12
   words. The parameters are fixed constants, because plate-alone recovery

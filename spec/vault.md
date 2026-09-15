@@ -67,7 +67,7 @@ A sealed file has this exact byte layout:
 
 - **VAULT-SEAL-1** — Every sealed vault file must use this layout. The tool must
   write and must read seal version `0x01` only.
-- **VAULT-SEAL-2** — The AEAD is ChaCha20-Poly1305 from LibreSSL libcrypto
+- **VAULT-SEAL-2** — The AEAD is ChaCha20-Poly1305 from LibreSSL `libcrypto`
   (D-13, D-15).
 - **VAULT-SEAL-3** — Every write must draw a fresh nonce from `arc4random(3)`
   (D-13).
@@ -229,7 +229,7 @@ threshold. [KEY-PIN](keys.md#key-pin) governs the round count, and
 [KEY-MASTER](keys.md#key-master) defines the plate check value.
 [ENTRY-POOL](entries.md#entry-pool) sets the pool defaults, and
 [ENTRY-SHADOW](entries.md#entry-shadow) uses the audit age.
-[CLI-REPL](programs.md#cli-repl) uses the lock timeout.
+[PROG-REPL](programs.md#prog-repl) uses the lock timeout.
 
 <a id="vault-atomic"></a>
 
@@ -261,13 +261,13 @@ STORE-ATOMIC-3).
   file. A pool refill on a machine with a stale index can reserve slot indexes
   that another machine's refill already reserved. The documentation must
   recommend one minting machine for entry creation and for refills
-  ([OVW-LIMITS](overview.md#ovw-limits)).
+  ([OVW-RISKS](overview.md#ovw-risks)).
 - **VAULT-BACKUP-4** — The tool can render a vault file up to the one-code QR
-  capacity as one QR code for paper backup ([CLI-QR](programs.md#cli-qr)). The
+  capacity as one QR code for paper backup ([PROG-QR](programs.md#prog-qr)). The
   tool must report a file that exceeds the capacity.
 
 A vault restored from an old copy stays able to address its oracle records,
 because the counter policy uses the wall clock
 ([ORC-COUNTER](oracle.md#orc-counter), [REC-RESTORE](recovery.md#rec-restore)).
 No file on disk, in either set, verifies the passphrase without an oracle
-([KEY-MASK](keys.md#key-mask), [SAFE-FLOOR](security.md#safe-floor)).
+([KEY-MASK](keys.md#key-mask), [SEC-FLOOR](security.md#sec-floor)).

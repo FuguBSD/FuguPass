@@ -6,8 +6,8 @@ present. Between ceremonies the master exists only on plates (D-12). The
 notation `M`, `root`, `f(k, label)`, `K_e`, `K_idx`, `c_ei`, `share(S, i)`, the
 slot index `e`, the oracle index `i`, and the threshold `k` comes from
 [keys.md](keys.md). The recovery procedures are in [recovery.md](recovery.md).
-[CLI-SCAN](programs.md#cli-scan) states the video-device requirement of a plate
-scan.
+[PROG-SCAN](programs.md#prog-scan) states the video-device requirement of a
+plate scan.
 
 <a id="cer-create"></a>
 
@@ -142,8 +142,8 @@ run these steps in rule order.
   or the new threshold in the config ([VAULT-CONFIG](vault.md#vault-config))
   before any enrollment. Until every machine runs it, each machine reveals
   against its own recorded list and threshold. The vault's offline-loss bound is
-  then the weakest machine's threshold ([SAFE-FLOOR](security.md#safe-floor)).
-  The one-breach passphrase verifier is unchanged. The documentation must state
+  then the weakest machine's threshold ([SEC-FLOOR](security.md#sec-floor)). The
+  one-breach passphrase verifier is unchanged. The documentation must state
   this.
 - **CER-PROVISION-14** — An added oracle takes the next free position. The loop
   of CER-PROVISION-12 then covers exactly the new slot-oracle pairs. For each
@@ -196,7 +196,7 @@ The slot loop and the index registration read the index, so the copy of the
 shared set precedes them. After the ceremony, every existing entry reveals on
 this machine through this machine's own records. A ceremony and its enrollment
 loops need every live oracle reachable. The quorum availability claim covers
-reveals only ([OVW-LIMITS](overview.md#ovw-limits)). A run that re-enrolls every
+reveals only ([OVW-RISKS](overview.md#ovw-risks)). A run that re-enrolls every
 record of this machine under one passphrase removes the change marker, and the
 report names the removal (ORC-ENROLL-12).
 
@@ -212,7 +212,7 @@ Plate verification confirms that a plate decodes to the master of this vault.
   ([VAULT-CONFIG](vault.md#vault-config)).
 - **CER-VERIFY-2** — Verification must not touch any oracle record and must not
   reveal any secret.
-- **CER-VERIFY-3** — The audit command ([CLI-REPL](programs.md#cli-repl)) must
+- **CER-VERIFY-3** — The audit command ([PROG-REPL](programs.md#prog-repl)) must
   report the date of the last plate verification.
 - **CER-VERIFY-4** — The tool must erase `M`, `root`, and `K_idx` with
   `explicit_bzero(3)` at the end of the verification.

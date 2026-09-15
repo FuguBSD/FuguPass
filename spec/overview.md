@@ -1,8 +1,8 @@
 # Overview
 
-This document states what FuguPass is, what the design defends, and what the
-design does not claim. The other area documents hold the mechanics. This
-document holds the claims and the accepted limits.
+This document specifies the purpose, the system model, the scope, the
+vocabulary, and the accepted limits of FuguPass. The other area documents hold
+the mechanics.
 
 <a id="ovw-purpose"></a>
 
@@ -18,7 +18,7 @@ not a requirement (D-02).
 
 - **OVW-PURPOSE-1** — FuguPass serves any user with secrets to keep. The design
   adopts the standards and the tools of air-gapped custody: BIP39 mnemonics,
-  SeedQR metal plates, and blind PIN oracles.
+  SeedQR plates, and blind PIN oracles.
 - **OVW-PURPOSE-2** — Derivation answers backup. Every vault key derives from
   one 12-word BIP39 master, so one plate restores the vault
   ([KEY-MASTER](keys.md#key-master)).
@@ -93,7 +93,7 @@ The scope covers:
 - Revocation of a stolen machine from the plate
   ([ORC-REVOKE](oracle.md#orc-revoke)).
 - Four sandboxed programs, with SeedQR import and export
-  ([CLI-SPLIT](programs.md#cli-split)).
+  ([PROG-SPLIT](programs.md#prog-split)).
 
 The non-goals bound every claim in this specification:
 
@@ -112,9 +112,29 @@ The non-goals bound every claim in this specification:
 | Oracle policy features    | The specification does not assume a delayed reveal, a velocity alarm, a freeze operation, or any oracle behavior beyond protocol v2 as the FuguOracle specification states it (D-03). |
 | FuguOracle changes        | FuguPass does not require a change of any kind to FuguOracle (D-02).                                                                                                                  |
 
-<a id="ovw-attacks"></a>
+<a id="ovw-vocabulary"></a>
 
-## Attacker outcomes
+## Vocabulary
+
+The project implements public standards, and its words must not narrow them to
+one use (D-21).
+
+- **OVW-VOCABULARY-1** — Every artifact names the standards that it implements.
+  Those standards serve more than one use, and every artifact stays neutral
+  between the uses.
+- **OVW-VOCABULARY-2** — No file that this repository owns holds the word
+  `bitcoin`, the word `crypto`, the word `cryptocurrency`, or the word `money`.
+  The rule covers every letter case, singular and plural. A technical name that
+  an external project fixes, such as `libcrypto`, is not a word. It sits in a
+  code span, and it names the external thing only.
+- **OVW-VOCABULARY-3** — A test reads the banned words from this document and
+  scans every tracked file for them. The scan skips a code span, a code block,
+  and a file that a pack of FuguBSD/Tooling owns. It also skips a record under
+  `docs/research/` and the rule that names the words.
+
+<a id="ovw-risks"></a>
+
+## Risks and limits
 
 Each row names the artifacts that the attacker holds. Five artifacts exist. They
 are a copy of the shared ciphertext set, and a machine's disk with the device
@@ -127,53 +147,49 @@ static key, and the master plate.
 | A shared-set copy alone                                                                                        | Nothing. Every file is ciphertext, and the copy holds no device factor, no wrap, and no verifier ([VAULT-BACKUP](vault.md#vault-backup)).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | A shared-set copy plus the passphrase, without `X`                                                             | Nothing. The attacker cannot derive a client key without `X`, so the oracle records are unaddressable, and the copy holds no wrap to unmask.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | A machine's disk with `X` and the wraps, without the passphrase                                                | No offline attack exists, because the disk holds no passphrase verifier. Online guessing burns three strikes per record per oracle, and each oracle wipes its own record. The owner revokes the machine from the plate: the owner locks that machine's records at enough live oracles that at most `k − 1` stay unlocked, and no quorum forms; with the full set of `n` live oracles, the count is `n − k + 1` locks ([ORC-REVOKE](oracle.md#orc-revoke)). An attacker who raises a record's stored counter to `0xFFFFFFFF` locks that record for every caller. A locked record denies its mask to the attacker too. The entry stays revealable while `k` live records remain, and the entry always recovers from the plate ([REC-WIPE](recovery.md#rec-wipe)). |
-| A machine's disk with `X` and the wraps, plus the passphrase. Malware in an unlocked session is the same case. | To each oracle, the attacker is the owner. The attacker reveals entries at the attacker's own pace, leaves one log line per entry at each of `k` oracles, and burns no strike. The attacker selects its own quorum, so guaranteed log coverage needs logs at enough live oracles that every possible quorum intersects them; with the full set of `n` live oracles, the count is `n − k + 1` oracles (SAFE-DETECT-6). The window closes when the owner reads logs that cover every possible quorum and revokes from the plate: locks at enough live oracles that at most `k − 1` stay unlocked deny every quorum (OVW-LIMITS-1, OVW-LIMITS-2, OVW-LIMITS-4, [ORC-REVOKE](oracle.md#orc-revoke)).                                                                |
-| A machine's disk plus a breach of one oracle's records, with that oracle's static key                          | An offline passphrase verifier: the breached record stores the hash of that record's pin secret, and the disk holds every salt. The KDF cost and the passphrase quality bound the search ([SAFE-FLOOR](security.md#safe-floor)). With `k` greater than 1, the verifier yields the passphrase only. With fewer than `k` breached oracles, every entry secret stays behind the remaining quorum: the attacker must query the live oracles, online and logged.                                                                                                                                                                                                                                                                                                     |
-| A machine's disk plus a breach of `k` oracles' records, with their static keys                                 | Full offline loss of the covered entries. The attacker searches the passphrase against one record hash, then unmasks `k` shares per entry and reconstructs every entry key with no live oracle. The KDF cost and the passphrase quality are the floor ([SAFE-FLOOR](security.md#safe-floor)).                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| The master plate                                                                                               | The attacker re-derives every derived secret and every machine's keys, with no oracle and no passphrase. Physical plate custody is the countermeasure (OVW-LIMITS-7).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| A machine's disk with `X` and the wraps, plus the passphrase. Malware in an unlocked session is the same case. | To each oracle, the attacker is the owner. The attacker reveals entries at the attacker's own pace, leaves one log line per entry at each of `k` oracles, and burns no strike. The attacker selects its own quorum, so guaranteed log coverage needs logs at enough live oracles that every possible quorum intersects them; with the full set of `n` live oracles, the count is `n − k + 1` oracles (SEC-DETECT-6). The window closes when the owner reads logs that cover every possible quorum and revokes from the plate: locks at enough live oracles that at most `k − 1` stay unlocked deny every quorum (OVW-RISKS-1, OVW-RISKS-2, OVW-RISKS-4, [ORC-REVOKE](oracle.md#orc-revoke)).                                                                    |
+| A machine's disk plus a breach of one oracle's records, with that oracle's static key                          | An offline passphrase verifier: the breached record stores the hash of that record's pin secret, and the disk holds every salt. The KDF cost and the passphrase quality bound the search ([SEC-FLOOR](security.md#sec-floor)). With `k` greater than 1, the verifier yields the passphrase only. With fewer than `k` breached oracles, every entry secret stays behind the remaining quorum: the attacker must query the live oracles, online and logged.                                                                                                                                                                                                                                                                                                       |
+| A machine's disk plus a breach of `k` oracles' records, with their static keys                                 | Full offline loss of the covered entries. The attacker searches the passphrase against one record hash, then unmasks `k` shares per entry and reconstructs every entry key with no live oracle. The KDF cost and the passphrase quality are the floor ([SEC-FLOOR](security.md#sec-floor)).                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| The master plate                                                                                               | The attacker re-derives every derived secret and every machine's keys, with no oracle and no passphrase. Physical plate custody is the countermeasure (OVW-RISKS-7).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | Oracle hosts, by seizure, wipe, or loss, while `k` oracles of the set stay live and reachable                  | Zero data loss and zero interruption: reveals continue on any `k` reachable oracles, with no ceremony ([REC-WIPE](recovery.md#rec-wipe)). With every position live, the set tolerates the loss of up to `n − k` hosts. The seized masks alone are meaningless strings, and fewer than `k` breached oracles unmask nothing.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | Oracle hosts, by seizure, wipe, or loss, with fewer than `k` oracles left reachable                            | Zero data loss. Reveals pause until a plate ceremony re-enrolls at replacement oracles ([REC-WIPE](recovery.md#rec-wipe)). Recovery needs no oracle (D-04).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
-<a id="ovw-limits"></a>
-
-## Accepted limits
-
 The limits below are the honest bounds of the design. Every other document must
-stay inside them, and [SAFE-CLAIMS](security.md#safe-claims) prohibits claims
+stay inside them, and [SEC-CLAIMS](security.md#sec-claims) prohibits claims
 beyond them.
 
-- **OVW-LIMITS-1** — A compromised endpoint sees every secret that it reveals
+- **OVW-RISKS-1** — A compromised endpoint sees every secret that it reveals
   while compromised.
-- **OVW-LIMITS-2** — The oracle is blind. It gates, counts, and wipes. It does
+- **OVW-RISKS-2** — The oracle is blind. It gates, counts, and wipes. It does
   not verify intent.
-- **OVW-LIMITS-3** — One breached oracle record, with that oracle's static key,
+- **OVW-RISKS-3** — One breached oracle record, with that oracle's static key,
   plus the machine's disk yields an offline passphrase verifier. The disk plus
   `k` breached oracles yields full offline loss. Between the two: an attacker
   with the passphrase and fewer than `k` breached oracles must query the
   remaining live oracles, online and logged. The KDF cost and the passphrase
-  quality are the floor ([SAFE-FLOOR](security.md#safe-floor)).
-- **OVW-LIMITS-4** — Detection is manual. The oracle writes logs and sends no
+  quality are the floor ([SEC-FLOOR](security.md#sec-floor)).
+- **OVW-RISKS-4** — Detection is manual. The oracle writes logs and sends no
   alerts. The owner must read the logs, or revocation never happens.
-- **OVW-LIMITS-5** — The oracle sees traffic patterns per record, never content.
-- **OVW-LIMITS-6** — FuguPass generates `k` `get_pin` requests per revealed
+- **OVW-RISKS-5** — The oracle sees traffic patterns per record, never content.
+- **OVW-RISKS-6** — FuguPass generates `k` `get_pin` requests per revealed
   entry, and one `set_pin` request per live oracle for each slot of each machine
   at enrollment. One oracle instance sees one request per event; the multiplier
   spreads across instances. This load can exceed the FuguOracle workload
   assumption of a few requests per day (FuguOracle D-04). This is a posture
   mismatch on a self-hosted oracle, not a correctness problem
   ([ORC-RECORDS](oracle.md#orc-records),
-  [QA-CALIBRATE](testing.md#qa-calibrate)).
-- **OVW-LIMITS-7** — The master plate is a single point of catastrophic theft.
+  [TEST-CALIBRATE](testing.md#test-calibrate)).
+- **OVW-RISKS-7** — The master plate is a single point of catastrophic theft.
   Physical custody of the plate is the countermeasure. D-01 excludes a sharded
   master, and only an approved change to D-01 can adopt one.
-- **OVW-LIMITS-8** — FuguPass defines no sync protocol and no write coordination
+- **OVW-RISKS-8** — FuguPass defines no sync protocol and no write coordination
   between machines. Concurrent entry creation on two machines can consume one
   slot twice, and a later file copy then overwrites one entry's file. A pool
   refill on a machine with a stale index can reserve slot indexes that another
   machine's refill already reserved. The documentation recommends one minting
   machine for entry creation and for refills
   ([VAULT-BACKUP](vault.md#vault-backup)).
-- **OVW-LIMITS-9** — The quorum availability claim covers reveals only. A
+- **OVW-RISKS-9** — The quorum availability claim covers reveals only. A
   ceremony, an enrollment, and a passphrase change need every live oracle
   reachable. Reveals pause while fewer than `k` oracles are reachable. After a
   loss, seizure, or wipe that leaves fewer than `k` oracles reachable, a plate
@@ -182,5 +198,5 @@ beyond them.
   is the loss of more than `n − k` oracles. With `k = n`, any one oracle loss
   pauses reveals.
 
-[SAFE-FLOOR](security.md#safe-floor) and [SAFE-DETECT](security.md#safe-detect)
-turn the limits into documentation duties.
+[SEC-FLOOR](security.md#sec-floor) and [SEC-DETECT](security.md#sec-detect) turn
+the limits into documentation duties.
