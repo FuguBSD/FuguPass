@@ -40,7 +40,7 @@ and the oracles are all gone.
 | Type       | Origin classes                | Content and metadata                          |
 | ---------- | ----------------------------- | --------------------------------------------- |
 | password   | derived or stored             | username, URL, site policy transform, version |
-| mnemonic   | derived, stored, or sovereign | a BIP39 mnemonic; SeedQR export parameters    |
+| mnemonic   | derived, stored, or sovereign | a BIP39 mnemonic of 12 words (D-22)           |
 | passphrase | derived, stored, or sovereign | the fingerprint of the linked seed            |
 | totp       | stored                        | the TOTP key and the RFC 6238 parameters      |
 | note       | stored                        | descriptors, xpubs, recovery codes            |
@@ -64,7 +64,7 @@ and the oracles are all gone.
 | Type       | Secret field | Type metadata fields                           |
 | ---------- | ------------ | ---------------------------------------------- |
 | password   | `password`   | `username`, `url`, `transform`, `version`      |
-| mnemonic   | `mnemonic`   | `seedqr-format`                                |
+| mnemonic   | `mnemonic`   | none                                           |
 | passphrase | `passphrase` | `seed-fingerprint`                             |
 | totp       | `totp-key`   | `totp-algorithm`, `totp-digits`, `totp-period` |
 | note       | `note`       | none                                           |

@@ -111,6 +111,8 @@ The non-goals bound every claim in this specification:
 | QR-relayed envelopes      | FuguPass does not relay oracle envelopes over QR codes.                                                                                                                               |
 | Oracle policy features    | The specification does not assume a delayed reveal, a velocity alarm, a freeze operation, or any oracle behavior beyond protocol v2 as the FuguOracle specification states it (D-03). |
 | FuguOracle changes        | FuguPass does not require a change of any kind to FuguOracle (D-02).                                                                                                                  |
+| 24 words                  | No program accepts a mnemonic of 24 words (D-22).                                                                                                                                     |
+| A Compact SeedQR          | No program decodes or renders a Compact SeedQR (D-22).                                                                                                                                |
 
 <a id="ovw-vocabulary"></a>
 

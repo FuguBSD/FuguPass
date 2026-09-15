@@ -168,9 +168,10 @@ the pool size and with the machine count.
 - **TEST-KAT-2** — Seal round-trip vectors must cover the seal format: a seal, a
   decrypt, and a decrypt failure on a modified byte
   ([VAULT-SEAL](vault.md#vault-seal)).
-- **TEST-KAT-3** — SeedQR and CompactSeedQR vectors, for 12 words and for 24
-  words, must match the SeedSigner specification
-  ([PROG-SCAN](programs.md#prog-scan)).
+- **TEST-KAT-3** — Standard SeedQR vectors for 12 words must match the
+  SeedSigner specification ([PROG-SCAN](programs.md#prog-scan)). Negative
+  vectors must cover a Compact SeedQR and a 24-word Standard SeedQR, and the
+  scan helper must reject both (D-22).
 - **TEST-KAT-4** — A fixed test master must provide a vector for every
   derivation label in [keys.md](keys.md).
 - **TEST-KAT-5** — The repository must hold the vectors. The known-answer tests

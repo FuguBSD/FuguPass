@@ -217,17 +217,17 @@ no keyboard.
 - **PROG-SCAN-1** — `fugupass-scan` must decode QR codes from camera frames and
   must write the decoded payload as text to stdout. The program must write no
   other data to stdout.
-- **PROG-SCAN-2** — The program must decode the standard SeedQR form. The form
+- **PROG-SCAN-2** — The program must decode the Standard SeedQR form. The form
   is the concatenation of the zero-based BIP39 wordlist indexes of the mnemonic.
   Each index is zero-padded to four decimal digits, in QR numeric mode. A
-  12-word mnemonic is 48 digits, and a 24-word mnemonic is 96 digits.
-- **PROG-SCAN-3** — The program must decode the CompactSeedQR form: the raw
-  entropy bytes, without checksum bits, in QR byte mode. A 12-word mnemonic is
-  16 bytes, and a 24-word mnemonic is 32 bytes. The program computes the BIP39
-  checksum to rebuild the final word. A checksum computation checks or completes
-  a mnemonic. It generates no seed (D-11).
-- **PROG-SCAN-4** — Both codecs follow the SeedSigner SeedQR specification.
-  Known-answer vectors pin both codecs ([TEST-KAT](testing.md#test-kat)).
+  12-word mnemonic is 48 digits. Every other digit count is a failure (D-22).
+- **PROG-SCAN-3** — The program must not decode the Compact SeedQR form (D-22).
+  A QR code in byte mode is a failure. The program computes no checksum. It
+  emits the 12 words of the digit string, and the master gate checks them
+  ([KEY-MASTER](keys.md#key-master)).
+- **PROG-SCAN-4** — The codec follows the Standard SeedQR form of the SeedSigner
+  SeedQR specification. Known-answer vectors pin it
+  ([TEST-KAT](testing.md#test-kat)).
 - **PROG-SCAN-5** — The program must emit a decoded mnemonic as the mnemonic
   words, on one line of text.
 - **PROG-SCAN-6** — The program must apply the sandbox of
@@ -242,9 +242,9 @@ no keyboard.
 
 - **PROG-QR-1** — `fugupass-qr` must read stdin and must render one QR code on
   the terminal, in UTF-8 half blocks.
-- **PROG-QR-2** — The program must render a mnemonic export in the standard
-  SeedQR form or in the CompactSeedQR form ([PROG-SCAN](programs.md#prog-scan)).
-  This serves the signer scan flow ([ENTRY-TYPES](entries.md#entry-types)).
+- **PROG-QR-2** — The program must render a mnemonic export in the Standard
+  SeedQR form only (D-22, [PROG-SCAN](programs.md#prog-scan)). This serves the
+  signer scan flow ([ENTRY-TYPES](entries.md#entry-types)).
 - **PROG-QR-3** — The program must render a vault file up to the one-code QR
   capacity as one QR code for the paper backup
   ([VAULT-BACKUP](vault.md#vault-backup)). It must report a file that exceeds
