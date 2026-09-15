@@ -41,7 +41,7 @@ and the oracles are all gone.
 | ---------- | ----------------------------- | --------------------------------------------- |
 | password   | derived or stored             | username, URL, site policy transform, version |
 | mnemonic   | derived, stored, or sovereign | a BIP39 mnemonic; SeedQR export parameters    |
-| passphrase | derived, stored, or sovereign | the linked wallet fingerprint                 |
+| passphrase | derived, stored, or sovereign | the fingerprint of the linked seed            |
 | totp       | stored                        | the TOTP key and the RFC 6238 parameters      |
 | note       | stored                        | descriptors, xpubs, recovery codes            |
 | shadow     | shadow                        | location, custodian, verification date        |
@@ -65,7 +65,7 @@ and the oracles are all gone.
 | ---------- | ------------ | ---------------------------------------------- |
 | password   | `password`   | `username`, `url`, `transform`, `version`      |
 | mnemonic   | `mnemonic`   | `seedqr-format`                                |
-| passphrase | `passphrase` | `wallet-fingerprint`                           |
+| passphrase | `passphrase` | `seed-fingerprint`                             |
 | totp       | `totp-key`   | `totp-algorithm`, `totp-digits`, `totp-period` |
 | note       | `note`       | none                                           |
 | shadow     | none         | `location`, `custodian`, `verified`            |

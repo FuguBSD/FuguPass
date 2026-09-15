@@ -25,7 +25,7 @@ phase applies.
 | [OVW-PURPOSE](overview.md#ovw-purpose)       | n-a   | —       | Citation only.                                                                                                             |
 | [OVW-MODEL](overview.md#ovw-model)           | n-a   | —       | Citation only.                                                                                                             |
 | [OVW-SCOPE](overview.md#ovw-scope)           | n-a   | —       | Citation only.                                                                                                             |
-| [OVW-VOCABULARY](overview.md#ovw-vocabulary) | done  | —       | [vocabulary.t](../t/fugupass/vocabulary.t) reads the words and scans the tree.                                             |
+| [OVW-VOCABULARY](overview.md#ovw-vocabulary) | done  | —       | [vocabulary.t](../t/fugupass/vocabulary.t) reads the five words and scans the tree.                                        |
 | [OVW-RISKS](overview.md#ovw-risks)           | n-a   | —       | Citation only.                                                                                                             |
 | [KEY-MASTER](keys.md#key-master)             | open  | P1      | —                                                                                                                          |
 | [KEY-DERIVE](keys.md#key-derive)             | open  | P1      | —                                                                                                                          |
