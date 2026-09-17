@@ -20,8 +20,9 @@ are plan 007, and ORC-CANARY-10 is a statement of plan 013. Of ORC-PROVISION it
 lands ORC-PROVISION-1, ORC-PROVISION-2, ORC-PROVISION-4, ORC-PROVISION-5, and
 ORC-PROVISION-9. The list changes are plan 009, and the statements are plan 013.
 It completes ORC-CONFORM, KEY-MASK-4, and SEC-ENTROPY-4. KEY-MASK-8 is the plate
-ceremony of plan 006. The quorum leg and the terminal driver of the harness
-follow in plan 006 and plan 007.
+ceremony of plan 006. Plan 006 also writes the index wrap of KEY-MASK-7. The
+quorum leg and the terminal driver of the harness follow in plan 006 and
+plan 007.
 
 ## Purpose
 
@@ -116,8 +117,15 @@ The harness holds, against each counterparty:
 - `make check` passes on the host, and `make harness` passes against the
   upstream server.
 - ORC-REVEAL, TEST-MASK, ORC-CONFORM, and SEC-ENTROPY read `done`.
-- ORC-RECORDS, ORC-COUNTER, ORC-ENROLL, ORC-CANARY, ORC-PROVISION, KEY-MASK, and
-  TEST-HARNESS read `partial` with the absent rules named.
+- ORC-RECORDS, ORC-ENROLL, ORC-CANARY, ORC-PROVISION, KEY-MASK, and TEST-HARNESS
+  read `partial` with the absent rules named.
+- ORC-COUNTER reads `partial` with ORC-COUNTER-7 as the absent rule. The
+  revocation exception of ORC-COUNTER-1 and ORC-COUNTER-5 is the absent part,
+  and plan 009 lands it.
+- The KEY-MASK note also names the absent index wrap of KEY-MASK-7.
+- The TEST-HARNESS note also names the absent parts of TEST-HARNESS-3. The
+  quorum coverage lands in plan 007, and the re-enrollment coverage lands in
+  plan 008.
 - The change deletes this plan.
 
 ## What this plan does not do

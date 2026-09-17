@@ -13,11 +13,14 @@ ORC-REVEAL, VAULT-INDEX.
 
 KEY-DEVICE-2 and KEY-MASK-4 are the writes of the device factor and the wraps,
 in plan 005 and plan 006. KEY-MASK-8 is the plate ceremony of plan 006. This
-plan adds SEC-ENTROPY-3, SEC-ENTROPY-5, and SEC-ENTROPY-7, and SEC-ENTROPY-4 is
-the ephemeral randomness of plan 005. This plan lands the eight custody labels
-of TEST-KAT-4, and plan 001 landed the other two. Plan 002 lands TEST-KAT-2, and
-the later of plan 002 and plan 003 sets the TEST-KAT row. The two analyses reach
-`done` when the human approval line holds a name and a date.
+plan derives the index wrap key of KEY-MASK-7, and plan 006 writes the index
+wrap itself. This plan adds SEC-ENTROPY-3, SEC-ENTROPY-5, and SEC-ENTROPY-7.
+Three plans land SEC-ENTROPY-4. Plan 002 draws the seal nonce, plan 004 draws
+the ephemeral keypair and the IV, and plan 005 draws the `set_pin` entropy. This
+plan lands the eight custody labels of TEST-KAT-4, and plan 001 landed the other
+two. Plan 002 lands TEST-KAT-2, and the later of plan 002 and plan 003 sets the
+TEST-KAT row. The two analyses reach `done` when the human approval line holds a
+name and a date.
 
 ## Purpose
 
@@ -64,14 +67,18 @@ across thresholds and re-enrollments (TEST-SPLIT-1). Each document ends with one
 approval line. The reviewer fills the name and the date at the merge, or the
 unit stays `partial`.
 
-**The vectors come from implementations that this project does not own.** The
-generator composes two of them, and they pin every part of TEST-SPLIT-4 (D-15).
-The `hmac` module of the Python standard library is an independent HMAC-SHA256.
-It produces each coefficient `f(S, label)` of KEY-SHARE-3, because `f` is
-HMAC-SHA256 (KEY-DERIVE-1). An independent GF(256) Shamir implementation
-produces the field operations, the share evaluation, and the reconstruction. The
-label strings come from `spec/keys.md`, which is specification and not an
-implementation. The source evaluation records both sources (TEST-SPLIT-5). The
+**The vectors come from implementations that this project does not own.** Two
+generators write them, and they pin every part of TEST-SPLIT-4 (D-15). The
+`hmac` module of the Python standard library is an independent HMAC-SHA256.
+`tests/vectors/generate.py` keeps each coefficient `f(S, label)` of KEY-SHARE-3
+on that module, because `f` is HMAC-SHA256 (KEY-DERIVE-1). A separate one-time
+generator, `tests/vectors/generate-share.py`, produces the field operations, the
+share evaluation, and the reconstruction. It runs on an independent GF(256)
+Shamir implementation, outside the dependency set of this repository, so `deps/`
+gains no entry. The developer runs it once and commits the vectors.
+`docs/analysis/share-arithmetic-sources.md` names that implementation, and the
+source evaluation records both sources (TEST-SPLIT-5). The label strings come
+from `spec/keys.md`, which is specification and not an implementation. The
 vectors cover the thresholds 1, 2, and 3 with up to 5 oracles, and threshold 1
 holds the `k = 1` reduction. The committed header pins the C code.
 
@@ -84,7 +91,8 @@ holds the `k = 1` reduction. The committed header pins the C code.
 | `src/pin.c`, `src/pin.h`                    | `pin_ei` through `bcrypt_pbkdf(3)`                                  |
 | `src/regress/share.c`                       | The tests below                                                     |
 | `tests/vectors/generate.py`                 | The eight custody labels and the coefficients                       |
-| `tests/vectors/share.h`                     | The committed vectors                                               |
+| `tests/vectors/generate-share.py`           | The share generator, outside the dependency set                     |
+| `tests/vectors/share.h`                     | The committed vectors of both generators                            |
 | `docs/analysis/mask-composition.md`         | The analysis of TEST-ANALYSIS                                       |
 | `docs/analysis/share-split.md`              | The analysis of TEST-SPLIT-1                                        |
 | `docs/analysis/share-arithmetic-sources.md` | The source evaluation of TEST-SPLIT-5                               |
@@ -104,6 +112,8 @@ holds the `k = 1` reduction. The committed header pins the C code.
   and `secp256k1_ec_seckey_verify` accepts it (KEY-CLIENT-2).
 - The machine name gate accepts `laptop-1` and rejects an upper-case letter, a
   space, an empty name, and 65 bytes (KEY-DEVICE-3).
+- The device factor of `laptop-1` and the pin salt of slot 17 at oracle 2 match
+  the vectors (TEST-KAT-4).
 - `pin_ei` matches the vector for the test passphrase, and two salts give two
   values.
 - The wrap key, the index key, the index wrap key, and the canary check seal key
@@ -115,6 +125,7 @@ holds the `k = 1` reduction. The committed header pins the C code.
 - KEY-CLIENT, KEY-PIN, and KEY-SHARE read `done`. KEY-DEVICE, KEY-MASK, and
   SEC-ENTROPY read `partial` with the absent rules named. TEST-SPLIT and
   TEST-ANALYSIS read `done` when the approval lines hold a name and a date.
+- The KEY-MASK note also names the absent index wrap of KEY-MASK-7.
 - TEST-KAT reads `partial` with TEST-KAT-2 and TEST-KAT-3 as the absent rules.
   Plan 002 lands TEST-KAT-2, and the later of the two plans sets the row.
 - The change deletes this plan.

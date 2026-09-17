@@ -8,8 +8,10 @@ Implements: VAULT-LAYOUT, VAULT-SEAL, VAULT-FORMAT, VAULT-ATOMIC, ENTRY-MODEL,
 ENTRY-TYPES. Implements: TEST-KAT without TEST-KAT-3. Implements: VAULT-CONFIG
 without VAULT-CONFIG-5. Implements: VAULT-INDEX without VAULT-INDEX-3 and
 VAULT-INDEX-6. Implements: VAULT-BACKUP without VAULT-BACKUP-3 and
-VAULT-BACKUP-4. Implements: ENTRY-ROTATION without ENTRY-ROTATION-1. Defers:
-SEC-ENTROPY, SEC-MEMORY, ENTRY-POOL, ENTRY-SHADOW, KEY-MASK.
+VAULT-BACKUP-4. Implements: ENTRY-ROTATION without ENTRY-ROTATION-1. Implements:
+KEY-ENTRY without KEY-ENTRY-1. Implements: SEC-ENTROPY without SEC-ENTROPY-3,
+SEC-ENTROPY-5, and SEC-ENTROPY-7. Defers: SEC-MEMORY, ENTRY-POOL, ENTRY-SHADOW,
+KEY-MASK.
 
 The absent rules are session and documentation rules. VAULT-INDEX-3 and
 VAULT-INDEX-6 bind the daily index read of plan 007. ENTRY-ROTATION-1 consumes a
@@ -17,7 +19,11 @@ pool slot, in plan 007. VAULT-BACKUP-4 is the paper QR of plan 012.
 VAULT-CONFIG-5 and VAULT-BACKUP-3 are statements of the manual pages, in
 plan 013. This plan adds TEST-KAT-2, the seal vectors, and TEST-KAT-3 stays with
 the scan helper of plan 012. The eight custody labels of TEST-KAT-4 stay with
-plan 003, and the later of plan 002 and plan 003 clears that part.
+plan 003, and the later of plan 002 and plan 003 clears that part. This plan
+seals the entry file under `K_e` (KEY-ENTRY-3), and plan 006 reserves the slots
+of KEY-ENTRY-1. It draws the seal nonce of SEC-ENTROPY-4 with `arc4random(3)`.
+Plan 004 draws the ephemeral keypair and the IV, and plan 005 draws the
+`set_pin` entropy.
 
 ## Purpose
 
@@ -101,6 +107,10 @@ of an entry is the position of its slot in `slots` (ENTRY-ROTATION-2).
 - VAULT-LAYOUT, VAULT-SEAL, VAULT-FORMAT, VAULT-ATOMIC, ENTRY-MODEL, and
   ENTRY-TYPES read `done`. VAULT-CONFIG, VAULT-INDEX, VAULT-BACKUP, and
   ENTRY-ROTATION read `partial` with the absent rules named.
+- KEY-ENTRY reads `partial` with KEY-ENTRY-1 as the absent rule.
+- SEC-ENTROPY reads `partial`. The absent rules are SEC-ENTROPY-3,
+  SEC-ENTROPY-5, and SEC-ENTROPY-7, and the note names each absent part of
+  SEC-ENTROPY-4.
 - TEST-KAT reads `partial` with TEST-KAT-3 as the absent rule. The eight custody
   labels of TEST-KAT-4 stay absent until plan 003 lands them.
 - The change deletes this plan.

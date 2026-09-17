@@ -5,17 +5,21 @@
 Proposed. It can land now, and it depends on no other plan. Every other plan of
 this repository waits on it.
 
-Implements: KEY-DERIVE, KEY-ENTRY, KEY-BIP85. Implements: KEY-MASTER without
-KEY-MASTER-2. Implements: TEST-KAT without TEST-KAT-2 and TEST-KAT-3.
-Implements: SEC-ENTROPY without SEC-ENTROPY-3, SEC-ENTROPY-4, SEC-ENTROPY-5, and
-SEC-ENTROPY-7. Implements: SEC-MEMORY without SEC-MEMORY-3 to SEC-MEMORY-6.
-Defers: VAULT-SEAL, PROG-SCAN. Defers: KEY-DEVICE, KEY-CLIENT, KEY-PIN,
-KEY-MASK, KEY-SHARE.
+Implements: KEY-DERIVE. Implements: KEY-ENTRY without KEY-ENTRY-1 and
+KEY-ENTRY-3. Implements: KEY-BIP85 without KEY-BIP85-5 and KEY-BIP85-6.
+Implements: KEY-MASTER without KEY-MASTER-2. Implements: TEST-KAT without
+TEST-KAT-2 and TEST-KAT-3. Implements: SEC-ENTROPY without SEC-ENTROPY-3,
+SEC-ENTROPY-4, SEC-ENTROPY-5, and SEC-ENTROPY-7. Implements: SEC-MEMORY without
+SEC-MEMORY-3 to SEC-MEMORY-6. Defers: VAULT-SEAL, PROG-SCAN. Defers: KEY-DEVICE,
+KEY-CLIENT, KEY-PIN, KEY-MASK, KEY-SHARE.
 
 Of the two security units, this plan lands SEC-ENTROPY-1, SEC-ENTROPY-2, and
 SEC-ENTROPY-6, and SEC-MEMORY-1 and SEC-MEMORY-2. The other rules land with the
 code that they bind, and the citation names each absent rule. KEY-MASTER-2 is
-the scan path, and plan 012 lands it with the scan helper. TEST-KAT-2 is the
+the scan path, and plan 012 lands it with the scan helper. KEY-ENTRY-1 is the
+slot reservation of the creation ceremony, in plan 006. KEY-ENTRY-3 seals the
+entry file under VAULT-SEAL, in plan 002. KEY-BIP85-5 is the ceremony step of
+plan 006, and KEY-BIP85-6 is the entry creation of plan 007. TEST-KAT-2 is the
 seal vectors of plan 002, and TEST-KAT-3 is the SeedQR vectors of plan 012. The
 other eight labels of the table belong to the five deferred key units, and plan
 003 lands them. TEST-KAT-4 stays partial on those eight labels, and plan 003
@@ -117,7 +121,7 @@ clears its temporaries on each exit path (SEC-MEMORY-1).
 ## Acceptance
 
 - `make check` passes on the host, and `make regress` passes in the guest.
-- KEY-DERIVE, KEY-ENTRY, and KEY-BIP85 read `done`. KEY-MASTER, SEC-ENTROPY, and
+- KEY-DERIVE reads `done`. KEY-ENTRY, KEY-BIP85, KEY-MASTER, SEC-ENTROPY, and
   SEC-MEMORY read `partial` with the absent rules named.
 - TEST-KAT reads `partial`. TEST-KAT-2 and TEST-KAT-3 are the absent rules, and
   the eight custody labels of TEST-KAT-4 are the absent part.

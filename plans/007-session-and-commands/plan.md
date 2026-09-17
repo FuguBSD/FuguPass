@@ -5,22 +5,25 @@
 Proposed. It waits on plan 006 for a vault. Plan 008, plan 009, and plan 011
 wait on it.
 
-Implements: ORC-QUORUM, ENTRY-SHADOW, VAULT-INDEX, ENTRY-POOL, ENTRY-ROTATION.
-Implements: ORC-CANARY without ORC-CANARY-10. Implements: PROG-REPL without
-PROG-REPL-6 to PROG-REPL-9. Implements: PROG-ONESHOT, SEC-MEMORY, TEST-HARNESS.
-Implements: PROG-OUTPUT without PROG-OUTPUT-2. Defers: CER-VERIFY, REC-PLATE,
-PROG-IFACE.
+Implements: ORC-QUORUM, ENTRY-SHADOW, VAULT-INDEX, ENTRY-POOL, ENTRY-ROTATION,
+KEY-BIP85. Implements: ORC-CANARY without ORC-CANARY-10. Implements: PROG-REPL
+without PROG-REPL-6 to PROG-REPL-9. Implements: PROG-ONESHOT, SEC-MEMORY,
+TEST-HARNESS. Implements: PROG-OUTPUT without PROG-OUTPUT-2. Defers: CER-VERIFY,
+REC-PLATE, PROG-IFACE.
 
 Of PROG-REPL, this plan lands PROG-REPL-1 to PROG-REPL-5: the unlock, the index
 open, the six commands, the quorum events, and the refusal. PROG-REPL-6 is plan
 010, and PROG-REPL-7 to PROG-REPL-9 are plan 011. It completes PROG-ONESHOT-1 to
 PROG-ONESHOT-3, ORC-CANARY-1, ORC-CANARY-3, ORC-CANARY-4, ORC-CANARY-8, and
 ORC-CANARY-9, VAULT-INDEX-3 and VAULT-INDEX-6, ENTRY-POOL-3 to ENTRY-POOL-9,
-ENTRY-ROTATION-1, and SEC-MEMORY-6. It adds the quorum reveal legs of
-TEST-HARNESS-5, and plan 008 and plan 009 add the other legs. PROG-ONESHOT-4
-stays partial on the later ceremonies, and SEC-MEMORY-3 stays partial on the two
-helpers of plan 012. PROG-OUTPUT-2 is the QR display of plan 012. ORC-CANARY-10
-is a statement of plan 013.
+ENTRY-ROTATION-1, and SEC-MEMORY-6. It completes KEY-BIP85-6: `add` and `gen`
+keep the candidate of the entry type. It also lands the canary re-enrollment
+subcommand of PROG-ONESHOT-4. It adds the quorum reveal legs of TEST-HARNESS-5,
+and plan 008 and plan 009 add the other legs. PROG-ONESHOT-4 stays partial on
+the later ceremonies, the recovery paths, the passphrase change, and the
+revocation paths. SEC-MEMORY-3 stays partial on the two helpers of plan 012.
+PROG-OUTPUT-2 is the QR display of plan 012. ORC-CANARY-10 is a statement of
+plan 013.
 
 ## Purpose
 
@@ -29,7 +32,8 @@ machine's records (D-06). This plan lands the session core: the canary checks in
 quorum order, and the index open through the index wraps. It also lands the
 quorum reveal with substitution, and the refusal below `k`. On that core it
 lands the six commands as one-shot subcommands: `ls`, `show`, `add`, `gen`,
-`totp`, and `audit`. The interface of plan 011 adds no core path
+`totp`, and `audit`. It also lands the `canary` subcommand: it re-enrolls one
+canary record (ORC-CANARY-5). The interface of plan 011 adds no core path
 (PROG-ONESHOT-2).
 
 ## Constraints that shape the design
@@ -58,7 +62,9 @@ after that oracle's canary. It continues until no untried quorum remains
 **A dead index wrap heals in session.** A canary re-enrollment replaces the
 canary mask, so the index wrap of that oracle dies. A session that holds `K_idx`
 re-wraps at once, and a session without `K_idx` deletes the wrap file and
-reports it (ORC-CANARY-8).
+reports it (ORC-CANARY-8). `fugupass canary <oracle>` re-enrolls the canary
+record of one oracle, and PROG-ONESHOT-4 needs that subcommand (ORC-CANARY-5,
+ORC-CANARY-11).
 
 **Consumption is one quorum event, in a fixed order.** `add` and `gen` take the
 lowest free slot with wraps at `k` or more live oracles, and verify the two
@@ -86,8 +92,8 @@ output, with no decoration (PROG-ONESHOT-3). A secret prints to the terminal
 | `src/session.c`, `src/session.h`   | The unlock, the quorum, the canaries, the index open |
 | `src/commands.c`, `src/commands.h` | The six commands                                     |
 | `src/entry.c`                      | The consumption, the rotation, the shadow audit      |
-| `src/fugupass.c`                   | The six subcommands                                  |
-| `src/fugupass/fugupass.1`          | The six commands and the report states               |
+| `src/fugupass.c`                   | The six subcommands and `canary`                     |
+| `src/fugupass/fugupass.1`          | The six commands, `canary`, and the report states    |
 | `tests/harness.d/session`          | The legs below                                       |
 | `spec/entries.md`                  | The rotation sentence of ENTRY-ROTATION              |
 | `spec/STATUS.md`                   | The cited units                                      |
@@ -106,7 +112,8 @@ The harness holds, against each counterparty, with one oracle and with the
   and no entry record receives a request.
 - A stopped oracle of the quorum leads to a substitution. Two stopped oracles of
   three lead to a refusal with each oracle state (ORC-QUORUM-5, ORC-QUORUM-6).
-- A re-enrolled canary heals its index wrap in session (ORC-CANARY-8).
+- `fugupass canary` re-enrolls a canary, and the session heals its index wrap
+  (ORC-CANARY-5, ORC-CANARY-8).
 - `totp` prints the code of the RFC 6238 vector for a stored totp entry.
 - `audit` lists a shadow entry with an old verification date and skips a fresh
   one (ENTRY-SHADOW-4).
@@ -118,15 +125,17 @@ The harness holds, against each counterparty, with one oracle and with the
 ## Acceptance
 
 - `make check` passes on the host, and `make harness` passes.
-- ORC-QUORUM, ENTRY-SHADOW, VAULT-INDEX, ENTRY-POOL, and ENTRY-ROTATION read
-  `done`. ORC-CANARY, PROG-REPL, and PROG-OUTPUT read `partial` with the absent
-  rules named.
-- PROG-ONESHOT reads `partial`, and the later ceremonies and recovery paths of
-  PROG-ONESHOT-4 are the absent part.
+- ORC-QUORUM, ENTRY-SHADOW, VAULT-INDEX, ENTRY-POOL, ENTRY-ROTATION, and
+  KEY-BIP85 read `done`. ORC-CANARY, PROG-REPL, and PROG-OUTPUT read `partial`
+  with the absent rules named.
+- PROG-ONESHOT reads `partial`. The absent parts of PROG-ONESHOT-4 are the later
+  ceremonies, the recovery paths, the passphrase change, and the revocation
+  paths.
 - SEC-MEMORY reads `partial`, and the two helpers of SEC-MEMORY-3 are the absent
   part.
-- TEST-HARNESS reads `partial`. The passphrase change leg and the provisioning
-  loop of TEST-HARNESS-5 are the absent parts.
+- TEST-HARNESS reads `partial`. The absent parts are the passphrase change leg
+  and the provisioning loop of TEST-HARNESS-5, and the re-enrollment coverage of
+  TEST-HARNESS-3.
 - The change deletes this plan.
 
 ## What this plan does not do

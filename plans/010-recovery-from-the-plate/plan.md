@@ -2,8 +2,10 @@
 
 ## Status
 
-Proposed. It waits on plan 006 for the program and the scan boundary. Its
-harness legs wait on plan 007 for a vault and on plan 009 for a second machine.
+Proposed. It waits on plan 006 for the program and the scan boundary. It also
+waits on plan 007, plan 008, and plan 009: they land the other subcommands of
+PROG-ONESHOT-4. Its harness legs need the vault of plan 007 and the second
+machine of plan 009.
 
 Implements: REC-PLATE, REC-VAULT, REC-RESTORE, CER-VERIFY, PROG-ONESHOT.
 Implements: PROG-REPL without PROG-REPL-7 to PROG-REPL-9. Defers: PROG-SCAN,
@@ -11,10 +13,10 @@ ORC-ENROLL.
 
 Of PROG-REPL, this plan lands PROG-REPL-6, and plan 011 lands PROG-REPL-7 to
 PROG-REPL-9. Of PROG-ONESHOT, it lands the recovery and the verification
-subcommands of PROG-ONESHOT-4. This plan waits on plan 009, so every earlier
-ceremony subcommand exists, and PROG-ONESHOT then reads `done`. REC-VAULT-4
-names the re-enrollment of plan 009 as its second step, and this plan lands the
-restore half.
+subcommands of PROG-ONESHOT-4. Plan 006 to plan 009 land every other subcommand
+of that rule, so PROG-ONESHOT then reads `done`. REC-VAULT-4 names the
+re-enrollment of plan 009 as its second step, and this plan lands the restore
+half.
 
 ## Purpose
 

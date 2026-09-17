@@ -5,12 +5,15 @@
 Proposed. It waits on plan 001 for the build skeleton. Plan 005 waits on it. It
 is independent of plan 002 and plan 003.
 
-Implements: ORC-CONFORM without ORC-CONFORM-2 and ORC-CONFORM-3. Defers:
-ORC-PROVISION, PROG-SPLIT, SEC-ENTROPY, TEST-HARNESS.
+Implements: ORC-CONFORM without ORC-CONFORM-2 and ORC-CONFORM-3. Implements:
+SEC-ENTROPY without SEC-ENTROPY-3, SEC-ENTROPY-5, and SEC-ENTROPY-7. Defers:
+ORC-PROVISION, PROG-SPLIT, TEST-HARNESS.
 
 ORC-CONFORM-2 and ORC-CONFORM-3 bind the records, in plan 005. The transport
 rule that this plan adds to ORC-CONFORM names the client. The unveil path that
-it needs lands with the program in plan 006.
+it needs lands with the program in plan 006. This plan draws the ephemeral
+keypair and the IV of SEC-ENTROPY-4. Plan 002 draws the seal nonce, and plan 005
+draws the `set_pin` entropy.
 
 ## Purpose
 
@@ -65,7 +68,7 @@ build takes both as arguments, so the vectors apply.
 | `src/regress/http.t`               | The transport tests below, with a fixture server |
 | `tests/vectors/oracle.h`           | The copied vectors                               |
 | `spec/oracle.md`                   | The transport rule of ORC-CONFORM                |
-| `spec/STATUS.md`                   | ORC-CONFORM `partial`, and the new code roots    |
+| `spec/STATUS.md`                   | The cited units, and the new code roots          |
 
 ## Tests
 
@@ -94,6 +97,9 @@ holds:
 - `make check` passes on the host, and `make regress` passes in the guest.
 - ORC-CONFORM reads `partial` with ORC-CONFORM-2 and ORC-CONFORM-3 as the absent
   rules, and its text holds the transport rule.
+- SEC-ENTROPY reads `partial`. The absent rules are SEC-ENTROPY-3,
+  SEC-ENTROPY-5, and SEC-ENTROPY-7, and the note names each absent part of
+  SEC-ENTROPY-4.
 - The change deletes this plan.
 
 ## What this plan does not do
