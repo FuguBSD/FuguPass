@@ -7,13 +7,17 @@ it. It is independent of plan 002 and plan 004.
 
 Implements: KEY-CLIENT, KEY-PIN, KEY-SHARE, TEST-SPLIT, TEST-ANALYSIS.
 Implements: KEY-DEVICE without KEY-DEVICE-2. Implements: KEY-MASK without
-KEY-MASK-4 and KEY-MASK-8. Implements: SEC-ENTROPY. Defers: ORC-ENROLL,
+KEY-MASK-4 and KEY-MASK-8. Implements: TEST-KAT without TEST-KAT-2 and
+TEST-KAT-3. Implements: SEC-ENTROPY without SEC-ENTROPY-4. Defers: ORC-ENROLL,
 ORC-REVEAL, VAULT-INDEX.
 
 KEY-DEVICE-2 and KEY-MASK-4 are the writes of the device factor and the wraps,
 in plan 005 and plan 006. KEY-MASK-8 is the plate ceremony of plan 006. This
-plan adds SEC-ENTROPY-3, SEC-ENTROPY-5, and SEC-ENTROPY-7. The two analyses
-reach `done` when the human approval line holds a name and a date.
+plan adds SEC-ENTROPY-3, SEC-ENTROPY-5, and SEC-ENTROPY-7, and SEC-ENTROPY-4 is
+the ephemeral randomness of plan 005. This plan lands the eight custody labels
+of TEST-KAT-4, and plan 001 landed the other two. Plan 002 lands TEST-KAT-2, and
+the later of plan 002 and plan 003 sets the TEST-KAT row. The two analyses reach
+`done` when the human approval line holds a name and a date.
 
 ## Purpose
 
@@ -60,13 +64,14 @@ across thresholds and re-enrollments (TEST-SPLIT-1). Each document ends with one
 approval line. The reviewer fills the name and the date at the merge, or the
 unit stays `partial`.
 
-**The vectors come from an independent implementation.** An independent
-implementation pins the standard parts: the GF(256) field operations, the
-polynomial evaluation, and the Lagrange interpolation (TEST-SPLIT-4, D-15). The
-source evaluation names the implementation that produced the vectors
-(TEST-SPLIT-5). The coefficient derivation is FuguPass-specific: it is `f` under
-the `shamir/` label (KEY-SHARE-3). No external implementation produces it. The
-vectors of `f` in plan 001 and the coefficient vectors of this plan pin it. The
+**The vectors come from implementations that this project does not own.** The
+generator composes two of them, and they pin every part of TEST-SPLIT-4 (D-15).
+The `hmac` module of the Python standard library is an independent HMAC-SHA256.
+It produces each coefficient `f(S, label)` of KEY-SHARE-3, because `f` is
+HMAC-SHA256 (KEY-DERIVE-1). An independent GF(256) Shamir implementation
+produces the field operations, the share evaluation, and the reconstruction. The
+label strings come from `spec/keys.md`, which is specification and not an
+implementation. The source evaluation records both sources (TEST-SPLIT-5). The
 vectors cover the thresholds 1, 2, and 3 with up to 5 oracles, and threshold 1
 holds the `k = 1` reduction. The committed header pins the C code.
 
@@ -78,7 +83,7 @@ holds the `k = 1` reduction. The committed header pins the C code.
 | `src/derive.c`, `src/derive.h`              | `X`, `t_ei`, `ck_ei`, `salt_ei`, `wk_ei`, the index and canary keys |
 | `src/pin.c`, `src/pin.h`                    | `pin_ei` through `bcrypt_pbkdf(3)`                                  |
 | `src/regress/share.c`                       | The tests below                                                     |
-| `tests/vectors/generate.py`                 | The custody labels and the coefficients                             |
+| `tests/vectors/generate.py`                 | The eight custody labels and the coefficients                       |
 | `tests/vectors/share.h`                     | The committed vectors                                               |
 | `docs/analysis/mask-composition.md`         | The analysis of TEST-ANALYSIS                                       |
 | `docs/analysis/share-split.md`              | The analysis of TEST-SPLIT-1                                        |
@@ -101,14 +106,17 @@ holds the `k = 1` reduction. The committed header pins the C code.
   space, an empty name, and 65 bytes (KEY-DEVICE-3).
 - `pin_ei` matches the vector for the test passphrase, and two salts give two
   values.
-- The wrap key and the canary check seal key match the vectors.
+- The wrap key, the index key, the index wrap key, and the canary check seal key
+  match the vectors (TEST-KAT-4).
 
 ## Acceptance
 
 - `make check` passes on the host, and `make regress` passes in the guest.
-- KEY-CLIENT, KEY-PIN, and KEY-SHARE read `done`. KEY-DEVICE and KEY-MASK read
-  `partial` with the absent rules named. TEST-SPLIT and TEST-ANALYSIS read
-  `done` when the approval lines hold a name and a date.
+- KEY-CLIENT, KEY-PIN, and KEY-SHARE read `done`. KEY-DEVICE, KEY-MASK, and
+  SEC-ENTROPY read `partial` with the absent rules named. TEST-SPLIT and
+  TEST-ANALYSIS read `done` when the approval lines hold a name and a date.
+- TEST-KAT reads `partial` with TEST-KAT-2 and TEST-KAT-3 as the absent rules.
+  Plan 002 lands TEST-KAT-2, and the later of the two plans sets the row.
 - The change deletes this plan.
 
 ## What this plan does not do

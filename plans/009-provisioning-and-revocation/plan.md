@@ -5,14 +5,16 @@
 Proposed. It waits on plan 008 for the change marker. It completes the quorum
 leg of the harness.
 
-Implements: REC-WIPE, TEST-HARNESS. Implements: CER-PROVISION without
-CER-PROVISION-13. Implements: ORC-REVOKE without ORC-REVOKE-7 and ORC-REVOKE-9.
-Implements: ORC-PROVISION without ORC-PROVISION-3 and ORC-PROVISION-8.
-Implements: ORC-COUNTER without ORC-COUNTER-7.
+Implements: REC-WIPE, TEST-HARNESS, CER-PROVISION. Implements: ORC-REVOKE
+without ORC-REVOKE-7 and ORC-REVOKE-9. Implements: ORC-PROVISION without
+ORC-PROVISION-3 and ORC-PROVISION-8. Implements: ORC-COUNTER without
+ORC-COUNTER-7.
 
 Of ORC-PROVISION, this plan lands ORC-PROVISION-6 and ORC-PROVISION-7, the list
-changes. It adds the revocation exception of ORC-COUNTER-1 and ORC-COUNTER-5.
-CER-PROVISION-13 holds one statement for the documentation, and plan 013 lands
+changes. It adds the revocation exception of ORC-COUNTER-1 and ORC-COUNTER-5. Of
+CER-PROVISION-13 it lands the behavior: the ceremony records the new list or the
+new threshold before any enrollment. The last sentence of CER-PROVISION-13 is a
+documentation statement, and plan 013 lands it. CER-PROVISION stays partial on
 that sentence. ORC-PROVISION-3, ORC-PROVISION-8, ORC-COUNTER-7, ORC-REVOKE-7,
 and ORC-REVOKE-9 are statements of plan 013 too. It completes TEST-HARNESS-5
 with the provisioning loop.
@@ -118,8 +120,10 @@ The harness holds, against the 2-of-3 topology of TEST-HARNESS-5:
 ## Acceptance
 
 - `make check` passes on the host, and `make harness` passes.
-- REC-WIPE and TEST-HARNESS read `done`. CER-PROVISION, ORC-PROVISION,
-  ORC-COUNTER, and ORC-REVOKE read `partial` with the absent rules named.
+- REC-WIPE and TEST-HARNESS read `done`. ORC-PROVISION, ORC-COUNTER, and
+  ORC-REVOKE read `partial` with the absent rules named.
+- CER-PROVISION reads `partial`, and the documentation sentence of
+  CER-PROVISION-13 is the absent part.
 - The change deletes this plan.
 
 ## What this plan does not do

@@ -6,7 +6,7 @@ Proposed. It waits on plan 006 for the helper boundary, and on plan 007 for the
 six commands. It also waits on plan 011 for the interface rules of PROG-SPLIT.
 
 Implements: PROG-SCAN, PROG-QR, KEY-MASTER, TEST-KAT. Implements: PROG-SPLIT,
-VAULT-BACKUP, PROG-OUTPUT, SEC-MEMORY.
+PROG-OUTPUT, SEC-MEMORY. Implements: VAULT-BACKUP without VAULT-BACKUP-3.
 
 This plan completes KEY-MASTER-2, TEST-KAT-3, PROG-SPLIT-4 and PROG-SPLIT-5,
 PROG-OUTPUT-2, and SEC-MEMORY-3 for the two helpers. It adds VAULT-BACKUP-4, and

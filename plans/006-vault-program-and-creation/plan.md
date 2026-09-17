@@ -5,17 +5,23 @@
 Proposed. It waits on plan 005 for the record client. Plan 007 to plan 010 wait
 on it.
 
-Implements: CER-CREATE, KEY-DEVICE, TEST-HARNESS. Implements: PROG-SPLIT,
-PROG-ONESHOT, ENTRY-POOL, ORC-REVOKE, KEY-MASK, SEC-MEMORY. Defers: PROG-IFACE,
+Implements: CER-CREATE, KEY-DEVICE, KEY-MASK. Implements: TEST-HARNESS without
+TEST-HARNESS-5. Implements: PROG-SPLIT without PROG-SPLIT-4, PROG-SPLIT-5, and
+PROG-SPLIT-7 to PROG-SPLIT-10. Implements: PROG-ONESHOT without PROG-ONESHOT-1
+to PROG-ONESHOT-3. Implements: ENTRY-POOL without ENTRY-POOL-3 to ENTRY-POOL-9.
+Implements: ORC-REVOKE without ORC-REVOKE-1 to ORC-REVOKE-5 and ORC-REVOKE-7 to
+ORC-REVOKE-10. Implements: SEC-MEMORY without SEC-MEMORY-6. Defers: PROG-IFACE,
 PROG-REPL, PROG-SCAN, PROG-QR, KEY-MASTER.
 
 Of PROG-SPLIT, this plan lands PROG-SPLIT-1, PROG-SPLIT-2, PROG-SPLIT-3, and
 PROG-SPLIT-6. The helper rules are plan 012, and the interface rules are
 plan 011. Of PROG-ONESHOT it lands the subcommand frame and the first ceremony
-subcommand of PROG-ONESHOT-4. Of ENTRY-POOL it lands ENTRY-POOL-1 and
-ENTRY-POOL-2, the pre-derivation. Of ORC-REVOKE it lands the kit export of
-ORC-REVOKE-6. It completes KEY-DEVICE-2, KEY-MASK-8, and TEST-HARNESS-8, and it
-adds SEC-MEMORY-3 for this program, SEC-MEMORY-4, and SEC-MEMORY-5.
+subcommand of PROG-ONESHOT-4, so that rule stays partial. Of ENTRY-POOL it lands
+ENTRY-POOL-1 and ENTRY-POOL-2, the pre-derivation. Of ORC-REVOKE it lands the
+kit export of ORC-REVOKE-6. It completes KEY-DEVICE-2, KEY-MASK-8, and
+TEST-HARNESS-8. It adds SEC-MEMORY-3 for this program, SEC-MEMORY-4, and
+SEC-MEMORY-5, so SEC-MEMORY-3 stays partial until plan 012 lands the two
+helpers.
 
 ## Purpose
 
@@ -107,8 +113,12 @@ on a file outside the unveil list after its pledge call.
 ## Acceptance
 
 - `make check` passes on the host, and `make harness` passes.
-- Every cited unit reads `done`, except the six units with a named absent rule,
-  which read `partial`.
+- CER-CREATE, KEY-DEVICE, and KEY-MASK read `done`. TEST-HARNESS, PROG-SPLIT,
+  ENTRY-POOL, and ORC-REVOKE read `partial` with the absent rules named.
+- PROG-ONESHOT reads `partial`, and the later ceremonies and recovery paths of
+  PROG-ONESHOT-4 are the absent part.
+- SEC-MEMORY reads `partial` with SEC-MEMORY-6 as the absent rule, and the two
+  helpers of SEC-MEMORY-3 are the absent part.
 - The change deletes this plan.
 
 ## What this plan does not do

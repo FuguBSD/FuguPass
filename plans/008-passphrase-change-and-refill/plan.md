@@ -5,13 +5,13 @@
 Proposed. It waits on plan 007 for the session core. Plan 009 waits on it for
 the change marker.
 
-Implements: ORC-ENROLL, CER-REFILL, TEST-HARNESS. Implements: ORC-CANARY.
-Defers: CER-PROVISION.
+Implements: ORC-ENROLL, CER-REFILL, TEST-HARNESS. Implements: ORC-CANARY without
+ORC-CANARY-10. Defers: CER-PROVISION.
 
 This plan completes ORC-ENROLL with ORC-ENROLL-4 to ORC-ENROLL-12. It adds the
-passphrase change leg of TEST-HARNESS-5. ORC-CANARY stays `partial` on
-ORC-CANARY-10, a statement of plan 013. The threshold change shares the marker
-and lands in plan 009.
+passphrase change leg of TEST-HARNESS-5, and plan 009 adds the provisioning
+loop. ORC-CANARY stays `partial` on ORC-CANARY-10, a statement of plan 013. The
+threshold change shares the marker and lands in plan 009.
 
 ## Purpose
 
@@ -93,8 +93,10 @@ The harness holds, against the 2-of-3 topology of TEST-HARNESS-5:
 ## Acceptance
 
 - `make check` passes on the host, and `make harness` passes.
-- ORC-ENROLL and CER-REFILL read `done`. ORC-CANARY and TEST-HARNESS read
-  `partial` with the absent rules named.
+- ORC-ENROLL and CER-REFILL read `done`. ORC-CANARY reads `partial` with
+  ORC-CANARY-10 as the absent rule.
+- TEST-HARNESS reads `partial`, and the provisioning loop of TEST-HARNESS-5 is
+  the absent part.
 - The change deletes this plan.
 
 ## What this plan does not do

@@ -8,9 +8,11 @@ and on plan 004 for the envelope. Plan 006 waits on it.
 Implements: ORC-REVEAL, TEST-MASK, ORC-CONFORM. Implements: ORC-RECORDS without
 ORC-RECORDS-4. Implements: ORC-COUNTER without ORC-COUNTER-7. Implements:
 ORC-ENROLL without the passphrase change rules ORC-ENROLL-4 to ORC-ENROLL-12.
-Implements: ORC-CANARY, ORC-PROVISION, SEC-ENTROPY. Implements: KEY-MASK without
-KEY-MASK-8. Implements: TEST-HARNESS without TEST-HARNESS-5 and TEST-HARNESS-8.
-Defers: ORC-QUORUM, ENTRY-POOL, CER-CREATE.
+Implements: ORC-CANARY without ORC-CANARY-1, ORC-CANARY-3, ORC-CANARY-4, and
+ORC-CANARY-8 to ORC-CANARY-10. Implements: ORC-PROVISION without ORC-PROVISION-3
+and ORC-PROVISION-6 to ORC-PROVISION-8. Implements: SEC-ENTROPY. Implements:
+KEY-MASK without KEY-MASK-8. Implements: TEST-HARNESS without TEST-HARNESS-5 and
+TEST-HARNESS-8. Defers: ORC-QUORUM, ENTRY-POOL, CER-CREATE.
 
 This plan lands the record side of the canary: ORC-CANARY-2, ORC-CANARY-5,
 ORC-CANARY-6, ORC-CANARY-7, and ORC-CANARY-11. The session rules of the canary
@@ -113,8 +115,9 @@ The harness holds, against each counterparty:
 
 - `make check` passes on the host, and `make harness` passes against the
   upstream server.
-- Every cited unit reads `done`, except the seven units with a named absent
-  rule, which read `partial`.
+- ORC-REVEAL, TEST-MASK, ORC-CONFORM, and SEC-ENTROPY read `done`.
+- ORC-RECORDS, ORC-COUNTER, ORC-ENROLL, ORC-CANARY, ORC-PROVISION, KEY-MASK, and
+  TEST-HARNESS read `partial` with the absent rules named.
 - The change deletes this plan.
 
 ## What this plan does not do

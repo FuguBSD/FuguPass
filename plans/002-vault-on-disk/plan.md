@@ -16,7 +16,8 @@ VAULT-INDEX-6 bind the daily index read of plan 007. ENTRY-ROTATION-1 consumes a
 pool slot, in plan 007. VAULT-BACKUP-4 is the paper QR of plan 012.
 VAULT-CONFIG-5 and VAULT-BACKUP-3 are statements of the manual pages, in
 plan 013. This plan adds TEST-KAT-2, the seal vectors, and TEST-KAT-3 stays with
-the scan helper of plan 012.
+the scan helper of plan 012. The eight custody labels of TEST-KAT-4 stay with
+plan 003, and the later of plan 002 and plan 003 clears that part.
 
 ## Purpose
 
@@ -97,8 +98,11 @@ of an entry is the position of its slot in `slots` (ENTRY-ROTATION-2).
 ## Acceptance
 
 - `make check` passes on the host, and `make regress` passes in the guest.
-- Every cited unit reads `done`, except the five units with a named absent rule,
-  which read `partial`.
+- VAULT-LAYOUT, VAULT-SEAL, VAULT-FORMAT, VAULT-ATOMIC, ENTRY-MODEL, and
+  ENTRY-TYPES read `done`. VAULT-CONFIG, VAULT-INDEX, VAULT-BACKUP, and
+  ENTRY-ROTATION read `partial` with the absent rules named.
+- TEST-KAT reads `partial` with TEST-KAT-3 as the absent rule. The eight custody
+  labels of TEST-KAT-4 stay absent until plan 003 lands them.
 - The change deletes this plan.
 
 ## What this plan does not do

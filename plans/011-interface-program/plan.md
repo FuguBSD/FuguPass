@@ -5,8 +5,8 @@
 Proposed. It waits on plan 007 for the six commands. It is independent of plan
 008 to plan 010, and plan 012 waits on it.
 
-Implements: PROG-IFACE, PROG-SPLIT. Implements: PROG-REPL without PROG-REPL-6.
-Defers: PROG-OUTPUT.
+Implements: PROG-IFACE. Implements: PROG-SPLIT without PROG-SPLIT-4 and
+PROG-SPLIT-5. Implements: PROG-REPL without PROG-REPL-6. Defers: PROG-OUTPUT.
 
 This plan lands PROG-REPL-7 to PROG-REPL-9, and it adds PROG-SPLIT-7 to
 PROG-SPLIT-10. Plan 010 lands PROG-REPL-6, the paths that work without the
@@ -110,8 +110,8 @@ The harness holds, in the guest under `fuguvm expect`:
   Perl sources, and `make harness` passes.
 - PROG-IFACE reads `done`, and PROG-SPLIT reads `partial` with PROG-SPLIT-4 and
   PROG-SPLIT-5 as the absent rules.
-- PROG-REPL reads `done` after plan 010 lands PROG-REPL-6, and the later of the
-  two plans sets the row.
+- PROG-REPL reads `partial` with PROG-REPL-6 as the absent rule. It reads `done`
+  after plan 010 lands PROG-REPL-6, and the later of the two plans sets the row.
 - The change deletes this plan.
 
 ## What this plan does not do
