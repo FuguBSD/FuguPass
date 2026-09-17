@@ -7,22 +7,27 @@ this repository waits on it.
 
 Implements: KEY-DERIVE, KEY-ENTRY, KEY-BIP85. Implements: KEY-MASTER without
 KEY-MASTER-2. Implements: TEST-KAT without TEST-KAT-2 and TEST-KAT-3.
-Implements: SEC-ENTROPY, SEC-MEMORY. Defers: VAULT-SEAL, PROG-SCAN.
+Implements: SEC-ENTROPY, SEC-MEMORY. Defers: VAULT-SEAL, PROG-SCAN. Defers:
+KEY-DEVICE, KEY-CLIENT, KEY-PIN, KEY-MASK, KEY-SHARE.
 
 Of the two security units, this plan lands SEC-ENTROPY-1, SEC-ENTROPY-2, and
 SEC-ENTROPY-6, and SEC-MEMORY-1 and SEC-MEMORY-2. The other rules land with the
 code that they bind, and the register names each absent rule. KEY-MASTER-2 is
 the scan path, and plan 012 lands it with the scan helper. TEST-KAT-2 is the
-seal vectors of plan 002, and TEST-KAT-3 is the SeedQR vectors of plan 012.
+seal vectors of plan 002, and TEST-KAT-3 is the SeedQR vectors of plan 012. The
+custody labels of the table belong to the five deferred key units, and plan 003
+lands them. Plan 003 completes the label vectors of TEST-KAT-4.
 
 ## Purpose
 
 Every vault key derives from one 12-word master (D-01). This plan lands the root
 of that tree: the master gate, the BIP39 seed, and the one derivation function
-`f`. It also lands the complete label table, the entry key, the plate check
-value, and the two BIP85 applications. Known-answer vectors pin every label
-before any vault file exists (TEST-KAT-4). The plan also lands the build
-skeleton that every later plan extends.
+`f`. It also lands three labels of the table: the entry key, the index key, and
+the plate check value. It lands the two BIP85 applications too. The label table
+of `keys.md` is the complete list, and plan 003 lands the custody labels.
+Known-answer vectors pin the three labels before any vault file exists
+(TEST-KAT-4). The plan also lands the build skeleton that every later plan
+extends.
 
 ## Constraints that shape the design
 
@@ -60,34 +65,34 @@ BIP39 application takes 12 English words (KEY-BIP85-8). No library beyond
 `libcrypto` and `libsecp256k1` enters (D-15).
 
 **The vectors come from an independent script.** `tests/vectors/generate.py` is
-a Python 3 script on the standard library alone. It derives every label of the
-table for the fixed test master. It also derives the two BIP85 applications from
-the reference vectors of the BIP85 document. The developer runs it once and
+a Python 3 script on the standard library alone. It derives the three labels of
+this plan for the fixed test master. It also derives the two BIP85 applications
+from the reference vectors of the BIP85 document. The developer runs it once and
 commits `tests/vectors/derive.h`. The regress build needs no Python
 (TEST-KAT-5).
 
 ## The interface contract
 
-`derive.h` declares the master gate, the seed, `f`, each label of the table as
-one function, and the plate check value. `bip85.h` declares the BIP32 master
-from the seed, the two applications, and the DRNG. Every function takes buffers
-and lengths and returns 0 or -1, and every function clears its temporaries on
-each exit path (SEC-MEMORY-1).
+`derive.h` declares the master gate, the seed, and `f`. It declares one function
+for each of the three labels: the entry key, the index key, and the plate check
+value. `bip85.h` declares the BIP32 master from the seed, the two applications,
+and the DRNG. Every function takes buffers and lengths and returns 0 or -1, and
+every function clears its temporaries on each exit path (SEC-MEMORY-1).
 
 ## Files
 
-| File                               | Change                                               |
-| ---------------------------------- | ---------------------------------------------------- |
-| `src/Makefile`                     | `SUBDIR` over the library, the programs, and regress |
-| `src/lib/Makefile`                 | `libfugupass.a` from the flat sources                |
-| `src/regress/Makefile`             | The `kat` target                                     |
-| `src/derive.c`, `src/derive.h`     | The gate, the seed, `f`, the labels, the check value |
-| `src/bip85.c`, `src/bip85.h`       | BIP32 hardened steps, the DRNG, the two applications |
-| `src/wordlist.c`, `src/wordlist.h` | The 2048 words                                       |
-| `src/regress/kat.c`                | The known-answer tests below                         |
-| `tests/vectors/generate.py`        | The one-time generator                               |
-| `tests/vectors/derive.h`           | The committed vectors, as hex                        |
-| `spec/STATUS.md`                   | The cited units, and the new code roots              |
+| File                               | Change                                                     |
+| ---------------------------------- | ---------------------------------------------------------- |
+| `src/Makefile`                     | `SUBDIR` over the library, the programs, and regress       |
+| `src/lib/Makefile`                 | `libfugupass.a` from the flat sources                      |
+| `src/regress/Makefile`             | The `kat` target                                           |
+| `src/derive.c`, `src/derive.h`     | The gate, the seed, `f`, the three labels, the check value |
+| `src/bip85.c`, `src/bip85.h`       | BIP32 hardened steps, the DRNG, the two applications       |
+| `src/wordlist.c`, `src/wordlist.h` | The 2048 words                                             |
+| `src/regress/kat.c`                | The known-answer tests below                               |
+| `tests/vectors/generate.py`        | The one-time generator                                     |
+| `tests/vectors/derive.h`           | The committed vectors, as hex                              |
+| `spec/STATUS.md`                   | The cited units, and the new code roots                    |
 
 ## Tests
 
@@ -99,8 +104,8 @@ each exit path (SEC-MEMORY-1).
   unknown word, and a wrong checksum, with a message that holds no word
   (TEST-KAT-6).
 - The seed of the test master equals the vector.
-- Every label of the table gives the vector value for slot 17 at oracle 2, with
-  threshold 3 and coefficient 1 (TEST-KAT-4).
+- The entry key of slot 17, the index key, and the plate check value give the
+  vector values (TEST-KAT-4).
 - The two BIP85 applications give the reference values of the BIP85 document
   (TEST-KAT-1).
 - The PWD BASE64 password has 21 characters, and the BIP39 child has 12 words

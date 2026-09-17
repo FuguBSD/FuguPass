@@ -8,17 +8,18 @@ and on plan 004 for the envelope. Plan 006 waits on it.
 Implements: ORC-REVEAL, TEST-MASK, ORC-CONFORM. Implements: ORC-RECORDS without
 ORC-RECORDS-4. Implements: ORC-COUNTER without ORC-COUNTER-7. Implements:
 ORC-ENROLL without the passphrase change rules ORC-ENROLL-4 to ORC-ENROLL-12.
-Implements: ORC-CANARY, ORC-PROVISION, KEY-MASK, SEC-ENTROPY. Implements:
-TEST-HARNESS without TEST-HARNESS-5 and TEST-HARNESS-8. Defers: ORC-QUORUM,
-ENTRY-POOL, CER-CREATE.
+Implements: ORC-CANARY, ORC-PROVISION, SEC-ENTROPY. Implements: KEY-MASK without
+KEY-MASK-8. Implements: TEST-HARNESS without TEST-HARNESS-5 and TEST-HARNESS-8.
+Defers: ORC-QUORUM, ENTRY-POOL, CER-CREATE.
 
 This plan lands the record side of the canary: ORC-CANARY-2, ORC-CANARY-5,
 ORC-CANARY-6, ORC-CANARY-7, and ORC-CANARY-11. The session rules of the canary
 are plan 007, and ORC-CANARY-10 is a statement of plan 013. Of ORC-PROVISION it
 lands ORC-PROVISION-1, ORC-PROVISION-2, ORC-PROVISION-4, ORC-PROVISION-5, and
 ORC-PROVISION-9. The list changes are plan 009, and the statements are plan 013.
-It completes ORC-CONFORM, KEY-MASK-4, and SEC-ENTROPY-4. The quorum leg and the
-terminal driver of the harness follow in plan 006 and plan 007.
+It completes ORC-CONFORM, KEY-MASK-4, and SEC-ENTROPY-4. KEY-MASK-8 is the plate
+ceremony of plan 006. The quorum leg and the terminal driver of the harness
+follow in plan 006 and plan 007.
 
 ## Purpose
 
@@ -112,8 +113,8 @@ The harness holds, against each counterparty:
 
 - `make check` passes on the host, and `make harness` passes against the
   upstream server.
-- Every cited unit reads `done`, except the six units with a named absent rule,
-  which read `partial`.
+- Every cited unit reads `done`, except the seven units with a named absent
+  rule, which read `partial`.
 - The change deletes this plan.
 
 ## What this plan does not do

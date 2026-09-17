@@ -64,6 +64,7 @@ build takes both as arguments, so the vectors apply.
 | `src/regress/envelope.c`           | The vector tests below                           |
 | `src/regress/http.t`               | The transport tests below, with a fixture server |
 | `tests/vectors/oracle.h`           | The copied vectors                               |
+| `spec/oracle.md`                   | The transport rule of ORC-CONFORM                |
 | `spec/STATUS.md`                   | ORC-CONFORM `partial`, and the new code roots    |
 
 ## Tests

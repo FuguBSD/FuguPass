@@ -3,13 +3,14 @@
 ## Status
 
 Proposed. It waits on plan 007 for the six commands. It is independent of plan
-008 to plan 010 and of plan 012.
+008 to plan 010, and plan 012 waits on it.
 
-Implements: PROG-IFACE. Implements: PROG-REPL, PROG-SPLIT. Defers: PROG-OUTPUT.
+Implements: PROG-IFACE, PROG-SPLIT. Implements: PROG-REPL without PROG-REPL-6.
+Defers: PROG-OUTPUT.
 
-This plan completes PROG-REPL with PROG-REPL-7 to PROG-REPL-9, and it adds
-PROG-SPLIT-7 to PROG-SPLIT-10. PROG-SPLIT stays `partial` on the two helper
-rules of plan 012.
+This plan lands PROG-REPL-7 to PROG-REPL-9, and it adds PROG-SPLIT-7 to
+PROG-SPLIT-10. Plan 010 lands PROG-REPL-6, the paths that work without the
+oracle. PROG-SPLIT stays `partial` on the two helper rules of plan 012.
 
 ## Purpose
 
@@ -107,8 +108,10 @@ The harness holds, in the guest under `fuguvm expect`:
 
 - `make check` passes on the host, with `make lint` and `make format` over the
   Perl sources, and `make harness` passes.
-- PROG-IFACE and PROG-REPL read `done`. PROG-SPLIT reads `partial` with
-  PROG-SPLIT-4 and PROG-SPLIT-5 as the absent rules.
+- PROG-IFACE reads `done`, and PROG-SPLIT reads `partial` with PROG-SPLIT-4 and
+  PROG-SPLIT-5 as the absent rules.
+- PROG-REPL reads `done` after plan 010 lands PROG-REPL-6, and the later of the
+  two plans sets the row.
 - The change deletes this plan.
 
 ## What this plan does not do

@@ -5,14 +5,17 @@
 Proposed. It waits on plan 008 for the change marker. It completes the quorum
 leg of the harness.
 
-Implements: CER-PROVISION, REC-WIPE, TEST-HARNESS. Implements: ORC-REVOKE
-without ORC-REVOKE-7 and ORC-REVOKE-9. Implements: ORC-PROVISION, ORC-COUNTER.
+Implements: REC-WIPE, TEST-HARNESS. Implements: CER-PROVISION without
+CER-PROVISION-13. Implements: ORC-REVOKE without ORC-REVOKE-7 and ORC-REVOKE-9.
+Implements: ORC-PROVISION without ORC-PROVISION-3 and ORC-PROVISION-8.
+Implements: ORC-COUNTER without ORC-COUNTER-7.
 
 Of ORC-PROVISION, this plan lands ORC-PROVISION-6 and ORC-PROVISION-7, the list
 changes. It adds the revocation exception of ORC-COUNTER-1 and ORC-COUNTER-5.
 CER-PROVISION-13 holds one statement for the documentation, and plan 013 lands
-that sentence. ORC-REVOKE-7 and ORC-REVOKE-9 are statements of plan 013 too. It
-completes TEST-HARNESS-5 with the provisioning loop.
+that sentence. ORC-PROVISION-3, ORC-PROVISION-8, ORC-COUNTER-7, ORC-REVOKE-7,
+and ORC-REVOKE-9 are statements of plan 013 too. It completes TEST-HARNESS-5
+with the provisioning loop.
 
 ## Purpose
 
@@ -82,6 +85,7 @@ creates fresh key material, so no old mask returns (REC-WIPE-3).
 | `src/fugupass.c`               | The `provision`, `revoke`, and `kit` subcommands       |
 | `src/fugupass/fugupass.1`      | The subcommands, the variants, the burned machine name |
 | `tests/harness.d/provision`    | The legs below                                         |
+| `spec/oracle.md`               | The burned machine name in ORC-REVOKE                  |
 | `spec/STATUS.md`               | The cited units                                        |
 
 ## Tests
@@ -114,9 +118,8 @@ The harness holds, against the 2-of-3 topology of TEST-HARNESS-5:
 ## Acceptance
 
 - `make check` passes on the host, and `make harness` passes.
-- CER-PROVISION, REC-WIPE, TEST-HARNESS, ORC-PROVISION, and ORC-COUNTER read
-  `done`. ORC-REVOKE reads `partial` with ORC-REVOKE-7 and ORC-REVOKE-9 as the
-  absent rules.
+- REC-WIPE and TEST-HARNESS read `done`. CER-PROVISION, ORC-PROVISION,
+  ORC-COUNTER, and ORC-REVOKE read `partial` with the absent rules named.
 - The change deletes this plan.
 
 ## What this plan does not do

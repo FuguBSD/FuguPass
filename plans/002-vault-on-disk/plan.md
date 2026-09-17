@@ -5,17 +5,18 @@
 Proposed. It waits on plan 001 for the entry key and the build skeleton.
 
 Implements: VAULT-LAYOUT, VAULT-SEAL, VAULT-FORMAT, VAULT-ATOMIC, ENTRY-MODEL,
-ENTRY-TYPES, TEST-KAT. Implements: VAULT-CONFIG without VAULT-CONFIG-5.
-Implements: VAULT-INDEX without VAULT-INDEX-3 and VAULT-INDEX-6. Implements:
-VAULT-BACKUP without VAULT-BACKUP-3 and VAULT-BACKUP-4. Implements:
-ENTRY-ROTATION without ENTRY-ROTATION-1. Defers: SEC-ENTROPY, SEC-MEMORY,
-ENTRY-POOL, ENTRY-SHADOW, KEY-MASK.
+ENTRY-TYPES. Implements: TEST-KAT without TEST-KAT-3. Implements: VAULT-CONFIG
+without VAULT-CONFIG-5. Implements: VAULT-INDEX without VAULT-INDEX-3 and
+VAULT-INDEX-6. Implements: VAULT-BACKUP without VAULT-BACKUP-3 and
+VAULT-BACKUP-4. Implements: ENTRY-ROTATION without ENTRY-ROTATION-1. Defers:
+SEC-ENTROPY, SEC-MEMORY, ENTRY-POOL, ENTRY-SHADOW, KEY-MASK.
 
 The absent rules are session and documentation rules. VAULT-INDEX-3 and
 VAULT-INDEX-6 bind the daily index read of plan 007. ENTRY-ROTATION-1 consumes a
 pool slot, in plan 007. VAULT-BACKUP-4 is the paper QR of plan 012.
 VAULT-CONFIG-5 and VAULT-BACKUP-3 are statements of the manual pages, in
-plan 013. This plan adds TEST-KAT-2, the seal vectors.
+plan 013. This plan adds TEST-KAT-2, the seal vectors, and TEST-KAT-3 stays with
+the scan helper of plan 012.
 
 ## Purpose
 

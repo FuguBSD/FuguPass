@@ -6,9 +6,9 @@ Proposed. It waits on plan 006 for a vault. Plan 008, plan 009, and plan 011
 wait on it.
 
 Implements: ORC-QUORUM, ENTRY-SHADOW, VAULT-INDEX, ENTRY-POOL, ENTRY-ROTATION,
-ORC-CANARY, TEST-HARNESS. Implements: PROG-REPL, PROG-ONESHOT, SEC-MEMORY.
-Implements: PROG-OUTPUT without PROG-OUTPUT-2. Defers: CER-VERIFY, REC-PLATE,
-PROG-IFACE.
+TEST-HARNESS. Implements: ORC-CANARY without ORC-CANARY-10. Implements:
+PROG-REPL, PROG-ONESHOT, SEC-MEMORY. Implements: PROG-OUTPUT without
+PROG-OUTPUT-2. Defers: CER-VERIFY, REC-PLATE, PROG-IFACE.
 
 Of PROG-REPL, this plan lands PROG-REPL-1 to PROG-REPL-5: the unlock, the index
 open, the six commands, the quorum events, and the refusal. PROG-REPL-6 is plan
@@ -16,7 +16,8 @@ open, the six commands, the quorum events, and the refusal. PROG-REPL-6 is plan
 PROG-ONESHOT-3, ORC-CANARY-1, ORC-CANARY-3, ORC-CANARY-4, ORC-CANARY-8, and
 ORC-CANARY-9, VAULT-INDEX-3 and VAULT-INDEX-6, ENTRY-POOL-3 to ENTRY-POOL-9,
 ENTRY-ROTATION-1, and SEC-MEMORY-6. It adds the quorum reveal legs of
-TEST-HARNESS-5. PROG-OUTPUT-2 is the QR display of plan 012.
+TEST-HARNESS-5. PROG-OUTPUT-2 is the QR display of plan 012. ORC-CANARY-10 is a
+statement of plan 013.
 
 ## Purpose
 
@@ -85,6 +86,7 @@ output, with no decoration (PROG-ONESHOT-3). A secret prints to the terminal
 | `src/fugupass.c`                   | The six subcommands                                  |
 | `src/fugupass/fugupass.1`          | The six commands and the report states               |
 | `tests/harness.d/session`          | The legs below                                       |
+| `spec/entries.md`                  | The rotation sentence of ENTRY-ROTATION              |
 | `spec/STATUS.md`                   | The cited units                                      |
 
 ## Tests
@@ -113,9 +115,9 @@ The harness holds, against each counterparty, with one oracle and with the
 ## Acceptance
 
 - `make check` passes on the host, and `make harness` passes.
-- Every cited unit reads `done`, except PROG-REPL, PROG-ONESHOT, PROG-OUTPUT,
-  SEC-MEMORY, and TEST-HARNESS, which read `partial` with the absent rules
-  named.
+- Every cited unit reads `done`, except ORC-CANARY, PROG-REPL, PROG-ONESHOT,
+  PROG-OUTPUT, SEC-MEMORY, and TEST-HARNESS, which read `partial` with the
+  absent rules named.
 - The change deletes this plan.
 
 ## What this plan does not do

@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed. It waits on plan 001 for `f` and the label table. Plan 005 waits on
+Proposed. It waits on plan 001 for `f` and the build skeleton. Plan 005 waits on
 it. It is independent of plan 002 and plan 004.
 
 Implements: KEY-CLIENT, KEY-PIN, KEY-SHARE, TEST-SPLIT, TEST-ANALYSIS.
@@ -60,11 +60,15 @@ across thresholds and re-enrollments (TEST-SPLIT-1). Each document ends with one
 approval line. The reviewer fills the name and the date at the merge, or the
 unit stays `partial`.
 
-**The vectors come from a second implementation.** `tests/vectors/generate.py`
-gains a pure Python GF(256) split: the field operations, the coefficients, the
-evaluation, the reconstruction, and the `k = 1` case. It covers the thresholds
-1, 2, and 3 with up to 5 oracles (TEST-SPLIT-4). The committed header pins the C
-code.
+**The vectors come from an independent implementation.** An independent
+implementation pins the standard parts: the GF(256) field operations, the
+polynomial evaluation, and the Lagrange interpolation (TEST-SPLIT-4, D-15). The
+source evaluation names the implementation that produced the vectors
+(TEST-SPLIT-5). The coefficient derivation is FuguPass-specific: it is `f` under
+the `shamir/` label (KEY-SHARE-3). No external implementation produces it. The
+vectors of `f` in plan 001 and the coefficient vectors of this plan pin it. The
+vectors cover the thresholds 1, 2, and 3 with up to 5 oracles, and threshold 1
+holds the `k = 1` reduction. The committed header pins the C code.
 
 ## Files
 
@@ -74,7 +78,7 @@ code.
 | `src/derive.c`, `src/derive.h`              | `X`, `t_ei`, `ck_ei`, `salt_ei`, `wk_ei`, the index and canary keys |
 | `src/pin.c`, `src/pin.h`                    | `pin_ei` through `bcrypt_pbkdf(3)`                                  |
 | `src/regress/share.c`                       | The tests below                                                     |
-| `tests/vectors/generate.py`                 | The GF(256) reference                                               |
+| `tests/vectors/generate.py`                 | The custody labels and the coefficients                             |
 | `tests/vectors/share.h`                     | The committed vectors                                               |
 | `docs/analysis/mask-composition.md`         | The analysis of TEST-ANALYSIS                                       |
 | `docs/analysis/share-split.md`              | The analysis of TEST-SPLIT-1                                        |

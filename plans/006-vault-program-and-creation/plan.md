@@ -73,16 +73,17 @@ prompts (TEST-HARNESS-8). The stub scan helper supplies the master.
 
 ## Files
 
-| File                               | Change                                           |
-| ---------------------------------- | ------------------------------------------------ |
-| `src/fugupass.c`                   | `main()`: the sandbox, the frame, the passphrase |
-| `src/helper.c`, `src/helper.h`     | The child run of a helper, text in and text out  |
-| `src/ceremony.c`, `src/ceremony.h` | Vault creation                                   |
-| `src/fugupass/Makefile`            | The program, `bsd.prog.mk`                       |
-| `src/fugupass/fugupass.1`          | The manual page: the frame and `create`          |
-| `tests/harness.d/create`           | The leg below, with its expect script            |
-| `tests/stubs/fugupass-scan`        | The double: it prints the test master            |
-| `spec/STATUS.md`                   | The cited units                                  |
+| File                               | Change                                             |
+| ---------------------------------- | -------------------------------------------------- |
+| `src/fugupass.c`                   | `main()`: the sandbox, the frame, the passphrase   |
+| `src/helper.c`, `src/helper.h`     | The child run of a helper, text in and text out    |
+| `src/ceremony.c`, `src/ceremony.h` | Vault creation                                     |
+| `src/fugupass/Makefile`            | The program, `bsd.prog.mk`                         |
+| `src/fugupass/fugupass.1`          | The manual page: the frame and `create`            |
+| `tests/harness.d/create`           | The leg below, with its expect script              |
+| `tests/stubs/fugupass-scan`        | The double: it prints the test master              |
+| `spec/programs.md`                 | The helper-path rule and the CA file of PROG-SPLIT |
+| `spec/STATUS.md`                   | The cited units                                    |
 
 ## Tests
 

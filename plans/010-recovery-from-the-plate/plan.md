@@ -2,8 +2,8 @@
 
 ## Status
 
-Proposed. It waits on plan 006 for the program and the scan boundary. It is
-independent of plan 007 to plan 009.
+Proposed. It waits on plan 006 for the program and the scan boundary. Its
+harness legs wait on plan 007 for a vault and on plan 009 for a second machine.
 
 Implements: REC-PLATE, REC-VAULT, REC-RESTORE, CER-VERIFY. Implements:
 PROG-REPL, PROG-ONESHOT. Defers: PROG-SCAN, ORC-ENROLL.
@@ -84,8 +84,10 @@ The harness holds, with the stub master and no oracle running:
 ## Acceptance
 
 - `make check` passes on the host, and `make harness` passes.
-- REC-PLATE, REC-VAULT, REC-RESTORE, and CER-VERIFY read `done`. PROG-REPL and
-  PROG-ONESHOT read `partial` with the absent rules named.
+- REC-PLATE, REC-VAULT, REC-RESTORE, and CER-VERIFY read `done`. PROG-ONESHOT
+  reads `partial` with the absent rules named.
+- PROG-REPL reads `done` after plan 011 lands PROG-REPL-7 to PROG-REPL-9, and
+  the later of the two plans sets the row.
 - The change deletes this plan.
 
 ## What this plan does not do

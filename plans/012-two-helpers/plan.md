@@ -2,8 +2,8 @@
 
 ## Status
 
-Proposed. It waits on plan 006 for the helper boundary. It is independent of
-plan 007 to plan 011.
+Proposed. It waits on plan 006 for the helper boundary, and on plan 007 for the
+six commands. It also waits on plan 011 for the interface rules of PROG-SPLIT.
 
 Implements: PROG-SCAN, PROG-QR, KEY-MASTER, TEST-KAT. Implements: PROG-SPLIT,
 VAULT-BACKUP, PROG-OUTPUT, SEC-MEMORY.
