@@ -106,7 +106,8 @@ run these steps in rule order.
   ([VAULT-INDEX](vault.md#vault-index)), with no machine-local set for that name
   on this machine. The tool must then warn that the ceremony replaces the
   records of the machine that holds that name. The tool must require an explicit
-  confirmation.
+  confirmation. The tool must refuse a machine name that the registry marks
+  retired (ORC-REVOKE-11). The refusal must name a new machine name as the path.
 - **CER-PROVISION-4** — The tool must write the config file
   ([VAULT-CONFIG](vault.md#vault-config)), including the plate check value.
 - **CER-PROVISION-5** — The tool must read the passphrase twice with
@@ -136,7 +137,8 @@ run these steps in rule order.
   machine. On such a machine, the loop of CER-PROVISION-7 covers each
   slot-oracle pair for which this machine holds no wrap. The tool re-wraps each
   dead index wrap ([ORC-CANARY](oracle.md#orc-canary)), and it re-seals each
-  stale canary check value.
+  stale canary check value. A retired machine name never runs this ceremony
+  (CER-PROVISION-3).
 - **CER-PROVISION-13** — A change of the oracle list or of the threshold is this
   ceremony, run on each machine of the vault. The ceremony records the new list
   or the new threshold in the config ([VAULT-CONFIG](vault.md#vault-config))

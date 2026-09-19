@@ -5,11 +5,11 @@
 Proposed. It waits on plan 006 for a vault. Plan 008, plan 009, and plan 011
 wait on it.
 
-Implements: ORC-QUORUM, ENTRY-SHADOW, VAULT-INDEX, ENTRY-POOL, ENTRY-ROTATION,
-KEY-BIP85. Implements: ORC-CANARY without ORC-CANARY-10. Implements: PROG-REPL
-without PROG-REPL-6 to PROG-REPL-9. Implements: PROG-ONESHOT, SEC-MEMORY,
-TEST-HARNESS. Implements: PROG-OUTPUT without PROG-OUTPUT-2. Defers: CER-VERIFY,
-REC-PLATE, PROG-IFACE.
+Implements: ORC-QUORUM, ENTRY-SHADOW, ENTRY-POOL, ENTRY-ROTATION, KEY-BIP85.
+Implements: VAULT-INDEX without VAULT-INDEX-7. Implements: ORC-CANARY without
+ORC-CANARY-10. Implements: PROG-REPL without PROG-REPL-6 to PROG-REPL-9.
+Implements: PROG-ONESHOT, SEC-MEMORY, TEST-HARNESS. Implements: PROG-OUTPUT
+without PROG-OUTPUT-2. Defers: CER-VERIFY, REC-PLATE, PROG-IFACE.
 
 Of PROG-REPL, this plan lands PROG-REPL-1 to PROG-REPL-5: the unlock, the index
 open, the six commands, the quorum events, and the refusal. PROG-REPL-6 is plan
@@ -23,7 +23,7 @@ and plan 008 and plan 009 add the other legs. PROG-ONESHOT-4 stays partial on
 the later ceremonies, the recovery paths, the passphrase change, and the
 revocation paths. SEC-MEMORY-3 stays partial on the two helpers of plan 012.
 PROG-OUTPUT-2 is the QR display of plan 012. ORC-CANARY-10 is a statement of
-plan 013.
+plan 013. VAULT-INDEX-7 is the retirement mark of plan 009.
 
 ## Purpose
 
@@ -125,17 +125,18 @@ The harness holds, against each counterparty, with one oracle and with the
 ## Acceptance
 
 - `make check` passes on the host, and `make harness` passes.
-- ORC-QUORUM, ENTRY-SHADOW, VAULT-INDEX, ENTRY-POOL, ENTRY-ROTATION, and
-  KEY-BIP85 read `done`. ORC-CANARY, PROG-REPL, and PROG-OUTPUT read `partial`
-  with the absent rules named.
+- ORC-QUORUM, ENTRY-SHADOW, ENTRY-POOL, ENTRY-ROTATION, and KEY-BIP85 read
+  `done`. VAULT-INDEX reads `partial`, and VAULT-INDEX-7 is the absent part.
+  ORC-CANARY, PROG-REPL, and PROG-OUTPUT read `partial` with the absent rules
+  named.
 - PROG-ONESHOT reads `partial`. The absent parts of PROG-ONESHOT-4 are the later
   ceremonies, the recovery paths, the passphrase change, and the revocation
   paths.
 - SEC-MEMORY reads `partial`, and the two helpers of SEC-MEMORY-3 are the absent
   part.
 - TEST-HARNESS reads `partial`. The absent parts are the passphrase change leg
-  and the provisioning loop of TEST-HARNESS-5, and the re-enrollment coverage of
-  TEST-HARNESS-3.
+  and the provisioning loop of TEST-HARNESS-5, and the re-enrollment coverage
+  and the lock coverage of TEST-HARNESS-3.
 - The change deletes this plan.
 
 ## What this plan does not do

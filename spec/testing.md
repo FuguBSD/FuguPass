@@ -24,7 +24,11 @@ tokens, for example FuguOracle OPS-GET-4.
   distinction between an HTTP error, a transport failure, an
   oracle-authentication failure, and a junk answer
   ([ORC-REVEAL](oracle.md#orc-reveal)). The suite must cover the quorum reveal
-  and the quorum failure reports ([ORC-QUORUM](oracle.md#orc-quorum)).
+  and the quorum failure reports ([ORC-QUORUM](oracle.md#orc-quorum)). The suite
+  must cover the lock of a revocation ([ORC-REVOKE](oracle.md#orc-revoke)).
+  After one wrong attempt at the revocation counter, every later `get_pin` of
+  that record must return junk. Every later `set_pin` of it must return an HTTP
+  error.
 - **TEST-HARNESS-4** — The same suite must pass against every counterparty. The
   suite must not branch on the counterparty.
 - **TEST-HARNESS-5** — The suite must run one leg against the documented example
@@ -52,7 +56,10 @@ tokens, for example FuguOracle OPS-GET-4.
 FuguPass is a second client of the wire protocol, beside the Blockstream Jade. A
 pass against every counterparty proves the FuguOracle claim that the oracle
 serves any conforming client. It touches nothing in the FuguOracle specification
-(D-02).
+(D-02). The lock is a consequence of FuguOracle OPS-GET-2 and FuguOracle
+OPS-SET-2, never a stated interface guarantee. The suite therefore pins it
+against every counterparty, as [TEST-MASK](testing.md#test-mask) pins the stable
+mask.
 
 <a id="test-mask"></a>
 

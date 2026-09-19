@@ -400,7 +400,8 @@ detects a passphrase mistyped the same way twice.
 - **ORC-REVOKE-4** — The plate regenerates the device factor and the client keys
   of any machine name ([KEY-DEVICE](keys.md#key-device)). The owner can
   therefore run the strike-burn path from the plate, after a total loss of the
-  stolen machine.
+  stolen machine. The strike-burn path retires that machine name at each oracle
+  where it lands (ORC-REVOKE-11).
 - **ORC-REVOKE-5** — An operator of a self-hosted oracle can stop the service. A
   service stop is reversible, and it affects every machine. The operator can
   delete named record files. No oracle operation reverses a deletion, and a
@@ -421,7 +422,8 @@ detects a passphrase mistyped the same way twice.
   material at the oracle and resets the stored counter (FuguOracle OPS-SET-4).
   One wrong attempt at this value burns one strike and locks the record. No
   later request passes anti-replay, and the record answers junk to every caller.
-  A locked record keeps its file, and only the operator paths remove it.
+  A locked record keeps its file, and only the operator paths remove it. The
+  lock retires the machine name at that oracle (ORC-REVOKE-11).
 - **ORC-REVOKE-9** — The runbook must state the FuguOracle restore residual. A
   filesystem restore of the records directory rewinds records to the backup
   time. A restore from a pre-revocation backup therefore revives revoked records
@@ -433,6 +435,18 @@ detects a passphrase mistyped the same way twice.
   each of those oracles. With the full set of `n` live oracles, the count is
   `n − k + 1` locks. Locks at every oracle are not necessary: the locks leave at
   most `k − 1` obtainable masks per entry.
+- **ORC-REVOKE-11** — A lock retires the machine name at that oracle. The stored
+  counter of a locked record is the highest value, so no later `set_pin` under
+  that name passes anti-replay there (FuguOracle OPS-SET-2). The records of that
+  name at that oracle therefore never re-enroll. The tool must mark the name
+  retired in the machine registry ([VAULT-INDEX](vault.md#vault-index)). A
+  retired name must not provision again
+  ([CER-PROVISION](ceremonies.md#cer-provision)), and a replacement machine
+  provisions under a new name.
+- **ORC-REVOKE-12** — The revocation report must direct the owner to lock or
+  delete the remaining records of the retired name at every other oracle. It
+  must also direct the owner to a passphrase change on every other machine when
+  the passphrase may be known ([ORC-ENROLL](oracle.md#orc-enroll)).
 
 Each ceremony exports the kit of its machine
 ([CER-PROVISION](ceremonies.md#cer-provision)). An attacker who first raises a
@@ -440,3 +454,8 @@ record's stored counter to `0xFFFFFFFF` locks that record for every caller. A
 locked record denies its mask to the attacker too. The revocation paths destroy
 or deny records, never data: every entry recovers from the plate
 ([REC-WIPE](recovery.md#rec-wipe)).
+
+A locked record is not a wiped record. A wipe unlinks the file, and a fresh
+`set_pin` re-creates the record (REC-WIPE-3). A lock keeps the file with the
+highest counter, so the oracle rejects every later request for that record. Only
+the operator paths remove it.

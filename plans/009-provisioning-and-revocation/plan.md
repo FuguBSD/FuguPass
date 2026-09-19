@@ -5,13 +5,14 @@
 Proposed. It waits on plan 008 for the change marker. It completes the quorum
 leg of the harness.
 
-Implements: REC-WIPE, TEST-HARNESS, CER-PROVISION. Implements: ORC-REVOKE
-without ORC-REVOKE-7 and ORC-REVOKE-9. Implements: ORC-PROVISION without
-ORC-PROVISION-3 and ORC-PROVISION-8. Implements: ORC-COUNTER without
-ORC-COUNTER-7.
+Implements: REC-WIPE, TEST-HARNESS, CER-PROVISION. Implements: VAULT-INDEX.
+Implements: ORC-REVOKE without ORC-REVOKE-7 and ORC-REVOKE-9. Implements:
+ORC-PROVISION without ORC-PROVISION-3 and ORC-PROVISION-8. Implements:
+ORC-COUNTER without ORC-COUNTER-7.
 
 Of ORC-PROVISION, this plan lands ORC-PROVISION-6 and ORC-PROVISION-7, the list
-changes. It adds the revocation exception of ORC-COUNTER-1 and ORC-COUNTER-5. Of
+changes. Of VAULT-INDEX, this plan lands VAULT-INDEX-7, the retirement mark. It
+adds the revocation exception of ORC-COUNTER-1 and ORC-COUNTER-5. Of
 CER-PROVISION-13 it lands the behavior: the ceremony records the new list or the
 new threshold before any enrollment. The last sentence of CER-PROVISION-13 is a
 documentation statement, and plan 013 lands it. CER-PROVISION stays partial on
@@ -63,14 +64,13 @@ replacement (ORC-REVOKE-3, ORC-REVOKE-8). `fugupass kit` exports the kit of a
 machine (ORC-REVOKE-6). The counter exception lives in one function, and every
 other request refuses that value (ORC-COUNTER-5).
 
-**A lock burns the machine name at that oracle.** A record with the stored
-counter `0xFFFFFFFF` accepts no later `set_pin`, because the oracle rejects a
-counter that is not greater (FuguOracle OPS-SET-2). The records of a revoked
-machine name at a locked oracle can therefore never re-enroll, and REC-WIPE-2
-and CER-PROVISION-12 do not reach them. The revocation report states that the
-machine name retires, and a replacement machine provisions under a new name. The
-implementation adds this rule to ORC-REVOKE, because the specification holds no
-sentence for it today.
+**A lock retires the machine name.** A record with the stored counter
+`0xFFFFFFFF` accepts no later `set_pin` (FuguOracle OPS-SET-2), so the lock
+retires the machine name at that oracle (ORC-REVOKE-11). The revocation
+subcommand marks the name retired in the index registry (VAULT-INDEX-7). The
+provisioning ceremony refuses a retired name (CER-PROVISION-3). The report
+directs the owner to the remaining oracles and to a passphrase change
+(ORC-REVOKE-12).
 
 **A wiped or lost record heals in the loop.** After a wipe, a host loss, or a
 static key rotation, the ceremony deletes the files of the position. It
@@ -79,16 +79,16 @@ creates fresh key material, so no old mask returns (REC-WIPE-3).
 
 ## Files
 
-| File                           | Change                                                 |
-| ------------------------------ | ------------------------------------------------------ |
-| `src/ceremony.c`               | Machine provisioning and its variants                  |
-| `src/revoke.c`, `src/revoke.h` | The kit, the lock, the replacement                     |
-| `src/oracle.c`                 | The revocation counter exception                       |
-| `src/fugupass.c`               | The `provision`, `revoke`, and `kit` subcommands       |
-| `src/fugupass/fugupass.1`      | The subcommands, the variants, the burned machine name |
-| `tests/harness.d/provision`    | The legs below                                         |
-| `spec/oracle.md`               | The burned machine name in ORC-REVOKE                  |
-| `spec/STATUS.md`               | The cited units                                        |
+| File                           | Change                                                           |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `src/ceremony.c`               | Machine provisioning, its variants, and the retired-name refusal |
+| `src/revoke.c`, `src/revoke.h` | The kit, the lock, the replacement                               |
+| `src/vault.c`                  | The retirement mark of the machine registry                      |
+| `src/oracle.c`                 | The revocation counter exception                                 |
+| `src/fugupass.c`               | The `provision`, `revoke`, and `kit` subcommands                 |
+| `src/fugupass/fugupass.1`      | The subcommands, the variants, the retired machine name          |
+| `tests/harness.d/provision`    | The legs below                                                   |
+| `spec/STATUS.md`               | The cited units                                                  |
 
 ## Tests
 
@@ -114,14 +114,19 @@ The harness holds, against the 2-of-3 topology of TEST-HARNESS-5:
   the ceremony restores the third (REC-WIPE-6).
 - The kit of a machine names the record files that the oracle store holds
   (ORC-REVOKE-6).
-- The lock leaves a machine name that cannot re-enroll at that oracle, and the
-  report says so.
+- The lock retires the machine name at that oracle, the index registry marks it,
+  and the report says so (ORC-REVOKE-11, VAULT-INDEX-7).
+- A provisioning run under a retired name refuses, and the refusal names a new
+  machine name (CER-PROVISION-3).
+- The lock leg of TEST-HARNESS-3 runs at each counterparty. One wrong attempt at
+  the revocation counter, then junk on every `get_pin` and an HTTP error on
+  every `set_pin` of that record.
 
 ## Acceptance
 
 - `make check` passes on the host, and `make harness` passes.
-- REC-WIPE and TEST-HARNESS read `done`. ORC-PROVISION, ORC-COUNTER, and
-  ORC-REVOKE read `partial` with the absent rules named.
+- REC-WIPE, TEST-HARNESS, and VAULT-INDEX read `done`. ORC-PROVISION,
+  ORC-COUNTER, and ORC-REVOKE read `partial` with the absent rules named.
 - CER-PROVISION reads `partial`, and the documentation sentence of
   CER-PROVISION-13 is the absent part.
 - The change deletes this plan.

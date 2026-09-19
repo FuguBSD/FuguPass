@@ -127,7 +127,7 @@ The index fields are:
 | Field       | Content                                                                       |
 | ----------- | ----------------------------------------------------------------------------- |
 | `entry`     | one entry: the file name, one space, the slot list, one space, the entry name |
-| `machine`   | one provisioned machine name                                                  |
+| `machine`   | one machine name, or one machine name, one space, and the word `retired`      |
 | `pool-free` | the free slot indexes, as a slot list                                         |
 | `pool-next` | the lowest slot index that no ceremony has reserved                           |
 | `verified`  | the date of the last plate verification                                       |
@@ -170,7 +170,8 @@ scanner discipline of the oracle service.
 - **VAULT-INDEX-2** — The index maps each entry name to its file name. It
   records each entry's slot list, the pool state, the machine registry, and the
   date of the last plate verification. The machine registry holds the
-  provisioned machine names.
+  provisioned machine names and marks each retired name
+  ([ORC-REVOKE](oracle.md#orc-revoke)).
 - **VAULT-INDEX-3** — A daily read unwraps `k` index shares through this
   machine's index wraps and reconstructs `K_idx`
   ([KEY-SHARE](keys.md#key-share), [KEY-MASK](keys.md#key-mask)). The read uses
@@ -184,6 +185,9 @@ scanner discipline of the oracle service.
   must stop the session with a report. The report must name the index file and
   this machine's index wraps of the quorum as the possible causes. The tool must
   not report this failure as a junk answer.
+- **VAULT-INDEX-7** — The revocation path must mark the revoked machine name
+  retired in the registry, and the mark must never clear
+  ([ORC-REVOKE](oracle.md#orc-revoke)).
 
 The index plaintext uses the line format
 ([VAULT-FORMAT](vault.md#vault-format)).
