@@ -6,12 +6,7 @@ Proposed. It waits on plan 013, so the port packages the complete programs and
 pages. The latency measurement needs real OpenBSD hardware, and the operator
 supplies it.
 
-Implements: TEST-CALIBRATE.
-
-The port has no unit in the specification today, and D-16 and the roadmap name
-it. The implementation adds one unit to the programs document for the port, with
-the p5-Fugu run dependency, and cites it in the register. A plan cannot cite a
-unit before it exists, so this plan names it in prose only.
+Implements: TEST-CALIBRATE. Implements: PROG-PORT.
 
 ## Purpose
 
@@ -46,22 +41,22 @@ secret for `explicit_bzero(3)` and every secret comparison for
 
 **The port is one directory.** `ports/security/fugupass` builds the four
 programs from a release tag, and installs them with the five manual pages. It
-declares `security/p5-Fugu` as a run dependency and `graphics/libqrencode` as a
-library dependency (D-16). The distfile is a tag of this repository through the
-GitHub mechanism of the ports tree.
+declares `devel/p5-Fugu` as a run dependency and `graphics/libqrencode` as a
+library dependency (PROG-PORT-1 to PROG-PORT-3). The distfile is a tag of this
+repository through the GitHub mechanism of the ports tree.
 
 ## Files
 
-| File                                 | Change                                                    |
-| ------------------------------------ | --------------------------------------------------------- |
-| `docs/analysis/kdf-calibration.md`   | The calibration record                                    |
-| `docs/analysis/scaling-check.md`     | The scaling record                                        |
-| `docs/analysis/sandbox-audit.md`     | The audit record                                          |
-| `tests/calibrate.c`                  | The round count timer, built in the guest and on hardware |
-| `tests/harness.d/scale`              | The scaling leg                                           |
-| `src/vault.c`                        | The default round count                                   |
-| `ports/security/fugupass/`           | The port                                                  |
-| `spec/programs.md`, `spec/STATUS.md` | The port unit and the cited units                         |
+| File                               | Change                                                    |
+| ---------------------------------- | --------------------------------------------------------- |
+| `docs/analysis/kdf-calibration.md` | The calibration record                                    |
+| `docs/analysis/scaling-check.md`   | The scaling record                                        |
+| `docs/analysis/sandbox-audit.md`   | The audit record                                          |
+| `tests/calibrate.c`                | The round count timer, built in the guest and on hardware |
+| `tests/harness.d/scale`            | The scaling leg                                           |
+| `src/vault.c`                      | The default round count                                   |
+| `ports/security/fugupass/`         | The port                                                  |
+| `spec/STATUS.md`                   | The cited units                                           |
 
 ## Tests
 
@@ -69,22 +64,22 @@ GitHub mechanism of the ports tree.
   milliseconds, on the hardware that the record names.
 - The scaling leg enrolls 300 records on 3 machines at one FuguOracle instance
   and records the numbers.
-- `make port-lib-check` and `make lint` of the ports tree pass, and
-  `make regress` of the port runs the offline tests.
+- `make port-lib-depends-check` and `portcheck` pass, and `make regress` of the
+  port runs the offline tests.
 - A `pkg_add` of the built package runs `fugupass create` against an oracle in
   the guest.
 
 ## Acceptance
 
 - `make check` passes on the host, and the port builds on amd64 and on arm64.
-- TEST-CALIBRATE reads `done`, and the port unit reads `done`.
+- TEST-CALIBRATE reads `done`, and PROG-PORT reads `done`.
 - The change deletes this plan.
 
 ## Open questions
 
-The p5-Fugu port must exist before this port builds, and no repository owns it
-today. The Fugu repository or this one holds it, and the operator decides. The
-default round count is the operator's choice from the measurements, not the
+The `devel/p5-Fugu` port of the Fugu repository must be in place before this
+port builds. The ports tree or a local ports directory of the guest holds it.
+The default round count is the operator's choice from the measurements, not the
 developer's.
 
 ## What this plan does not do

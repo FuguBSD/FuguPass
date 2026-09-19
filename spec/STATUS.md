@@ -73,6 +73,7 @@ phase applies.
 | [PROG-OUTPUT](programs.md#prog-output)       | open  | P2      | —                                                                                                                          |
 | [PROG-SCAN](programs.md#prog-scan)           | open  | P3      | —                                                                                                                          |
 | [PROG-QR](programs.md#prog-qr)               | open  | P3      | —                                                                                                                          |
+| [PROG-PORT](programs.md#prog-port)           | open  | P4      | —                                                                                                                          |
 | [SEC-ENTROPY](security.md#sec-entropy)       | open  | P1      | —                                                                                                                          |
 | [SEC-MEMORY](security.md#sec-memory)         | open  | P1      | —                                                                                                                          |
 | [SEC-FLOOR](security.md#sec-floor)           | open  | P4      | —                                                                                                                          |
@@ -100,15 +101,15 @@ phase applies.
 
 The drift gate maps each document to the code that implements it.
 
-| Document      | Roots                                                                             |
-| ------------- | --------------------------------------------------------------------------------- |
-| overview.md   | `t/fugupass/vocabulary.t`                                                         |
-| keys.md       | `src/derive.c`, `src/bip85.c`                                                     |
-| vault.md      | `src/vault.c`, `src/seal.c`                                                       |
-| entries.md    | `src/entry.c`                                                                     |
-| oracle.md     | `src/oracle.c`, `src/envelope.c`                                                  |
-| ceremonies.md | `src/ceremony.c`                                                                  |
-| recovery.md   | `src/recover.c`                                                                   |
-| programs.md   | `src/fugupass.c`, `bin/fugupass-repl`, `src/fugupass-scan.c`, `src/fugupass-qr.c` |
-| security.md   | `src/`                                                                            |
-| testing.md    | `tests/`                                                                          |
+| Document      | Roots                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------- |
+| overview.md   | `t/fugupass/vocabulary.t`                                                                   |
+| keys.md       | `src/derive.c`, `src/bip85.c`                                                               |
+| vault.md      | `src/vault.c`, `src/seal.c`                                                                 |
+| entries.md    | `src/entry.c`                                                                               |
+| oracle.md     | `src/oracle.c`, `src/envelope.c`                                                            |
+| ceremonies.md | `src/ceremony.c`                                                                            |
+| recovery.md   | `src/recover.c`                                                                             |
+| programs.md   | `src/fugupass.c`, `bin/fugupass-repl`, `src/fugupass-scan.c`, `src/fugupass-qr.c`, `ports/` |
+| security.md   | `src/`                                                                                      |
+| testing.md    | `tests/`                                                                                    |

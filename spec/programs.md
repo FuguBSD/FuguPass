@@ -256,3 +256,23 @@ no keyboard.
 
 A vault file is ciphertext, so its paper QR is a safe backup object
 ([VAULT-BACKUP](vault.md#vault-backup)).
+
+<a id="prog-port"></a>
+
+## The port
+
+- **PROG-PORT-1** — The project packages FuguPass as the OpenBSD port
+  `security/fugupass` (D-16). The port lives under `ports/security/fugupass` of
+  this repository. The submission to the ports tree is the operator's act.
+- **PROG-PORT-2** — The port must build the four programs from a release tag of
+  this repository, and must install them with their manual pages.
+- **PROG-PORT-3** — The port must declare `devel/p5-Fugu` as a run dependency
+  (D-16), and each library that a helper program links as a library dependency
+  ([PROG-QR](programs.md#prog-qr)).
+- **PROG-PORT-4** — The developer must build the port on OpenBSD/amd64 and on
+  OpenBSD/arm64, and must run the regress target of the port there. The `fuguvm`
+  tool can supply the guest, as a command only. The port must not depend on
+  `fuguvm`.
+
+The Fugu repository holds the `devel/p5-Fugu` port (Fugu REL-PORT), and the
+ports tree must hold it before this port builds.
