@@ -74,8 +74,8 @@ phase applies.
 | [PROG-SCAN](programs.md#prog-scan)           | open  | P3      | —                                                                                                                          |
 | [PROG-QR](programs.md#prog-qr)               | open  | P3      | —                                                                                                                          |
 | [PROG-PORT](programs.md#prog-port)           | open  | P4      | —                                                                                                                          |
-| [SEC-ENTROPY](security.md#sec-entropy)       | open  | P1      | —                                                                                                                          |
-| [SEC-MEMORY](security.md#sec-memory)         | open  | P1      | —                                                                                                                          |
+| [SEC-ENTROPY](security.md#sec-entropy)       | open  | P2      | —                                                                                                                          |
+| [SEC-MEMORY](security.md#sec-memory)         | open  | P3      | —                                                                                                                          |
 | [SEC-FLOOR](security.md#sec-floor)           | open  | P4      | —                                                                                                                          |
 | [SEC-DETECT](security.md#sec-detect)         | open  | P4      | —                                                                                                                          |
 | [SEC-CLAIMS](security.md#sec-claims)         | open  | P4      | —                                                                                                                          |

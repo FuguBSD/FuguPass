@@ -91,6 +91,8 @@ The interop harness proves conformance against every available conforming oracle
   FuguOracle OVW-PURPOSE-4 permits many clients on one instance. Each record
   burns its own three strikes, so a wipe destroys one record and touches no
   other. A record holds no entry name, no purpose, and no content.
+  [OVW-RISKS](overview.md#ovw-risks) states the guess budget that the record
+  count sets.
 - **ORC-RECORDS-4** — The documentation must state the load that FuguPass
   generates against the stated workload assumption of the oracle. The load is
   `k` `get_pin` requests per revealed entry. It is also one `set_pin` request
