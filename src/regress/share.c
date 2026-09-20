@@ -287,9 +287,10 @@ test_field(void)
 /*
  * test_split():
  *	The share of each oracle matches the vector, at each
- *	threshold of the vectors (KEY-SHARE-5). The vectors come
- *	from an independent implementation, so they pin the
- *	coefficient label and the evaluation (TEST-SPLIT-4).
+ *	threshold of the vectors (KEY-SHARE-5). The galois module
+ *	of PyPI made the field arithmetic of the vectors, and the
+ *	hmac module of Python made the coefficients, so they pin
+ *	the coefficient label and the evaluation (TEST-SPLIT-4).
  */
 static int
 test_split(void)

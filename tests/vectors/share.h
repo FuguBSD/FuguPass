@@ -20,24 +20,36 @@
  * person edits it by hand. The first one writes the head of the
  * file and the share vectors:
  *
- *	python3 tests/vectors/generate-share.py > tests/vectors/share.h
+ *	python3 -m venv scratch/venv
+ *	scratch/venv/bin/pip install galois
+ *	scratch/venv/bin/python tests/vectors/generate-share.py \
+ *	    > tests/vectors/share.h
  *
  * The second one appends the pin vectors and the last line:
  *
  *	scratch/venv/bin/python tests/vectors/generate-pin.py \
  *	    >> tests/vectors/share.h
  *
- * Each generator is an independent reference of its part, outside
- * the dependency set of this repository (D-15). Neither one reads a
- * file of the C build, and neither one copies C code. A difference
- * between a generator and the C is a defect of one of them, and the
- * known-answer test shows that difference.
+ * Each generator rests on a third-party reference of its part,
+ * outside the dependency set of this repository (D-15). The field
+ * arithmetic and the interpolation of the share vectors come from
+ * the galois module of PyPI. The pin vectors come from the bcrypt
+ * module of PyPI, and the block below names its version. The share
+ * vectors here come from galois 0.4.11.
  *
- * tests/vectors/generate-share.py holds its own field, its own
- * split, and its own reconstruction. It derives each coefficient
- * with the hmac module of the Python standard library
- * (KEY-SHARE-3). The label strings come from spec/keys.md, which is
- * specification and not an implementation.
+ * tests/vectors/generate-share.py writes no field arithmetic of its
+ * own. galois builds GF(256) from the field polynomial of
+ * KEY-SHARE-2. It multiplies, it inverts, it evaluates each
+ * polynomial of the split, and it interpolates the reconstruction.
+ * The coefficients stay on the hmac module of the Python standard
+ * library, which is independent of the C: the C calls HMAC-SHA256
+ * of libcrypto (KEY-SHARE-3). The label strings come from
+ * spec/keys.md, which is specification and not an implementation.
+ *
+ * Neither generator reads a file of the C build, and neither one
+ * copies C code. A difference between a generator and the C is a
+ * defect of one of them, and the known-answer test shows that
+ * difference.
  *
  * KAT_SHARE_SECRET is a public test constant, and it is not a
  * secret. A secret and a share stand as lower-case hex, with no

@@ -17,42 +17,56 @@
 """The generator of the share vectors (TEST-SPLIT-4).
 
 The script writes the head of the share header and the share
-vectors to the standard output. A developer runs it once, and
-commits the header:
+vectors to the standard output. The galois module of PyPI holds the
+field arithmetic and the interpolation. That module stays outside
+the dependency set of this repository, and deps/ gains no entry for
+it (D-15). A developer builds a throwaway environment under
+scratch/, which the repository ignores, and runs the script once:
 
-    python3 tests/vectors/generate-share.py > tests/vectors/share.h
+    python3 -m venv scratch/venv
+    scratch/venv/bin/pip install galois
+    scratch/venv/bin/python tests/vectors/generate-share.py \\
+        > tests/vectors/share.h
 
 tests/vectors/generate-pin.py appends the pin vectors and the last
 line of the file.
 
-The script is an independent implementation of the share split. It
-holds its own field, its own split, and its own reconstruction. It
-copies no C code, it reads no file of the C build, and it shares no
-helper with tests/vectors/generate.py. It takes the Python standard
-library only. The label strings come from spec/keys.md, which is
-specification and not an implementation. A difference between the
-two implementations is a defect of one of them, and the
-known-answer test shows that difference.
+The script writes no field arithmetic of its own. galois builds
+GF(256) from the field polynomial of KEY-SHARE-2. It multiplies, it
+inverts, it evaluates each polynomial of the split, and it
+interpolates the reconstruction. The script copies no C code, it
+reads no file of the C build, and it shares no helper with
+tests/vectors/generate.py.
 
-The field arithmetic below takes the plain form, and not the
-branch-free form of the C. The inverse comes from a search of the
-field. Two implementations of one definition therefore stand
-against each other.
+The coefficients stay on the hmac module of the Python standard
+library. That module is independent of the C, because the C calls
+HMAC-SHA256 of libcrypto (KEY-DERIVE-1, KEY-SHARE-3). The label
+strings come from spec/keys.md, which is specification and not an
+implementation. A difference between this reference and the C is a
+defect of one of them, and the known-answer test shows that
+difference.
 
-The script proves its own data before it prints. It proves the
-field against two products of FIPS 197, and it proves that every
-nonzero element has one inverse. It proves that each index set
-reconstructs the secret, and that a set of one element less does
-not. A failed proof stops the run, and the script prints nothing.
+The script proves its own data before it prints. It reads the field
+polynomial back from galois, and it proves the field against two
+products of FIPS 197. It proves that every nonzero element has one
+inverse. It proves that each index set reconstructs the secret, and
+that a set of one element less does not. A failed proof stops the
+run, and the script prints nothing.
 """
 
 import hashlib
 import hmac
 
+import galois
+
 # The field polynomial x^8 + x^4 + x^3 + x + 1 of GF(256), as the
 # number 0x11b (KEY-SHARE-2). The field holds 256 elements.
 FIELD_POLY = 0x11B
 FIELD_SIZE = 0x100
+
+# The field of the split. galois holds every product, every inverse,
+# every evaluation and the interpolation of this script.
+FIELD = galois.GF(2**8, irreducible_poly=FIELD_POLY)
 
 # The coefficient label of a split, from the label table of
 # spec/keys.md. The threshold and the coefficient index follow it,
@@ -104,7 +118,7 @@ MUL_PAIRS = (
 INV_VALUES = (0x01, 0x02, 0x53, 0x57, 0x80, 0x1B, 0xFF)
 
 # Two products of the standard that fixes this field (FIPS 197,
-# section 4.2). The script proves its field against them.
+# section 4.2). The script proves the field of galois against them.
 KNOWN_PRODUCTS = (
     (0x57, 0x83, 0xC1),
     (0x57, 0x13, 0xFE),
@@ -117,7 +131,7 @@ HEX_WIDTH = 64
 # prints the tail of it, because that script holds the last vectors.
 # The guard name differs from the guard of src/share.h, because one
 # test reads both files.
-HEADER = """/*
+HEADER = f"""/*
  * Copyright (c) 2026 Dick Olsson <hi@senzilla.io>
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -139,24 +153,36 @@ HEADER = """/*
  * person edits it by hand. The first one writes the head of the
  * file and the share vectors:
  *
- *	python3 tests/vectors/generate-share.py > tests/vectors/share.h
+ *	python3 -m venv scratch/venv
+ *	scratch/venv/bin/pip install galois
+ *	scratch/venv/bin/python tests/vectors/generate-share.py \\
+ *	    > tests/vectors/share.h
  *
  * The second one appends the pin vectors and the last line:
  *
  *	scratch/venv/bin/python tests/vectors/generate-pin.py \\
  *	    >> tests/vectors/share.h
  *
- * Each generator is an independent reference of its part, outside
- * the dependency set of this repository (D-15). Neither one reads a
- * file of the C build, and neither one copies C code. A difference
- * between a generator and the C is a defect of one of them, and the
- * known-answer test shows that difference.
+ * Each generator rests on a third-party reference of its part,
+ * outside the dependency set of this repository (D-15). The field
+ * arithmetic and the interpolation of the share vectors come from
+ * the galois module of PyPI. The pin vectors come from the bcrypt
+ * module of PyPI, and the block below names its version. The share
+ * vectors here come from galois {galois.__version__}.
  *
- * tests/vectors/generate-share.py holds its own field, its own
- * split, and its own reconstruction. It derives each coefficient
- * with the hmac module of the Python standard library
- * (KEY-SHARE-3). The label strings come from spec/keys.md, which is
- * specification and not an implementation.
+ * tests/vectors/generate-share.py writes no field arithmetic of its
+ * own. galois builds GF(256) from the field polynomial of
+ * KEY-SHARE-2. It multiplies, it inverts, it evaluates each
+ * polynomial of the split, and it interpolates the reconstruction.
+ * The coefficients stay on the hmac module of the Python standard
+ * library, which is independent of the C: the C calls HMAC-SHA256
+ * of libcrypto (KEY-SHARE-3). The label strings come from
+ * spec/keys.md, which is specification and not an implementation.
+ *
+ * Neither generator reads a file of the C build, and neither one
+ * copies C code. A difference between a generator and the C is a
+ * defect of one of them, and the known-answer test shows that
+ * difference.
  *
  * KAT_SHARE_SECRET is a public test constant, and it is not a
  * secret. A secret and a share stand as lower-case hex, with no
@@ -176,41 +202,29 @@ def _fail(message):
 def mul(left, right):
     """The product of two field elements (KEY-SHARE-2).
 
-    The loop adds the first operand to the result for each set bit
-    of the second one. It doubles the first operand at each step,
-    and a double that leaves the byte takes the field polynomial.
+    galois multiplies. This function maps the two bytes into the
+    field, and it maps the product back to a byte.
     """
-    result = 0
-    for _ in range(8):
-        if right & 1:
-            result ^= left
-        right >>= 1
-        left <<= 1
-        if left & FIELD_SIZE:
-            left ^= FIELD_POLY
-    return result
+    return int(FIELD(left) * FIELD(right))
 
 
 def inverse(value):
     """The multiplicative inverse of a nonzero field element.
 
-    The search covers the field, so the inverse shares no structure
-    with the multiplication of the C. The field holds 255 nonzero
-    elements, and each one has exactly one inverse.
+    galois inverts. The field holds 255 nonzero elements, and each
+    one has exactly one inverse.
     """
     if value == 0:
         _fail("the field holds no inverse of zero")
-    for candidate in range(1, FIELD_SIZE):
-        if mul(value, candidate) == 1:
-            return candidate
-    _fail(f"the field holds no inverse of {value:#04x}")
+    return int(FIELD(value) ** -1)
 
 
 def coefficient(secret, threshold, index):
     """A_j: coefficient j of one split, at the threshold.
 
     The coefficient is HMAC-SHA256 with the secret as the key
-    (KEY-DERIVE-1, KEY-SHARE-3).
+    (KEY-DERIVE-1, KEY-SHARE-3). It comes from the hmac module of
+    the Python standard library, and not from galois.
     """
     label = f"{LABEL_SHAMIR}{threshold}/{index}"
     return hmac.new(secret, label.encode(), hashlib.sha256).digest()
@@ -221,43 +235,47 @@ def share(secret, threshold, oracle):
 
     Byte b takes the polynomial of byte b, at the oracle index. The
     constant term is the secret byte, and coefficient j multiplies
-    the index to the power j.
+    the index to the power j. galois.Poly evaluates the polynomial,
+    and it takes the coefficient of the highest power first.
     """
     table = [
         coefficient(secret, threshold, index)
         for index in range(1, threshold)]
+    point = FIELD(oracle)
     result = bytearray(len(secret))
     for at in range(len(secret)):
-        value = secret[at]
-        power = 1
-        for column in table:
-            power = mul(power, oracle)
-            value ^= mul(column[at], power)
-        result[at] = value
+        coeffs = [column[at] for column in reversed(table)]
+        coeffs.append(secret[at])
+        result[at] = int(galois.Poly(FIELD(coeffs))(point))
     return bytes(result)
 
 
 def reconstruct(shares):
     """The secret at x = 0, from an index set of shares (KEY-SHARE-6).
 
-    The argument maps each oracle index to its share. The weight of
-    one index is the product of m over m + i, for each other index
-    m of the set.
+    The argument maps each oracle index to its share.
+    galois.lagrange_poly builds the polynomial of byte b through the
+    points of the set, and the value of it at x = 0 is the byte.
     """
     indexes = sorted(shares)
+    points = FIELD(indexes)
+    zero = FIELD(0)
     result = bytearray(len(shares[indexes[0]]))
-    for index in indexes:
-        weight = 1
-        for other in indexes:
-            if other != index:
-                weight = mul(weight, mul(other, inverse(other ^ index)))
-        for at in range(len(result)):
-            result[at] ^= mul(shares[index][at], weight)
+    for at in range(len(result)):
+        values = FIELD([shares[index][at] for index in indexes])
+        result[at] = int(galois.lagrange_poly(points, values)(zero))
     return bytes(result)
 
 
 def _check_field():
-    """Prove the field against FIPS 197, and prove every inverse."""
+    """Prove the field of galois, and prove every inverse.
+
+    The first proof reads the field polynomial back, so a field of
+    another polynomial stops the run. The second proof takes two
+    products of FIPS 197, section 4.2.
+    """
+    if int(FIELD.irreducible_poly) != FIELD_POLY:
+        _fail("galois built the field of another polynomial")
     for left, right, product in KNOWN_PRODUCTS:
         if mul(left, right) != product:
             _fail(f"the product of {left:#04x} and {right:#04x} is wrong")

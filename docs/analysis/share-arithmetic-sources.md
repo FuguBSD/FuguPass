@@ -23,6 +23,10 @@ the pick.
 
 ## The candidates
 
+Each candidate below is a possible import: it answers which implementation this
+repository ships. Which reference pins the outputs is a separate question, and
+"The sources of the vectors" answers it.
+
 | Candidate                 | Form                 | Licence | Timing of the arithmetic                     |
 | ------------------------- | -------------------- | ------- | -------------------------------------------- |
 | libgfshare                | C library            | MIT     | Log and exp tables, with a secret index      |
@@ -82,27 +86,44 @@ The section below names the source of each vector set.
 
 ## The sources of the vectors
 
-This repository holds three generators, and they write the vectors. Two of them
-take the Python standard library alone. `tests/vectors/generate-pin.py` also
-calls the `bcrypt` module of PyPI, the one package outside that library. `deps/`
-gains no entry for that module, and the regress build needs no Python.
+The section above answers which implementation this repository ships. This
+section answers the other question of D-15: which reference pins the outputs of
+that implementation.
 
-`tests/vectors/generate-share.py` holds its own field, its own split and its own
-reconstruction. It writes the arithmetic from the definition of KEY-SHARE-2, in
-Python. The loop takes the plain form, and not the branch-free form of the C.
-Its inverse comes from a search of the field, so it shares no structure with the
-C. The script proves its field against two products of FIPS 197, section 4.2:
-`0x57 · 0x83 = 0xc1`, and `0x57 · 0x13 = 0xfe`. It derives each coefficient with
-the `hmac` module of the Python standard library, an independent HMAC-SHA256
-(KEY-DERIVE-1, KEY-SHARE-3).
+This repository holds three generators, and they write the vectors.
+`tests/vectors/generate.py` takes the Python standard library alone. The other
+two also call a module of PyPI. `deps/` gains no entry for either module, and
+the regress build needs no Python. The developer installs each module into a
+throwaway environment under `scratch/`, which the repository ignores.
+
+`tests/vectors/generate-share.py` writes no field arithmetic of its own. It
+calls the `galois` module of PyPI, which Matt Hostetter holds under the MIT
+licence. `galois.GF(2**8, irreducible_poly=0x11b)` builds the field of
+KEY-SHARE-2. That module multiplies and it inverts. `galois.Poly` evaluates each
+polynomial of the split, and `galois.lagrange_poly` interpolates the
+reconstruction. The script therefore shares no arithmetic with `src/share.c`,
+and one misreading of KEY-SHARE-2 cannot enter both. The vectors in
+`tests/vectors/share.h` come from version 0.4.11 of that module, on 2026-09-20.
+
+The licence set that D-15 names governs an imported implementation. `galois`
+ships no code into this repository, and no file of it enters the checkout, so
+that set does not reach it. The same holds for the `bcrypt` module below.
+
+The script proves the field before it prints. It reads the field polynomial back
+from `galois`, so a field of another polynomial stops the run. It then checks
+two products of FIPS 197, section 4.2: `0x57 · 0x83 = 0xc1`, and
+`0x57 · 0x13 = 0xfe`. It also checks that every nonzero element has one inverse.
+
+The coefficients stay outside `galois`. The script derives each one with the
+`hmac` module of the Python standard library (KEY-DERIVE-1, KEY-SHARE-3). That
+module is independent of the C, because the C calls HMAC-SHA256 of `libcrypto`.
 
 `tests/vectors/generate-pin.py` holds no arithmetic of its own. The Python
 standard library holds no `bcrypt_pbkdf(3)`, so the script calls `bcrypt.kdf()`
 of the `bcrypt` module of PyPI. That function computes `bcrypt_pbkdf(3)`, and it
 takes the same argument order: the password, the salt, the byte count, and the
 round count (KEY-PIN-3). The vectors in `tests/vectors/share.h` come from
-version 5.0.0 of that module, on 2026-09-20. The developer installs the module
-into a throwaway environment under `scratch/`, which the repository ignores.
+version 5.0.0 of that module, on 2026-09-20.
 
 `tests/vectors/generate.py` writes the label vectors of the derivation tree,
 with the `hmac` module alone. It writes coefficient values too, and no test
