@@ -16,13 +16,17 @@
 
 /*
  * The derivation core: the gate of the master, the BIP39 seed, the
- * function f, and two labels of the table of keys.md. derive.h
- * states the interface.
+ * function f, the gate of a machine name, and nine labels of the
+ * table of keys.md. derive.h states the interface.
  *
  * The primitives come from libcrypto, and no other library enters
- * this file (D-15). The table of keys.md is the complete list of the
- * labels (KEY-DERIVE-2), and each label of this file comes from that
- * table.
+ * this file (D-15). The reduction of a client key takes the BN
+ * functions of that library, because libsecp256k1 gives no scalar
+ * arithmetic (KEY-CLIENT-2).
+ *
+ * The table of keys.md is the complete list of the labels
+ * (KEY-DERIVE-2), and each label of this file comes from that table.
+ * The label functions below stand in the order of that table.
  */
 
 #include <inttypes.h>
@@ -31,6 +35,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <openssl/bn.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
@@ -53,14 +58,42 @@
 #define ROOT_SALT	"mnemonic"
 
 /*
- * The labels of the two keys of this file. Every label carries the
- * prefix, and the table of keys.md holds the complete list
- * (KEY-DERIVE-2).
+ * The labels of this file, in the order of the table of keys.md. The
+ * coefficient label of the split is the one label of the table that
+ * share.c holds (KEY-SHARE-3).
  */
-#define LABEL_PREFIX	"fugupass/v1/"
+static const char	label_entry_key[] = DERIVE_LABEL_PREFIX "entry-key";
+static const char	label_device_factor[] = DERIVE_LABEL_PREFIX
+			    "device-factor";
+static const char	label_client_key[] = DERIVE_LABEL_PREFIX "client-key";
+static const char	label_pin_salt[] = DERIVE_LABEL_PREFIX "pin-salt";
+static const char	label_wrap[] = DERIVE_LABEL_PREFIX "wrap";
+static const char	label_index_key[] = DERIVE_LABEL_PREFIX "index-key";
+static const char	label_wrap_index[] = DERIVE_LABEL_PREFIX "wrap-index";
+static const char	label_canary_check[] = DERIVE_LABEL_PREFIX
+			    "canary-check";
+static const char	label_plate_check[] = DERIVE_LABEL_PREFIX "plate-check";
 
-static const char	label_entry_key[] = LABEL_PREFIX "entry-key";
-static const char	label_plate_check[] = LABEL_PREFIX "plate-check";
+/*
+ * One label of a record, with its suffix and the terminator. The
+ * longest one is the label, the oracle index of 3 digits, one
+ * solidus, and the slot index of 10 digits. Each helper below proves
+ * the length of the label that it writes.
+ */
+#define LABEL_MAX	48
+
+/*
+ * The order q of the secp256k1 group, less one, as 32 big-endian
+ * bytes. SEC 2 version 2, section 2.4.1, fixes q. A client key is
+ * the remainder of the key material modulo this value, and then one
+ * more, so the key stays in 1 to q - 1 (KEY-CLIENT-2).
+ */
+static const unsigned char order_minus_one[] = {
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe,
+	0xba, 0xae, 0xdc, 0xe6, 0xaf, 0x48, 0xa0, 0x3b,
+	0xbf, 0xd2, 0x5e, 0x8c, 0xd0, 0x36, 0x41, 0x40
+};
 
 /*
  * master_sum(index, err, errlen):
@@ -102,6 +135,87 @@ out:
 	explicit_bzero(bits, sizeof(bits));
 	explicit_bzero(digest, sizeof(digest));
 	explicit_bzero(want, sizeof(want));
+	return rv;
+}
+
+/*
+ * key_record(key, keylen, label, oracle, slot, out, outlen):
+ *	f of the key of keylen bytes at key, and the label with the
+ *	suffix i/e, to the outlen bytes at out. The suffix is the
+ *	oracle index, one solidus, and the slot index, as unpadded
+ *	decimal ASCII.
+ */
+static int
+key_record(const unsigned char *key, size_t keylen, const char *label,
+    unsigned int oracle, uint32_t slot, unsigned char *out, size_t outlen)
+{
+	char	 buf[LABEL_MAX];
+	int	 n, rv = -1;
+
+	/* A slot index stays below 2^31 (KEY-ENTRY-1). */
+	if (keylen != DERIVE_KEYLEN || oracle == 0 ||
+	    oracle > DERIVE_ORACLE_MAX || slot > INT32_MAX)
+		return -1;
+
+	n = snprintf(buf, sizeof(buf), "%s%u/%" PRIu32, label, oracle, slot);
+	if (n < 0 || (size_t)n >= sizeof(buf))
+		goto out;
+	rv = derive_f(key, keylen, buf, (size_t)n, out, outlen);
+out:
+	explicit_bzero(buf, sizeof(buf));
+	return rv;
+}
+
+/*
+ * key_canary(key, keylen, label, oracle, out, outlen):
+ *	f of the key of keylen bytes at key, and the label with the
+ *	suffix i/canary, to the outlen bytes at out. The literal
+ *	canary stands in place of the slot index (KEY-CLIENT-3,
+ *	KEY-PIN-2).
+ */
+static int
+key_canary(const unsigned char *key, size_t keylen, const char *label,
+    unsigned int oracle, unsigned char *out, size_t outlen)
+{
+	char	 buf[LABEL_MAX];
+	int	 n, rv = -1;
+
+	if (keylen != DERIVE_KEYLEN || oracle == 0 ||
+	    oracle > DERIVE_ORACLE_MAX)
+		return -1;
+
+	n = snprintf(buf, sizeof(buf), "%s%u/canary", label, oracle);
+	if (n < 0 || (size_t)n >= sizeof(buf))
+		goto out;
+	rv = derive_f(key, keylen, buf, (size_t)n, out, outlen);
+out:
+	explicit_bzero(buf, sizeof(buf));
+	return rv;
+}
+
+/*
+ * key_oracle(key, keylen, label, oracle, out, outlen):
+ *	f of the key of keylen bytes at key, and the label with the
+ *	suffix i, to the outlen bytes at out. The suffix is the
+ *	oracle index alone, as unpadded decimal ASCII.
+ */
+static int
+key_oracle(const unsigned char *key, size_t keylen, const char *label,
+    unsigned int oracle, unsigned char *out, size_t outlen)
+{
+	char	 buf[LABEL_MAX];
+	int	 n, rv = -1;
+
+	if (keylen != DERIVE_KEYLEN || oracle == 0 ||
+	    oracle > DERIVE_ORACLE_MAX)
+		return -1;
+
+	n = snprintf(buf, sizeof(buf), "%s%u", label, oracle);
+	if (n < 0 || (size_t)n >= sizeof(buf))
+		goto out;
+	rv = derive_f(key, keylen, buf, (size_t)n, out, outlen);
+out:
+	explicit_bzero(buf, sizeof(buf));
 	return rv;
 }
 
@@ -207,6 +321,188 @@ derive_entry_key(const unsigned char *root, size_t rootlen, uint32_t slot,
 out:
 	explicit_bzero(label, sizeof(label));
 	return rv;
+}
+
+int
+derive_machine_check(const char *name, size_t namelen)
+{
+	unsigned char	 c;
+	size_t		 i;
+
+	if (namelen == 0 || namelen > DERIVE_MACHINE_MAX)
+		return -1;
+
+	/*
+	 * The set is the lowercase ASCII letters, the digits, and
+	 * the hyphen (KEY-DEVICE-3). The byte comparisons take no
+	 * locale, and a byte above 0x7f falls outside each set.
+	 */
+	for (i = 0; i < namelen; i++) {
+		c = (unsigned char)name[i];
+		if ((c < 'a' || c > 'z') && (c < '0' || c > '9') &&
+		    c != '-')
+			return -1;
+	}
+	return 0;
+}
+
+int
+derive_device_factor(const unsigned char *root, size_t rootlen,
+    const char *name, size_t namelen, unsigned char *out, size_t outlen)
+{
+	/* The label, the longest machine name, and the terminator. */
+	char	 label[sizeof(label_device_factor) + DERIVE_MACHINE_MAX];
+	int	 n, rv = -1;
+
+	if (rootlen != DERIVE_ROOTLEN)
+		return -1;
+	if (derive_machine_check(name, namelen) != 0)
+		return -1;
+
+	/*
+	 * The suffix is the UTF-8 bytes of the machine name. The
+	 * gate holds the name to ASCII, and ASCII text is its own
+	 * UTF-8 form.
+	 */
+	n = snprintf(label, sizeof(label), "%s%.*s", label_device_factor,
+	    (int)namelen, name);
+	if (n < 0 || (size_t)n >= sizeof(label))
+		goto out;
+	rv = derive_f(root, rootlen, label, (size_t)n, out, outlen);
+out:
+	explicit_bzero(label, sizeof(label));
+	return rv;
+}
+
+int
+derive_client_reduce(const unsigned char *t, size_t tlen, unsigned char *out,
+    size_t outlen)
+{
+	BN_CTX		*ctx = NULL;
+	BIGNUM		*num = NULL, *mod = NULL, *key = NULL;
+	int		 rv = -1;
+
+	if (tlen != DERIVE_KEYLEN || outlen != DERIVE_KEYLEN)
+		return -1;
+
+	if ((ctx = BN_CTX_new()) == NULL)
+		goto out;
+	if ((num = BN_bin2bn(t, (int)tlen, NULL)) == NULL)
+		goto out;
+	if ((mod = BN_bin2bn(order_minus_one, (int)sizeof(order_minus_one),
+	    NULL)) == NULL)
+		goto out;
+	if ((key = BN_new()) == NULL)
+		goto out;
+
+	/*
+	 * The key material is a secret, and the flag asks libcrypto
+	 * for the constant-time path of the division.
+	 */
+	BN_set_flags(num, BN_FLG_CONSTTIME);
+	if (BN_mod(key, num, mod, ctx) != 1)
+		goto out;
+	if (BN_add_word(key, 1) != 1)
+		goto out;
+	if (BN_bn2binpad(key, out, (int)outlen) != (int)outlen)
+		goto out;
+	rv = 0;
+out:
+	BN_clear_free(key);
+	BN_clear_free(num);
+	BN_free(mod);
+	BN_CTX_free(ctx);
+	if (rv != 0)
+		explicit_bzero(out, outlen);
+	return rv;
+}
+
+int
+derive_client_key(const unsigned char *x, size_t xlen, unsigned int oracle,
+    uint32_t slot, unsigned char *out, size_t outlen)
+{
+	unsigned char	 t[DERIVE_KEYLEN];
+	int		 rv = -1;
+
+	if (outlen != DERIVE_KEYLEN)
+		return -1;
+
+	/* The key material is t_ei, and the reduction gives ck_ei. */
+	if (key_record(x, xlen, label_client_key, oracle, slot, t,
+	    sizeof(t)) != 0)
+		goto out;
+	rv = derive_client_reduce(t, sizeof(t), out, outlen);
+out:
+	explicit_bzero(t, sizeof(t));
+	if (rv != 0)
+		explicit_bzero(out, outlen);
+	return rv;
+}
+
+int
+derive_client_key_canary(const unsigned char *x, size_t xlen,
+    unsigned int oracle, unsigned char *out, size_t outlen)
+{
+	unsigned char	 t[DERIVE_KEYLEN];
+	int		 rv = -1;
+
+	if (outlen != DERIVE_KEYLEN)
+		return -1;
+
+	if (key_canary(x, xlen, label_client_key, oracle, t, sizeof(t)) != 0)
+		goto out;
+	rv = derive_client_reduce(t, sizeof(t), out, outlen);
+out:
+	explicit_bzero(t, sizeof(t));
+	if (rv != 0)
+		explicit_bzero(out, outlen);
+	return rv;
+}
+
+int
+derive_pin_salt(const unsigned char *x, size_t xlen, unsigned int oracle,
+    uint32_t slot, unsigned char *out, size_t outlen)
+{
+	return key_record(x, xlen, label_pin_salt, oracle, slot, out, outlen);
+}
+
+int
+derive_pin_salt_canary(const unsigned char *x, size_t xlen,
+    unsigned int oracle, unsigned char *out, size_t outlen)
+{
+	return key_canary(x, xlen, label_pin_salt, oracle, out, outlen);
+}
+
+int
+derive_wrap_key(const unsigned char *mask, size_t masklen,
+    unsigned int oracle, uint32_t slot, unsigned char *out, size_t outlen)
+{
+	return key_record(mask, masklen, label_wrap, oracle, slot, out, outlen);
+}
+
+int
+derive_index_key(const unsigned char *root, size_t rootlen,
+    unsigned char *out, size_t outlen)
+{
+	if (rootlen != DERIVE_ROOTLEN)
+		return -1;
+	return derive_f(root, rootlen, label_index_key,
+	    sizeof(label_index_key) - 1, out, outlen);
+}
+
+int
+derive_index_wrap_key(const unsigned char *mask, size_t masklen,
+    unsigned int oracle, unsigned char *out, size_t outlen)
+{
+	return key_oracle(mask, masklen, label_wrap_index, oracle, out, outlen);
+}
+
+int
+derive_canary_check_key(const unsigned char *mask, size_t masklen,
+    unsigned int oracle, unsigned char *out, size_t outlen)
+{
+	return key_oracle(mask, masklen, label_canary_check, oracle, out,
+	    outlen);
 }
 
 int

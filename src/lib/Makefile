@@ -24,7 +24,7 @@
 .PATH:		${.CURDIR}/..
 
 LIB=		fugupass
-SRCS=		bip85.c derive.c wordlist.c
+SRCS=		bip85.c derive.c pin.c share.c wordlist.c
 
 CFLAGS+=	-Wall -Wextra -Werror
 CFLAGS+=	-I${.CURDIR}/..
@@ -35,6 +35,10 @@ CFLAGS+=	-I${.CURDIR}/..
 LOCALBASE?=	/usr/local
 
 CFLAGS+=	-I${LOCALBASE}/include
+
+# bcrypt_pbkdf(3) comes from libutil of the base system. pin.c reads
+# <util.h>, and each directory that links this archive adds -lutil
+# to LDADD.
 
 NOPIC=		yes
 NOPROFILE=	yes
