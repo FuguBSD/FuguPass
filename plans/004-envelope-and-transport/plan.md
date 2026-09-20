@@ -3,11 +3,11 @@
 ## Status
 
 Proposed. It waits on plan 001 for the build skeleton. Plan 005 waits on it. It
-is independent of plan 002 and plan 003.
+is independent of plan 002.
 
 Implements: ORC-CONFORM without ORC-CONFORM-2 and ORC-CONFORM-3. Implements:
-SEC-ENTROPY without SEC-ENTROPY-3, SEC-ENTROPY-5, and SEC-ENTROPY-7. Defers:
-ORC-PROVISION, PROG-SPLIT, TEST-HARNESS.
+SEC-ENTROPY without SEC-ENTROPY-4. Defers: ORC-PROVISION, PROG-SPLIT,
+TEST-HARNESS.
 
 ORC-CONFORM-2 and ORC-CONFORM-3 bind the records, in plan 005. The transport
 rule that this plan adds to ORC-CONFORM names the client. The unveil path that
@@ -97,9 +97,8 @@ holds:
 - `make check` passes on the host, and `make regress` passes in the guest.
 - ORC-CONFORM reads `partial` with ORC-CONFORM-2 and ORC-CONFORM-3 as the absent
   rules, and its text holds the transport rule.
-- SEC-ENTROPY reads `partial`. The absent rules are SEC-ENTROPY-3,
-  SEC-ENTROPY-5, and SEC-ENTROPY-7, and the note names each absent part of
-  SEC-ENTROPY-4.
+- SEC-ENTROPY reads `partial` with SEC-ENTROPY-4 as the absent rule. The note
+  names each absent part of SEC-ENTROPY-4.
 - The change deletes this plan.
 
 ## What this plan does not do
