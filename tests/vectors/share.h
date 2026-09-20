@@ -42,9 +42,14 @@
  * KEY-SHARE-2. It multiplies, it inverts, it evaluates each
  * polynomial of the split, and it interpolates the reconstruction.
  * The coefficients stay on the hmac module of the Python standard
- * library, which is independent of the C: the C calls HMAC-SHA256
- * of libcrypto (KEY-SHARE-3). The label strings come from
- * spec/keys.md, which is specification and not an implementation.
+ * library (KEY-SHARE-3). That module calls _hashlib, the extension
+ * module of CPython over OpenSSL, and the C calls the HMAC-SHA256
+ * of LibreSSL libcrypto. LibreSSL is a fork of OpenSSL, so these
+ * vectors pin no independent HMAC-SHA256. They pin the label
+ * assembly, the key choice and the message construction of
+ * KEY-SHARE-3. The label strings come from spec/keys.md, which is
+ * specification and not an implementation, so a misreading of
+ * KEY-SHARE-3 shows here.
  *
  * Neither generator reads a file of the C build, and neither one
  * copies C code. A difference between a generator and the C is a

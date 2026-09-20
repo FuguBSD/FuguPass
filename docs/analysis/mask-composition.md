@@ -90,9 +90,11 @@ the label all stay the same (CER-PROVISION-15). A tool that wrote the new wrap
 under the old mask would publish `share_old ⊕ share_new` to a holder of both
 wraps. CER-PROVISION-15 forbids that case. The ceremony takes a fresh `set_pin`
 for every record of this machine, at every live oracle. Every mask therefore
-rotates before the new wraps land. The specification states the availability
-reason and the confidentiality reason. The confidentiality reason is the
-two-plaintext case, and section 6 states what it costs.
+rotates before the new wraps land. CER-PROVISION-15 puts the fresh-mask duty on
+the availability reason: a stale wrap under a live mask would keep the old
+threshold reachable. That rule records the two-plaintext case too, and it states
+that the case adds no new capability against the master. Section 6 states what
+the case costs.
 
 The opposite direction is safe. A passphrase change rotates the mask and keeps
 the share (ORC-ENROLL-4). Two wraps of one plaintext under two keys give the XOR
@@ -148,11 +150,10 @@ file, and the config file holds the plate check value (VAULT-LAYOUT-4,
 VAULT-CONFIG-1). One HMAC on `root` tests the same guess against that value
 (KEY-MASTER-5, VAULT-CONFIG-5). The case therefore gives the attacker no new
 capability against the master. SEC-FLOOR-1 forbids a passphrase verifier on the
-disk, and this value is not one. The risk table gives the same reason for a
-machine's disk, and it names no master verifier
-([OVW-RISKS](../../spec/overview.md#ovw-risks)). The search also stays at the
-entropy of the master, 128 bits (KEY-MASTER-1). What the case breaks is A3, and
-section 6 then covers neither wrap.
+disk, and this value is not one. The risk table names the same offline test for
+a machine's disk ([OVW-RISKS](../../spec/overview.md#ovw-risks)). The search
+also stays at the entropy of the master, 128 bits (KEY-MASTER-1). What the case
+breaks is A3, and the claim of this section then covers neither wrap.
 
 **A predictable mask.** A failure of the oracle RNG and a failure of the client
 draw together give the key share to an attacker. The key material mixes server

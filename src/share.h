@@ -68,13 +68,17 @@ unsigned char	share_inv(unsigned char);
  *	The share of the oracle index oracle, from the split of the
  *	secret of secretlen bytes at secret, at the threshold
  *	threshold, to the outlen bytes at out (KEY-SHARE-5).
- *	secretlen and outlen must be DERIVE_KEYLEN.
  *
- *	The threshold and the oracle index are 1 to
- *	DERIVE_ORACLE_MAX. The oracle index is 1-based. The caller
- *	holds the vault rule that the threshold is the count of the
- *	oracle positions or fewer (KEY-SHARE-1). With a threshold of
- *	1, the share equals the secret (KEY-SHARE-7).
+ *	Four gates give -1, and each one rejects the call before the
+ *	split: a secretlen other than DERIVE_KEYLEN, an outlen other
+ *	than DERIVE_KEYLEN, a threshold outside 1 to
+ *	DERIVE_ORACLE_MAX, and an oracle index outside 1 to
+ *	DERIVE_ORACLE_MAX. The oracle index is 1-based (KEY-SHARE-5),
+ *	and p_b(0) is the secret itself (KEY-SHARE-4).
+ *
+ *	The caller holds the vault rule that the threshold is the
+ *	count of the oracle positions or fewer (KEY-SHARE-1). With a
+ *	threshold of 1, the share equals the secret (KEY-SHARE-7).
  */
 int	share_split(const unsigned char *, size_t, unsigned int, unsigned int,
 	    unsigned char *, size_t);
@@ -82,14 +86,19 @@ int	share_split(const unsigned char *, size_t, unsigned int, unsigned int,
 /*
  * share_combine(index, shares, count, out, outlen):
  *	The secret of the count shares at shares, to the outlen bytes
- *	at out (KEY-SHARE-6). outlen must be DERIVE_KEYLEN. shares
- *	holds count shares of DERIVE_KEYLEN bytes each, and index
- *	holds the oracle index of each share, in the same order.
+ *	at out (KEY-SHARE-6). shares holds count shares of
+ *	DERIVE_KEYLEN bytes each, and index holds the oracle index of
+ *	each share, in the same order.
  *
- *	Each index must differ from every other index, and a repeated
- *	index gives -1. count must equal the threshold of the split.
- *	A count below the threshold gives a value other than the
- *	secret, and no function can see that case.
+ *	Four gates give -1, and each one rejects the call before the
+ *	interpolation: an outlen other than DERIVE_KEYLEN, a count of
+ *	0, a count above DERIVE_ORACLE_MAX, and an index outside 1 to
+ *	DERIVE_ORACLE_MAX. A repeated index gives -1 too, because two
+ *	equal indexes give a divisor of 0.
+ *
+ *	count must equal the threshold of the split. A count of 1 to
+ *	the threshold minus one gives a value other than the secret,
+ *	and no function can see that case.
  */
 int	share_combine(const unsigned int *, const unsigned char *, size_t,
 	    unsigned char *, size_t);

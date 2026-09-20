@@ -116,7 +116,12 @@ two products of FIPS 197, section 4.2: `0x57 · 0x83 = 0xc1`, and
 
 The coefficients stay outside `galois`. The script derives each one with the
 `hmac` module of the Python standard library (KEY-DERIVE-1, KEY-SHARE-3). That
-module is independent of the C, because the C calls HMAC-SHA256 of `libcrypto`.
+module calls `_hashlib`, the extension module of CPython over OpenSSL. The C
+calls the HMAC-SHA256 of LibreSSL `libcrypto`. LibreSSL is a fork of OpenSSL, so
+the two share one source. The vectors therefore pin no independent HMAC-SHA256.
+They pin the label assembly, the key choice and the message construction of
+KEY-SHARE-3 instead. The script builds those three from `spec/keys.md` alone, so
+a misreading of KEY-SHARE-3 shows in the vectors.
 
 `tests/vectors/generate-pin.py` holds no arithmetic of its own. The Python
 standard library holds no `bcrypt_pbkdf(3)`, so the script calls `bcrypt.kdf()`

@@ -443,11 +443,19 @@ test_single(void)
 
 /*
  * test_reject():
- *	The documented rejection gates of share_combine(),
- *	share_split() and pin_secret() give a failure (share.h,
- *	pin.h). Each case below names the mutation that it catches.
- *	Every one of these gates stands between a caller error and a
- *	wrong key, and no caller sees the difference without it.
+ *	The rejection gates of share_combine(), share_split() and
+ *	pin_secret() give a failure (share.h, pin.h). Each case below
+ *	names the mutation that it catches, and each of those
+ *	mutations turns a caller error into a wrong key.
+ *
+ *	Two halves of those gates carry no case, because another path
+ *	gives -1 for the same call. A threshold of 0 wraps
+ *	threshold - 1 to UINT_MAX, and the label of that coefficient
+ *	index does not fit its buffer, so share_split() gives -1
+ *	without the gate too. A count above DERIVE_ORACLE_MAX carries
+ *	two equal indexes, or one index outside 1 to
+ *	DERIVE_ORACLE_MAX, so the index gate of share_combine()
+ *	rejects it without the count gate too.
  */
 static int
 test_reject(void)
@@ -482,8 +490,8 @@ test_reject(void)
 	}
 
 	/*
-	 * An index of 0 gives -1 (share.h). An oracle index is 1-based,
-	 * and 0 is the evaluation point of the secret (KEY-SHARE-5). A
+	 * An index of 0 gives -1 (share.h). An oracle index is 1-based
+	 * (KEY-SHARE-5), and p_b(0) is the secret (KEY-SHARE-4). A
 	 * removal of that gate gives the first share the weight 1 and
 	 * the second share the weight 0. share_combine() then gives 0,
 	 * and the caller takes the first share for the secret.
@@ -504,22 +512,24 @@ test_reject(void)
 	}
 
 	/*
-	 * A threshold outside 1 to DERIVE_ORACLE_MAX gives -1
-	 * (share.h). The upper case carries the gate: a removal of it
-	 * takes the threshold 256, because every coefficient label of
-	 * that threshold fits its buffer. share_split() then gives 0
-	 * and a share of a threshold that KEY-SHARE-1 forbids.
-	 *
-	 * The case of the threshold 0 catches a gate that gives 0 in
-	 * place of -1. A removal of the whole gate still gives -1
-	 * there, by another path: threshold - 1 wraps to UINT_MAX, and
-	 * the label of that coefficient index needs 31 bytes of a
-	 * buffer of 28.
+	 * An outlen other than DERIVE_KEYLEN gives -1 (share.h). A
+	 * removal of that half of the gate interpolates outlen bytes
+	 * alone, and it leaves the last byte of out untouched.
+	 * share_combine() then gives 0, and the caller takes a secret
+	 * with one byte of its own buffer in it.
 	 */
-	if (share_split(secret, sizeof(secret), 0, 1, got, sizeof(got)) == 0) {
-		warnx("a threshold of 0: share_split() takes it");
+	if (share_combine(set_k2, shares, 2, got, sizeof(got) - 1) == 0) {
+		warnx("a short output: share_combine() takes it");
 		rv = -1;
 	}
+
+	/*
+	 * A threshold above DERIVE_ORACLE_MAX gives -1 (share.h). A
+	 * removal of that half of the gate takes the threshold 256,
+	 * because every coefficient label of that threshold fits its
+	 * buffer. share_split() then gives 0 and a share of a threshold
+	 * that KEY-SHARE-1 forbids.
+	 */
 	if (share_split(secret, sizeof(secret), DERIVE_ORACLE_MAX + 1, 1, got,
 	    sizeof(got)) == 0) {
 		warnx("a threshold above the maximum: share_split() takes it");
@@ -527,10 +537,23 @@ test_reject(void)
 	}
 
 	/*
+	 * An oracle index of 0 gives -1 (share.h). A removal of that
+	 * half of the gate sets the evaluation point to 0, and p_b(0)
+	 * is the secret itself (KEY-SHARE-4). share_split() then gives
+	 * 0, and the caller wraps the secret itself in place of a
+	 * share.
+	 */
+	if (share_split(secret, sizeof(secret), 2, 0, got, sizeof(got)) == 0) {
+		warnx("an oracle index of 0: share_split() takes it");
+		rv = -1;
+	}
+
+	/*
 	 * An oracle index above DERIVE_ORACLE_MAX gives -1 (share.h). A
-	 * removal of that gate casts 256 to the evaluation point 0, and
-	 * p_b(0) is the secret itself (KEY-SHARE-4). share_split() then
-	 * gives 0, and the caller takes the secret for a share.
+	 * removal of that half of the gate casts 256 to the evaluation
+	 * point 0, and p_b(0) is the secret itself (KEY-SHARE-4).
+	 * share_split() then gives 0, and the caller takes the secret
+	 * for a share.
 	 */
 	if (share_split(secret, sizeof(secret), 2, DERIVE_ORACLE_MAX + 1, got,
 	    sizeof(got)) == 0) {
@@ -540,13 +563,53 @@ test_reject(void)
 	}
 
 	/*
-	 * An output length other than PIN_SECRETLEN gives -1 (pin.h). A
-	 * removal of that gate lets bcrypt_pbkdf(3) fill the shorter
-	 * buffer, because its output length is free. pin_secret() then
-	 * gives 0 and a pin secret that no oracle payload takes
-	 * (KEY-PIN-3).
+	 * A secretlen other than DERIVE_KEYLEN gives -1 (share.h). A
+	 * removal of that half of the gate keys every coefficient with
+	 * the shorter secret, and the last step still reads outlen
+	 * bytes of it. share_split() then gives 0 and a share of
+	 * another polynomial. A quorum that mixes the two calls
+	 * reconstructs a wrong key.
+	 */
+	if (share_split(secret, sizeof(secret) - 1, 2, 1, got,
+	    sizeof(got)) == 0) {
+		warnx("a short secret: share_split() takes it");
+		rv = -1;
+	}
+
+	/*
+	 * An outlen other than DERIVE_KEYLEN gives -1 (share.h). A
+	 * removal of that half of the gate evaluates outlen bytes
+	 * alone, and it leaves the last byte of out untouched.
+	 * share_split() then gives 0 and a share with a stale last
+	 * byte, and the reconstruction misses that byte of the key.
+	 */
+	if (share_split(secret, sizeof(secret), 2, 1, got,
+	    sizeof(got) - 1) == 0) {
+		warnx("a short output: share_split() takes it");
+		rv = -1;
+	}
+
+	/*
+	 * A saltlen other than DERIVE_KEYLEN gives -1 (pin.h). A
+	 * removal of that half of the gate hands the short salt to
+	 * bcrypt_pbkdf(3), which takes every salt length above 0.
+	 * pin_secret() then gives 0 and the pin secret of another salt,
+	 * which the oracle record does not match (KEY-PIN-2).
 	 */
 	memset(salt, 'a', sizeof(salt));
+	if (pin_secret(KAT_PIN_PASSPHRASE, strlen(KAT_PIN_PASSPHRASE), salt,
+	    sizeof(salt) - 1, KAT_PIN_ROUNDS, got, PIN_SECRETLEN) == 0) {
+		warnx("a short salt: pin_secret() takes it");
+		rv = -1;
+	}
+
+	/*
+	 * An outlen other than PIN_SECRETLEN gives -1 (pin.h). A
+	 * removal of that half of the gate lets bcrypt_pbkdf(3) fill
+	 * the shorter buffer, because its output length is free.
+	 * pin_secret() then gives 0 and a pin secret that no oracle
+	 * payload takes (KEY-PIN-3).
+	 */
 	if (pin_secret(KAT_PIN_PASSPHRASE, strlen(KAT_PIN_PASSPHRASE), salt,
 	    sizeof(salt), KAT_PIN_ROUNDS, got, PIN_SECRETLEN - 1) == 0) {
 		warnx("a short output: pin_secret() takes it");
