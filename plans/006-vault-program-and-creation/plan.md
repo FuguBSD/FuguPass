@@ -5,14 +5,14 @@
 Proposed. It waits on plan 005 for the record client. Plan 007 to plan 010 wait
 on it.
 
-Implements: CER-CREATE, KEY-DEVICE, KEY-MASK, KEY-ENTRY. Implements: KEY-BIP85
-without KEY-BIP85-6. Implements: TEST-HARNESS without TEST-HARNESS-5.
-Implements: PROG-SPLIT without PROG-SPLIT-4, PROG-SPLIT-5, and PROG-SPLIT-7 to
-PROG-SPLIT-10. Implements: PROG-ONESHOT without PROG-ONESHOT-1 to
-PROG-ONESHOT-3. Implements: ENTRY-POOL without ENTRY-POOL-3 to ENTRY-POOL-9.
-Implements: ORC-REVOKE without ORC-REVOKE-1 to ORC-REVOKE-5 and ORC-REVOKE-7 to
-ORC-REVOKE-10. Implements: SEC-MEMORY without SEC-MEMORY-6. Defers: PROG-IFACE,
-PROG-REPL, PROG-SCAN, PROG-QR, KEY-MASTER.
+Implements: CER-CREATE, KEY-DEVICE, KEY-ENTRY. Implements: KEY-MASK without
+KEY-MASK-10. Implements: KEY-BIP85 without KEY-BIP85-6. Implements: TEST-HARNESS
+without TEST-HARNESS-5. Implements: PROG-SPLIT without PROG-SPLIT-4,
+PROG-SPLIT-5, and PROG-SPLIT-7 to PROG-SPLIT-10. Implements: PROG-ONESHOT
+without PROG-ONESHOT-1 to PROG-ONESHOT-3. Implements: ENTRY-POOL without
+ENTRY-POOL-3 to ENTRY-POOL-9. Implements: ORC-REVOKE without ORC-REVOKE-1 to
+ORC-REVOKE-5 and ORC-REVOKE-7 to ORC-REVOKE-10. Implements: SEC-MEMORY without
+SEC-MEMORY-6. Defers: PROG-IFACE, PROG-REPL, PROG-SCAN, PROG-QR, KEY-MASTER.
 
 Of PROG-SPLIT, this plan lands PROG-SPLIT-1, PROG-SPLIT-2, PROG-SPLIT-3, and
 PROG-SPLIT-6. The helper rules are plan 012, and the interface rules are
@@ -20,10 +20,11 @@ plan 011. Of PROG-ONESHOT it lands the subcommand frame and the first ceremony
 subcommand of PROG-ONESHOT-4, so that rule stays partial. Of ENTRY-POOL it lands
 ENTRY-POOL-1 and ENTRY-POOL-2, the pre-derivation. Of ORC-REVOKE it lands the
 kit export of ORC-REVOKE-6. It completes KEY-DEVICE-2, KEY-MASK-7, KEY-MASK-8,
-and TEST-HARNESS-8. It completes KEY-ENTRY-1 with the slot reservation of the
-pool. It lands KEY-BIP85-5, and plan 007 lands KEY-BIP85-6. It adds SEC-MEMORY-3
-for this program, SEC-MEMORY-4, and SEC-MEMORY-5, so SEC-MEMORY-3 stays partial
-until plan 012 lands the two helpers.
+and TEST-HARNESS-8. Plan 009 lands KEY-MASK-10 with its threshold change. It
+completes KEY-ENTRY-1 with the slot reservation of the pool. It lands
+KEY-BIP85-5, and plan 007 lands KEY-BIP85-6. It adds SEC-MEMORY-3 for this
+program, SEC-MEMORY-4, and SEC-MEMORY-5, so SEC-MEMORY-3 stays partial until
+plan 012 lands the two helpers.
 
 ## Purpose
 
@@ -115,9 +116,9 @@ on a file outside the unveil list after its pledge call.
 ## Acceptance
 
 - `make check` passes on the host, and `make harness` passes.
-- CER-CREATE, KEY-DEVICE, KEY-MASK, and KEY-ENTRY read `done`. TEST-HARNESS,
-  PROG-SPLIT, ENTRY-POOL, and ORC-REVOKE read `partial` with the absent rules
-  named.
+- CER-CREATE, KEY-DEVICE, and KEY-ENTRY read `done`. TEST-HARNESS, PROG-SPLIT,
+  ENTRY-POOL, and ORC-REVOKE read `partial` with the absent rules named.
+- KEY-MASK reads `partial` with KEY-MASK-10 as the absent rule.
 - KEY-BIP85 reads `partial` with KEY-BIP85-6 as the absent rule.
 - The TEST-HARNESS note also names the absent parts of TEST-HARNESS-3. The
   quorum coverage lands in plan 007, and the re-enrollment coverage lands in

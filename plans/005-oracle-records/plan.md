@@ -11,8 +11,8 @@ ORC-ENROLL without the passphrase change rules ORC-ENROLL-4 to ORC-ENROLL-12.
 Implements: ORC-CANARY without ORC-CANARY-1, ORC-CANARY-3, ORC-CANARY-4, and
 ORC-CANARY-8 to ORC-CANARY-10. Implements: ORC-PROVISION without ORC-PROVISION-3
 and ORC-PROVISION-6 to ORC-PROVISION-8. Implements: SEC-ENTROPY. Implements:
-KEY-MASK without KEY-MASK-8. Implements: TEST-HARNESS without TEST-HARNESS-5 and
-TEST-HARNESS-8. Defers: ORC-QUORUM, ENTRY-POOL, CER-CREATE.
+KEY-MASK without KEY-MASK-8 and KEY-MASK-10. Implements: TEST-HARNESS without
+TEST-HARNESS-5 and TEST-HARNESS-8. Defers: ORC-QUORUM, ENTRY-POOL, CER-CREATE.
 
 This plan lands the record side of the canary: ORC-CANARY-2, ORC-CANARY-5,
 ORC-CANARY-6, ORC-CANARY-7, and ORC-CANARY-11. The session rules of the canary
@@ -20,9 +20,9 @@ are plan 007, and ORC-CANARY-10 is a statement of plan 013. Of ORC-PROVISION it
 lands ORC-PROVISION-1, ORC-PROVISION-2, ORC-PROVISION-4, ORC-PROVISION-5, and
 ORC-PROVISION-9. The list changes are plan 009, and the statements are plan 013.
 It completes ORC-CONFORM, KEY-MASK-4, and SEC-ENTROPY-4. KEY-MASK-8 is the plate
-ceremony of plan 006. Plan 006 also writes the index wrap of KEY-MASK-7. The
-quorum leg and the terminal driver of the harness follow in plan 006 and
-plan 007.
+ceremony of plan 006. Plan 006 also writes the index wrap of KEY-MASK-7. Plan
+009 lands KEY-MASK-10 with its threshold change. The quorum leg and the terminal
+driver of the harness follow in plan 006 and plan 007.
 
 ## Purpose
 
