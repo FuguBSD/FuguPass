@@ -24,8 +24,9 @@
  * list FuguSeed LIST-SOURCE-1. The words sit here as C data, so
  * FuguPass reads no file of FuguSeed at a build and at a run.
  *
- * The words are unique and sorted, so wordlist_index() searches them
- * with a bisection. The table is public data and holds no secret.
+ * The table is public data and holds no secret. The word of a
+ * caller of wordlist_index() can be a secret, so that function reads
+ * every entry at each call (SEC-MEMORY-2).
  */
 
 #include <string.h>
@@ -390,29 +391,44 @@ wordlist_word(size_t index, char *buf, size_t buflen)
 int
 wordlist_index(const char *word, size_t wordlen, size_t *index)
 {
-	size_t	 low = 0, high = WORDLIST_COUNT, middle;
-	int	 order;
+	unsigned char	 have[WORDLIST_MAX], want[WORDLIST_MAX];
+	size_t		 i, len, mask, found = WORDLIST_COUNT;
+	int		 hit;
 
-	while (low < high) {
-		middle = low + (high - low) / 2;
-		order = strncmp(wordlist[middle], word, wordlen);
+	if (wordlen > sizeof(want))
+		return -1;
 
-		/*
-		 * strncmp() compares wordlen bytes, so a longer
-		 * word of the table matches a prefix of the word
-		 * of the caller. Such a word sorts after it.
-		 */
-		if (order == 0 && wordlist[middle][wordlen] != '\0')
-			order = 1;
+	/*
+	 * The word of the caller can be a word of the scanned master,
+	 * and that master is a secret (KEY-MASTER-3). The scan
+	 * therefore reads every entry and stops at no match: an early
+	 * stop tells the index of the word by the time of the call
+	 * (SEC-MEMORY-2). A bisection leaks the same index through its
+	 * branch path, so the comparison primitive alone is not
+	 * sufficient.
+	 *
+	 * Each buffer holds the bytes of one word, and zero after
+	 * them. Two equal buffers are therefore two equal words. Every
+	 * word of the list is WORDLIST_MAX bytes or shorter, and the
+	 * digest test proves the list.
+	 */
+	memset(want, 0, sizeof(want));
+	memcpy(want, word, wordlen);
+	for (i = 0; i < WORDLIST_COUNT; i++) {
+		len = strnlen(wordlist[i], sizeof(have));
+		memset(have, 0, sizeof(have));
+		memcpy(have, wordlist[i], len);
 
-		if (order < 0)
-			low = middle + 1;
-		else if (order > 0)
-			high = middle;
-		else {
-			*index = middle;
-			return 0;
-		}
+		/* mask is every bit on a match, and zero on a miss. */
+		hit = timingsafe_bcmp(have, want, sizeof(want)) == 0;
+		mask = (size_t)0 - (size_t)hit;
+		found = (found & ~mask) | (i & mask);
 	}
-	return -1;
+	explicit_bzero(want, sizeof(want));
+	explicit_bzero(have, sizeof(have));
+
+	if (found == WORDLIST_COUNT)
+		return -1;
+	*index = found;
+	return 0;
 }

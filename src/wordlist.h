@@ -21,8 +21,9 @@
  * is its 0-based position in the list.
  *
  * Both functions return 0, or -1 on a failure. A failed call writes
- * nothing to an output. The list is public data, so neither function
- * holds a secret.
+ * nothing to an output. The list is public data. The word that a
+ * caller gives to wordlist_index() can be a secret, so that function
+ * reads the whole list at each call (SEC-MEMORY-2).
  */
 
 #ifndef WORDLIST_H
