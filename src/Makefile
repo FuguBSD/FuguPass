@@ -24,6 +24,12 @@
 # directories only. Each program gets a directory of its own, and
 # that directory reads bsd.prog.mk.
 
+# The regress loop links the archive of lib, so it must run after the
+# build loop. bsd.subdir.mk declares regress with the double-colon
+# operator, and this line must use the same operator.
+
+regress:: all
+
 SUBDIR=	lib regress
 
 .include <bsd.subdir.mk>

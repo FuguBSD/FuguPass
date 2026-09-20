@@ -24,9 +24,11 @@
 #
 # The archive one directory up links nothing, so this directory owns
 # the link line of the two libraries. libsecp256k1 comes from the
-# ports tree, under LOCALBASE. The lookup of the archive follows
-# usr.bin/ssh/Makefile.inc of the OpenBSD tree: an object directory
-# holds the archive when it exists.
+# ports tree, under LOCALBASE. The lookup of the archive tests the
+# obj directory of lib. make obj puts the archive there, and a tree
+# without make obj holds the archive in lib. This file writes the
+# literal name obj, because make reads the condition before
+# bsd.own.mk sets ${__objdir}.
 
 .include <bsd.own.mk>
 
@@ -39,9 +41,9 @@ CFLAGS+=	-I${.CURDIR}/../../tests
 LOCALBASE?=	/usr/local
 LIBFUGUPASS=	${.CURDIR}/../lib
 
-.if exists(${LIBFUGUPASS}/${__objdir})
-LDADD+=		-L${LIBFUGUPASS}/${__objdir} -lfugupass
-DPADD+=		${LIBFUGUPASS}/${__objdir}/libfugupass.a
+.if exists(${LIBFUGUPASS}/obj)
+LDADD+=		-L${LIBFUGUPASS}/obj -lfugupass
+DPADD+=		${LIBFUGUPASS}/obj/libfugupass.a
 .else
 LDADD+=		-L${LIBFUGUPASS} -lfugupass
 DPADD+=		${LIBFUGUPASS}/libfugupass.a
