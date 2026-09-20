@@ -191,6 +191,6 @@ quorum.
 TEST-ANALYSIS-3 requires one human approval of this analysis, and D-19 makes the
 approval part of the acceptance of the custody layer. The approver reads
 sections 2, 3 and 7, and accepts the assumptions and the residual risks. The
-approver then replaces both placeholders of the line below.
+line below records that approval, with the name and the date.
 
 Approved by `D. Olsson` on `2026-09-21`.

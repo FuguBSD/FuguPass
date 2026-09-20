@@ -113,11 +113,12 @@ RNG (SEC-ENTROPY-1, SEC-ENTROPY-7). The plate re-derives every share through
 `K_e`, with no oracle and no stored coefficient
 ([REC-PLATE](../../spec/recovery.md#rec-plate)).
 
-Two flows show why the coefficients must be deterministic. Each flow needs a
-share at an index that no live wrap covers. KEY-SHARE-8 forbids a share on disk,
-and forbids a retained share between uses. Every use re-derives the coefficients
-from the split secret, and evaluates the polynomial. The secret in hand is
-therefore the only source of a missing share.
+Two flows show what determinism gives. Each flow needs a share at an index that
+no live wrap covers. KEY-SHARE-8 forbids a share on disk, and forbids a retained
+share between uses. Every use re-derives the coefficients from the split secret,
+and evaluates the polynomial. The secret in hand is therefore all that each flow
+needs. A random split would make each flow collect shares first, and the
+subsection below states that cost.
 
 - **A canary repair.** A canary re-enrollment at oracle `i` replaces that
   oracle's canary mask, and this machine's index wrap of that oracle dies. A
@@ -134,24 +135,48 @@ therefore the only source of a missing share.
 
 ### Alternatives considered
 
+Each alternative below is possible. Each one costs more on the two flows above,
+and this subsection states that cost.
+
 **A random coefficient set.** The machine draws a fresh set at provisioning,
-writes every wrap in one pass, and discards the set. Neither flow above can then
-rebuild its missing share. An added oracle would need the original polynomial.
-The tool must collect `k` shares from a quorum, and interpolate it first. The
-below-threshold secrecy would also rest on the system RNG, and SEC-ENTROPY-7
-forbids that draw. A predictable RNG gives the coefficients, and one share then
-gives the secret. This alternative moves no floor either. The plate check value
-sits on the disk (KEY-MASTER-5, VAULT-CONFIG-5). It tests a candidate master at
-128 bits, with no share at all.
+writes every wrap in one pass, and discards the set. Each flow above then
+rebuilds its missing share by interpolation. A session that opens the index
+opens `k` index wraps, so it sees `k` shares of `K_idx` at distinct indexes
+(ORC-CANARY-3, KEY-MASK-7). Those `k` points fix the degree `k − 1` polynomial
+(KEY-SHARE-6), and the session evaluates it at the dead index. The canary repair
+still completes with no `root` and no ceremony. The added-oracle ceremony runs
+the same step once for each slot. It first opens `k` existing wraps of each
+`K_e`. That step needs `k` live oracles, where CER-PROVISION-14 needs none of
+them today.
+
+A fresh re-split is not an alternative to the interpolation. It would put a
+second plaintext under every unrotated wrap key, and KEY-MASK-10 forbids that.
+
+Four costs separate this alternative from the chosen design.
+
+- **The inputs.** The deterministic split needs the secret in hand alone. This
+  alternative needs a quorum's shares as well. A session that takes `K_idx` from
+  the plate holds no share (KEY-MASK-8), and it must reach a quorum first.
+- **What the tool holds.** The tool would assemble a share set in memory for
+  each interpolation. The deterministic split holds no share beyond the one that
+  each flow writes.
+- **The RNG.** The below-threshold secrecy would rest on the system RNG. A
+  predictable RNG gives the coefficients, and one share then gives the secret.
+  SEC-ENTROPY-7 forbids that draw today, so this alternative also needs a change
+  of the specification.
+- **The floor.** Neither design moves it. The plate check value sits on the disk
+  (KEY-MASTER-5, VAULT-CONFIG-5). It tests a candidate master at 128 bits, with
+  no share at all.
 
 **A root-keyed coefficient.** The tool derives `A_j` from `root`, under a label
 that carries the slot. `S` then leaves the key of `f`. The attacker's view no
-longer holds `S` in the key of `f` and in the linear terms together. The
-alternative fails on two counts. The canary repair needs `root` under it, so
-that repair becomes a plate ceremony. ORC-CANARY-5 grants that repair at any
-time, without a ceremony, and this alternative takes the grant away. The index
-key carries the second count. `K_idx` has no slot number (KEY-MASK-6), so the
-proposed label has no form for it.
+longer holds `S` in the key of `f` and in the linear terms together. A direct
+re-derivation of a missing share needs `root` under this variant. D-12 keeps the
+master absent outside a ceremony, so the canary repair interpolates here too,
+and it keeps the grant of ORC-CANARY-5. The deterministic split needs `K_idx`
+alone. The index key adds one design task, and not a reason to reject the
+variant. `K_idx` has no slot number (KEY-MASK-6), so this variant needs a second
+label form for it.
 
 ## 5. The domain separation of the coefficient labels
 
@@ -255,7 +280,7 @@ of that entry.
 TEST-SPLIT-2 requires one human approval of this analysis, and D-19 makes the
 approval part of the acceptance of the custody layer. The approver reads
 sections 2, 3 and 9, and accepts the move from an unconditional claim to a
-computational one. The approver then replaces both placeholders of the line
-below.
+computational one. The line below records that approval, with the name and the
+date.
 
 Approved by `D. Olsson` on `2026-09-21`.
