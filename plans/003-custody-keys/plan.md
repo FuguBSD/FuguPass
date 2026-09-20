@@ -56,7 +56,12 @@ reduction uses the `BN` functions of `libcrypto` with the constant-time flag
 **The passphrase touches one function.** `pin_ei` is `bcrypt_pbkdf(3)` from
 `libutil` over the passphrase and `salt_ei`, with the round count as an argument
 and 32 output bytes (KEY-PIN-3). No other function takes the passphrase
-(KEY-DERIVE-4).
+(KEY-DERIVE-4). The Python standard library holds no `bcrypt_pbkdf(3)`, so a
+third one-time generator, `tests/vectors/generate-pin.py`, writes the `pin_ei`
+vector. It runs on the `bcrypt` module of PyPI, outside the dependency set, so
+`deps/` gains no entry. The developer runs it once and commits the vector, as
+with the share generator. `docs/analysis/share-arithmetic-sources.md` names this
+source too.
 
 **Two documents wait for a human.** `docs/analysis/mask-composition.md` covers
 the key reuse across reveals, the KDF of the mask, and the wrap XOR of a share
@@ -68,19 +73,20 @@ approval line. The reviewer fills the name and the date at the merge, or the
 unit stays `partial`.
 
 **The vectors come from implementations that this project does not own.** Two
-generators write them, and they pin every part of TEST-SPLIT-4 (D-15). The
-`hmac` module of the Python standard library is an independent HMAC-SHA256.
-`tests/vectors/generate.py` keeps each coefficient `f(S, label)` of KEY-SHARE-3
-on that module, because `f` is HMAC-SHA256 (KEY-DERIVE-1). A separate one-time
-generator, `tests/vectors/generate-share.py`, produces the field operations, the
-share evaluation, and the reconstruction. It runs on an independent GF(256)
-Shamir implementation, outside the dependency set of this repository, so `deps/`
-gains no entry. The developer runs it once and commits the vectors.
-`docs/analysis/share-arithmetic-sources.md` names that implementation, and the
-source evaluation records both sources (TEST-SPLIT-5). The label strings come
-from `spec/keys.md`, which is specification and not an implementation. The
-vectors cover the thresholds 1, 2, and 3 with up to 5 oracles, and threshold 1
-holds the `k = 1` reduction. The committed header pins the C code.
+generators write the share vectors, and they pin every part of TEST-SPLIT-4
+(D-15). The `hmac` module of the Python standard library is an independent
+HMAC-SHA256. `tests/vectors/generate.py` keeps each coefficient `f(S, label)` of
+KEY-SHARE-3 on that module, because `f` is HMAC-SHA256 (KEY-DERIVE-1). A
+separate one-time generator, `tests/vectors/generate-share.py`, produces the
+field operations, the share evaluation, and the reconstruction. It runs on an
+independent GF(256) Shamir implementation, outside the dependency set of this
+repository, so `deps/` gains no entry. The developer runs it once and commits
+the vectors. `docs/analysis/share-arithmetic-sources.md` names that
+implementation, and the source evaluation records both sources (TEST-SPLIT-5).
+The label strings come from `spec/keys.md`, which is specification and not an
+implementation. The vectors cover the thresholds 1, 2, and 3 with up to 5
+oracles, and threshold 1 holds the `k = 1` reduction. The committed header pins
+the C code.
 
 ## Files
 
@@ -92,7 +98,8 @@ holds the `k = 1` reduction. The committed header pins the C code.
 | `src/regress/share.c`                       | The tests below                                                     |
 | `tests/vectors/generate.py`                 | The eight custody labels and the coefficients                       |
 | `tests/vectors/generate-share.py`           | The share generator, outside the dependency set                     |
-| `tests/vectors/share.h`                     | The committed vectors of both generators                            |
+| `tests/vectors/generate-pin.py`             | The pin generator, outside the dependency set                       |
+| `tests/vectors/share.h`                     | The committed vectors of the three generators                       |
 | `docs/analysis/mask-composition.md`         | The analysis of TEST-ANALYSIS                                       |
 | `docs/analysis/share-split.md`              | The analysis of TEST-SPLIT-1                                        |
 | `docs/analysis/share-arithmetic-sources.md` | The source evaluation of TEST-SPLIT-5                               |
