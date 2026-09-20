@@ -111,8 +111,47 @@ sub-quorum claim.
 Determinism keeps the entropy rule exact: no stored secret comes from the system
 RNG (SEC-ENTROPY-1, SEC-ENTROPY-7). The plate re-derives every share through
 `K_e`, with no oracle and no stored coefficient
-([REC-PLATE](../../spec/recovery.md#rec-plate)). A random coefficient set would
-need a durable store of its own, and that store would be a second root of trust.
+([REC-PLATE](../../spec/recovery.md#rec-plate)).
+
+Two flows show why the coefficients must be deterministic. Each flow needs a
+share at an index that no live wrap covers. KEY-SHARE-8 forbids a share on disk,
+and forbids a retained share between uses. Every use re-derives the coefficients
+from the split secret, and evaluates the polynomial. The secret in hand is
+therefore the only source of a missing share.
+
+- **A canary repair.** A canary re-enrollment at oracle `i` replaces that
+  oracle's canary mask, and this machine's index wrap of that oracle dies. A
+  client that holds `K_idx` in session memory must re-wrap at once. It must
+  re-derive `share(K_idx, i)`, and it must wrap that share under the fresh
+  canary mask (ORC-CANARY-8). The old mask never returns (REC-WIPE-3). The
+  client can run this repair at any time, without a ceremony (ORC-CANARY-5). The
+  master stays absent outside a ceremony (D-12), so `root` is out of reach here.
+- **An added oracle.** An added oracle takes the next free position. For each
+  slot, the tool re-derives the split of `K_e`, and evaluates the share at the
+  new index (CER-PROVISION-14). The oracle is new, so no wrap holds a share at
+  that index. This ceremony does hold `root` (CER-PROVISION-1), and `root` gives
+  `K_e`. It gives no coefficient of a random split.
+
+### Alternatives considered
+
+**A random coefficient set.** The machine draws a fresh set at provisioning,
+writes every wrap in one pass, and discards the set. Neither flow above can then
+rebuild its missing share. An added oracle would need the original polynomial.
+The tool must collect `k` shares from a quorum, and interpolate it first. The
+below-threshold secrecy would also rest on the system RNG, and SEC-ENTROPY-7
+forbids that draw. A predictable RNG gives the coefficients, and one share then
+gives the secret. This alternative moves no floor either. The plate check value
+sits on the disk (KEY-MASTER-5, VAULT-CONFIG-5). It tests a candidate master at
+128 bits, with no share at all.
+
+**A root-keyed coefficient.** The tool derives `A_j` from `root`, under a label
+that carries the slot. `S` then leaves the key of `f`. The attacker's view no
+longer holds `S` in the key of `f` and in the linear terms together. The
+alternative fails on two counts. The canary repair needs `root` under it, so
+that repair becomes a plate ceremony. ORC-CANARY-5 grants that repair at any
+time, without a ceremony, and this alternative takes the grant away. The index
+key carries the second count. `K_idx` has no slot number (KEY-MASK-6), so the
+proposed label has no form for it.
 
 ## 5. The domain separation of the coefficient labels
 
