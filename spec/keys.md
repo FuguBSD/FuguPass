@@ -257,6 +257,13 @@ own analysis ([TEST-SPLIT](testing.md#test-split)).
   ([KEY-SHARE](keys.md#key-share)).
 - **KEY-MASK-8** — A plate ceremony re-derives `K_idx` directly from `root`.
 - **KEY-MASK-9** — No offline passphrase verifier exists on disk.
+- **KEY-MASK-10** — One wrap key covers exactly one plaintext for the life of
+  the record. A reveal reads a wrap and writes none, so a reveal adds no
+  plaintext. A re-split of the split secret under an unrotated mask is the one
+  path that breaks this rule. The share changes, and the secret, the oracle
+  index, and the label stay the same. This rule covers `K_e` and `K_idx`
+  ([KEY-SHARE](keys.md#key-share)). CER-PROVISION-15 closes that path
+  ([CER-PROVISION](ceremonies.md#cer-provision)).
 
 `c_ei` alone is ciphertext, and `s_ei` alone is a meaningless string at the
 oracle (D-06). A daily index read unwraps `k` index shares through the session's

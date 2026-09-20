@@ -32,9 +32,14 @@ Every step of every BIP85 path is hardened, so the script needs no
 point of the curve. One addition modulo the order of the group gives
 the private key of a child.
 
+The custody vectors need one oracle answer, and this script sends
+no request. Two public test masks stand in place of an answer, and
+the header names them as public constants.
+
 The script proves its own data before it prints. It proves the word
 list against the pinned digest, and it proves the BIP85 master
-against the extended key of the BIP85 document. A failed proof stops
+against the extended key of the BIP85 document. It proves that the
+client key falls inside the range of the curve. A failed proof stops
 the run, and the script prints nothing.
 """
 
@@ -83,10 +88,20 @@ BIP39_APP = 39
 BIP39_ENGLISH = 0
 BIP39_WORDS = 12
 
-# The two labels of this plan, from the label table of spec/keys.md.
-# Every label carries the prefix, and the entry label carries the
-# slot index as unpadded decimal ASCII (KEY-ENTRY-2, KEY-MASTER-5).
+# The ten labels of the tree, in the order of the label table of
+# spec/keys.md. Every label carries the prefix, and a label suffix
+# stands directly after the label string. A slot index, an oracle
+# index, a threshold and a coefficient index are unpadded decimal
+# ASCII (KEY-DERIVE-2).
 LABEL_ENTRY_KEY = "fugupass/v1/entry-key"
+LABEL_DEVICE_FACTOR = "fugupass/v1/device-factor"
+LABEL_CLIENT_KEY = "fugupass/v1/client-key"
+LABEL_PIN_SALT = "fugupass/v1/pin-salt"
+LABEL_WRAP = "fugupass/v1/wrap"
+LABEL_SHAMIR = "fugupass/v1/shamir/"
+LABEL_INDEX_KEY = "fugupass/v1/index-key"
+LABEL_WRAP_INDEX = "fugupass/v1/wrap-index"
+LABEL_CANARY_CHECK = "fugupass/v1/canary-check"
 LABEL_PLATE_CHECK = "fugupass/v1/plate-check"
 
 # The fixed test master of the tests. It is a public constant, and
@@ -96,6 +111,34 @@ TEST_MASTER = (
     "abandon abandon abandon abandon abandon abandon "
     "abandon abandon abandon abandon abandon about")
 TEST_SLOT = 17
+
+# The machine name, the oracle index, and the canary form of the
+# record suffix. The name holds lower-case letters, digits and
+# hyphens (KEY-DEVICE-3). The oracle index counts from 1, and the
+# canary form stands in place of the slot index (KEY-CLIENT-3,
+# KEY-PIN-2).
+TEST_MACHINE = "laptop-1"
+TEST_ORACLE = 2
+CANARY = "canary"
+
+# The thresholds of the coefficient vectors. The coefficient label
+# carries the threshold, so one threshold value proves nothing about
+# another one (KEY-SHARE-3).
+TEST_THRESHOLDS = (2, 3)
+
+# The two masks of the vectors. They are public test constants, and
+# they are not secrets. A real mask is the 32-byte answer of an
+# oracle, and the client stores no mask (KEY-MASK-1, KEY-MASK-2). A
+# test needs a fixed input, so these bytes stand in place of an
+# answer.
+TEST_MASK = bytes(range(32))
+TEST_CANARY_MASK = bytes(range(32, 64))
+
+# A public test material of the client key, above q - 1. A real
+# t_ei above q - 1 is out of reach of a test, because q is close to
+# 2^256. This constant takes the reduction of KEY-CLIENT-2 through
+# the modulus, and not through the addition of 1 alone.
+TEST_EDGE_MATERIAL = b"\xff" * 32
 
 # The master of the test vectors of BIP85, and the BIP85 index of
 # each of those vectors. The document names the master as one BIP32
@@ -157,8 +200,15 @@ HEADER = f"""/*
  *
  * KAT_TEST_* comes from the fixed test master, a public constant of
  * the tests. BIP39 fixes root, and it publishes the seed of this
- * master as a test vector. The label table of spec/keys.md fixes the
- * two labels, and KEY-DERIVE-1 fixes f.
+ * master as a test vector. The label table of spec/keys.md fixes
+ * every label, and KEY-DERIVE-1 fixes f. These vectors cover each of
+ * the ten labels of that table.
+ *
+ * KAT_TEST_MASK and KAT_TEST_CANARY_MASK are public test constants,
+ * and they are not secrets. A real mask is the 32-byte answer of an
+ * oracle, and the client stores no mask (KEY-MASK-1, KEY-MASK-2). A
+ * test needs a fixed input, so these bytes stand in place of an
+ * answer.
  *
  * KAT_BIP85_* comes from the master of the test vectors of BIP85.
  * That document prints the password and the child mnemonic beside
@@ -645,6 +695,68 @@ def plate_check(root):
     return _f(root, LABEL_PLATE_CHECK)
 
 
+def device_factor(root, machine):
+    """X: the device factor of one machine name (KEY-DEVICE-1)."""
+    return _f(root, LABEL_DEVICE_FACTOR + machine)
+
+
+def record_suffix(oracle, slot):
+    """The per-record suffix i/e, or i/canary (spec/keys.md)."""
+    return f"{oracle}/{slot}"
+
+
+def client_material(factor, suffix):
+    """t_ei: the client key material of one record (KEY-CLIENT-1)."""
+    return _f(factor, LABEL_CLIENT_KEY + suffix)
+
+
+def client_key(material):
+    """ck_ei: (t_ei mod (q - 1)) + 1, as 32 bytes (KEY-CLIENT-2).
+
+    The reduction holds the key in the range 1 to q - 1. Python
+    reads the material as one big-endian integer, so the script
+    needs no library of big numbers.
+    """
+    number = int.from_bytes(material, "big") % (GROUP_ORDER - 1) + 1
+    return number.to_bytes(32, "big")
+
+
+def pin_salt(factor, suffix):
+    """salt_ei: the pin salt of one record (KEY-PIN-2)."""
+    return _f(factor, LABEL_PIN_SALT + suffix)
+
+
+def wrap_key(mask, suffix):
+    """wk_ei: the wrap key of one record, from its mask (KEY-MASK-3)."""
+    return _f(mask, LABEL_WRAP + suffix)
+
+
+def index_key(root):
+    """K_idx: the key of the index file (KEY-MASK-6)."""
+    return _f(root, LABEL_INDEX_KEY)
+
+
+def index_wrap_key(mask, oracle):
+    """The index wrap key of one oracle (KEY-MASK-7).
+
+    The key comes from the canary mask of that oracle.
+    """
+    return _f(mask, LABEL_WRAP_INDEX + str(oracle))
+
+
+def canary_check_key(mask, oracle):
+    """The seal key of the canary check of one oracle (KEY-MASK-5).
+
+    The key comes from the canary mask of that oracle.
+    """
+    return _f(mask, LABEL_CANARY_CHECK + str(oracle))
+
+
+def coefficient(secret, threshold, index):
+    """A_j: coefficient j of one split, at the threshold (KEY-SHARE-3)."""
+    return _f(secret, f"{LABEL_SHAMIR}{threshold}/{index}")
+
+
 def _base58_decode(text):
     """The body of the base58 text, with the 4 check bytes proven.
 
@@ -724,6 +836,112 @@ def _define_text(name, parts):
         print(f"\t\"{part}\"{tail}")
 
 
+def _print_custody(root, secret):
+    """Compute and print the custody vectors (TEST-KAT-4).
+
+    The values come from the fixed test master, the fixed machine
+    name, and the two public test masks. The coefficients split the
+    secret, and the caller passes the entry key of the test slot.
+    """
+    entry = record_suffix(TEST_ORACLE, TEST_SLOT)
+    canary = record_suffix(TEST_ORACLE, CANARY)
+    factor = device_factor(root, TEST_MACHINE)
+    material = client_material(factor, entry)
+    key = client_key(material)
+    canary_key = client_key(client_material(factor, canary))
+    edge_key = client_key(TEST_EDGE_MATERIAL)
+    for name, value in (("client", key), ("canary", canary_key),
+                        ("edge", edge_key)):
+        if not 1 <= int.from_bytes(value, "big") < GROUP_ORDER:
+            _fail(f"the {name} key falls outside the range of the curve")
+    if int.from_bytes(edge_key, "big") >= int.from_bytes(
+            TEST_EDGE_MATERIAL, "big"):
+        _fail("the edge material takes no reduction")
+
+    print("/* The machine name of the device factor below"
+          " (KEY-DEVICE-3). */")
+    _define_text("KAT_TEST_MACHINE", _text_parts(TEST_MACHINE))
+    print()
+    print("/* The device factor: f(root, "
+          f"\"{LABEL_DEVICE_FACTOR}{TEST_MACHINE}\"). */")
+    _define_text("KAT_TEST_DEVICE_FACTOR", _hex_parts(factor))
+    print()
+    print("/* The oracle index of the record vectors below. */")
+    _define("KAT_TEST_ORACLE", TEST_ORACLE)
+    print()
+    print("/* The client key material: f(X, "
+          f"\"{LABEL_CLIENT_KEY}{entry}\"). */")
+    _define_text("KAT_TEST_CLIENT_MATERIAL", _hex_parts(material))
+    print()
+    print("/* The client key of that material: (t mod (q - 1)) + 1. */")
+    _define_text("KAT_TEST_CLIENT_KEY", _hex_parts(key))
+    print()
+    print("/*")
+    print(" * The canary client key: the same reduction of")
+    print(f" * f(X, \"{LABEL_CLIENT_KEY}{canary}\").")
+    print(" */")
+    _define_text("KAT_TEST_CANARY_CLIENT_KEY", _hex_parts(canary_key))
+    print()
+    print("/* A public test material of 32 bytes 0xff, above"
+          " q - 1. */")
+    _define_text("KAT_TEST_EDGE_MATERIAL", _hex_parts(TEST_EDGE_MATERIAL))
+    print()
+    print("/* The client key of that material, through the"
+          " modulus. */")
+    _define_text("KAT_TEST_EDGE_CLIENT_KEY", _hex_parts(edge_key))
+    print()
+    print(f"/* The pin salt: f(X, \"{LABEL_PIN_SALT}{entry}\"). */")
+    _define_text("KAT_TEST_PIN_SALT", _hex_parts(pin_salt(factor, entry)))
+    print()
+    print("/* The canary pin salt: f(X, "
+          f"\"{LABEL_PIN_SALT}{canary}\"). */")
+    _define_text(
+        "KAT_TEST_CANARY_PIN_SALT", _hex_parts(pin_salt(factor, canary)))
+    print()
+    print("/* A public test mask of the record, in place of an"
+          " answer. */")
+    _define_text("KAT_TEST_MASK", _hex_parts(TEST_MASK))
+    print()
+    print("/* A public test mask of the canary record. */")
+    _define_text("KAT_TEST_CANARY_MASK", _hex_parts(TEST_CANARY_MASK))
+    print()
+    print("/* The wrap key: f(mask, "
+          f"\"{LABEL_WRAP}{entry}\"). */")
+    _define_text(
+        "KAT_TEST_WRAP_KEY", _hex_parts(wrap_key(TEST_MASK, entry)))
+    print()
+    print(f"/* The index key: f(root, \"{LABEL_INDEX_KEY}\"). */")
+    _define_text("KAT_TEST_INDEX_KEY", _hex_parts(index_key(root)))
+    print()
+    print("/* The index wrap key: f(canary mask, "
+          f"\"{LABEL_WRAP_INDEX}{TEST_ORACLE}\"). */")
+    _define_text(
+        "KAT_TEST_INDEX_WRAP_KEY",
+        _hex_parts(index_wrap_key(TEST_CANARY_MASK, TEST_ORACLE)))
+    print()
+    print("/*")
+    print(" * The canary check seal key:")
+    print(f" * f(canary mask, \"{LABEL_CANARY_CHECK}{TEST_ORACLE}\").")
+    print(" */")
+    _define_text(
+        "KAT_TEST_CANARY_CHECK_KEY",
+        _hex_parts(canary_check_key(TEST_CANARY_MASK, TEST_ORACLE)))
+    print()
+    print("/*")
+    print(" * The coefficients of the split of KAT_TEST_ENTRY_KEY")
+    print(" * (KEY-SHARE-3). A name carries the threshold and the")
+    print(" * coefficient index, as the label does:")
+    print(" * KAT_TEST_COEFF_K3_1 comes from")
+    print(f" * f(K_e, \"{LABEL_SHAMIR}3/1\").")
+    print(" */")
+    for threshold in TEST_THRESHOLDS:
+        for index in range(1, threshold):
+            _define_text(
+                f"KAT_TEST_COEFF_K{threshold}_{index}",
+                _hex_parts(coefficient(secret, threshold, index)))
+            print()
+
+
 def main():
     """Prove the data of the script, and print the header."""
     _check_wordlist()
@@ -757,6 +975,7 @@ def main():
     print(f"/* The plate check value: f(root, \"{LABEL_PLATE_CHECK}\"). */")
     _define_text("KAT_TEST_PLATE_CHECK", _hex_parts(test_plate_check))
     print()
+    _print_custody(test_root, test_entry_key)
     print("/* The 12 words of the master of the BIP85 test vectors. */")
     _define_text("KAT_BIP85_MASTER", _text_parts(BIP85_MASTER))
     print()

@@ -5,10 +5,10 @@
 Proposed. It waits on plan 008 for the change marker. It completes the quorum
 leg of the harness.
 
-Implements: REC-WIPE, TEST-HARNESS, CER-PROVISION. Implements: VAULT-INDEX.
-Implements: ORC-REVOKE without ORC-REVOKE-7 and ORC-REVOKE-9. Implements:
-ORC-PROVISION without ORC-PROVISION-3 and ORC-PROVISION-8. Implements:
-ORC-COUNTER without ORC-COUNTER-7.
+Implements: REC-WIPE, TEST-HARNESS, CER-PROVISION. Implements: VAULT-INDEX,
+KEY-MASK. Implements: ORC-REVOKE without ORC-REVOKE-7 and ORC-REVOKE-9.
+Implements: ORC-PROVISION without ORC-PROVISION-3 and ORC-PROVISION-8.
+Implements: ORC-COUNTER without ORC-COUNTER-7.
 
 Of ORC-PROVISION, this plan lands ORC-PROVISION-6 and ORC-PROVISION-7, the list
 changes. Of VAULT-INDEX, this plan lands VAULT-INDEX-7, the retirement mark. It
@@ -18,7 +18,8 @@ new threshold before any enrollment. The last sentence of CER-PROVISION-13 is a
 documentation statement, and plan 013 lands it. CER-PROVISION stays partial on
 that sentence. ORC-PROVISION-3, ORC-PROVISION-8, ORC-COUNTER-7, ORC-REVOKE-7,
 and ORC-REVOKE-9 are statements of plan 013 too. It completes TEST-HARNESS-5
-with the provisioning loop.
+with the provisioning loop. CER-PROVISION-15 re-enrolls every record with a
+fresh mask, so this plan completes KEY-MASK-10.
 
 ## Purpose
 
@@ -125,7 +126,7 @@ The harness holds, against the 2-of-3 topology of TEST-HARNESS-5:
 ## Acceptance
 
 - `make check` passes on the host, and `make harness` passes.
-- REC-WIPE, TEST-HARNESS, and VAULT-INDEX read `done`. ORC-PROVISION,
+- REC-WIPE, TEST-HARNESS, VAULT-INDEX, and KEY-MASK read `done`. ORC-PROVISION,
   ORC-COUNTER, and ORC-REVOKE read `partial` with the absent rules named.
 - CER-PROVISION reads `partial`, and the documentation sentence of
   CER-PROVISION-13 is the absent part.

@@ -156,12 +156,20 @@ run these steps in rule order.
   stay unchanged.
 - **CER-PROVISION-15** — A threshold change changes every share. The tool must
   re-split every `K_e` and `K_idx` with the new `k`
-  ([KEY-SHARE](keys.md#key-share)). It must re-enroll this machine's record at
-  every live oracle with a fresh `set_pin`. It must recompute every wrap on this
+  ([KEY-SHARE](keys.md#key-share)). It must re-enroll every record of this
+  machine at every live oracle with a fresh `set_pin`. This covers each entry
+  record and the canary record of each oracle
+  ([ORC-RECORDS](oracle.md#orc-records)). It must recompute every wrap on this
   machine, canaries and index wraps included. A stale wrap under a live mask
   would keep the old threshold reachable, so the tool must obtain fresh masks.
-  The tool must persist the change marker with the kind `threshold` before the
-  first `set_pin`, in the machine-local set
+  That availability reason carries the fresh-mask duty. A record that kept its
+  mask would also wrap the old share and the new share under one wrap key. A
+  holder of both wraps reads the XOR of the two shares. That value gives an
+  offline test of a candidate master. The plate check value on the disk already
+  gives a cheaper test ([KEY-MASTER](keys.md#key-master),
+  [VAULT-CONFIG](vault.md#vault-config)), so the case adds no new capability
+  against the master. The tool must persist the change marker with the kind
+  `threshold` before the first `set_pin`, in the machine-local set
   ([VAULT-LAYOUT](vault.md#vault-layout),
   [VAULT-FORMAT](vault.md#vault-format)). While the marker exists, a session
   must refuse reveals and must name the re-run of this ceremony (ORC-ENROLL-10).
