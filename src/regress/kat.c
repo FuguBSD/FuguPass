@@ -80,6 +80,13 @@
 	"abandon abandon abandon abandon abandon art"
 
 /*
+ * A caller word that is longer than every word of the list. Its
+ * first WORDLIST_MAX bytes are the word accident of the list, so a
+ * lookup of those bytes alone gives a wrong index.
+ */
+#define WORD_LONG	"accidental"
+
+/*
  * hexcheck(name, value, len, want):
  *	Compare the len bytes at value with the hex text at want. A
  *	difference prints the two values, and gives -1.
@@ -125,10 +132,11 @@ textcheck(const char *name, const char *got, const char *want)
 /*
  * test_wordlist():
  *	The table holds the 2048 words of the pinned digest, and each
- *	word maps to its index and back. The digest covers the words,
- *	with one line feed after each word. FuguSeed pins the same
- *	number for the same list, so the two projects agree on the
- *	list by one number.
+ *	word maps to its index and back. A word that is longer than
+ *	every word of the list gives a failure. The digest covers the
+ *	words, with one line feed after each word. FuguSeed pins the
+ *	same number for the same list, so the two projects agree on
+ *	the list by one number.
  */
 static int
 test_wordlist(void)
@@ -162,6 +170,16 @@ test_wordlist(void)
 	if (hexcheck("the word digest", digest, sizeof(digest),
 	    WORDLIST_DIGEST) != 0)
 		rv = -1;
+
+	/*
+	 * A line of the operator can hold a long word. The guard of
+	 * the lookup stops that word before the buffer of the scan.
+	 */
+	if (wordlist_index(WORD_LONG, strlen(WORD_LONG), &index) == 0) {
+		warnx("the word list: the long word %s maps to %zu",
+		    WORD_LONG, index);
+		rv = -1;
+	}
 	return rv;
 }
 
