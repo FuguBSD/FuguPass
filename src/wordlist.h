@@ -23,7 +23,9 @@
  * Both functions return 0, or -1 on a failure. A failed call writes
  * nothing to an output. The list is public data. The word that a
  * caller gives to wordlist_index() can be a secret, so that function
- * reads the whole list at each call (SEC-MEMORY-2).
+ * compares each word with timingsafe_bcmp(3) (SEC-MEMORY-2). It also
+ * reads the whole list at each call. No rule asks for that scan, and
+ * wordlist.c gives its reason.
  */
 
 #ifndef WORDLIST_H
@@ -58,7 +60,7 @@ int	wordlist_word(size_t, char *, size_t);
  * wordlist_index(word, wordlen, index):
  *	The index of the word of wordlen bytes at word. The bytes
  *	carry no terminator. A failure is a word that the list does
- *	not hold.
+ *	not hold, and a word of more than WORDLIST_MAX bytes.
  */
 int	wordlist_index(const char *, size_t, size_t *);
 

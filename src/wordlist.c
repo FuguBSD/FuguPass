@@ -25,8 +25,11 @@
  * FuguPass reads no file of FuguSeed at a build and at a run.
  *
  * The table is public data and holds no secret. The word of a
- * caller of wordlist_index() can be a secret, so that function reads
- * every entry at each call (SEC-MEMORY-2).
+ * caller of wordlist_index() can be a secret, so that function
+ * compares each word with timingsafe_bcmp(3) (SEC-MEMORY-2). The
+ * rule asks for that primitive. The full scan of the table is a
+ * decision of this file, and the comment of the function gives its
+ * reason.
  */
 
 #include <string.h>
@@ -395,17 +398,24 @@ wordlist_index(const char *word, size_t wordlen, size_t *index)
 	size_t		 i, len, mask, found = WORDLIST_COUNT;
 	int		 hit;
 
+	/*
+	 * A word of more than WORDLIST_MAX bytes does not fit want,
+	 * and it is longer than every word of the list. The call
+	 * fails here, and no byte of the word enters a buffer.
+	 */
 	if (wordlen > sizeof(want))
 		return -1;
 
 	/*
 	 * The word of the caller can be a word of the scanned master,
-	 * and that master is a secret (KEY-MASTER-3). The scan
-	 * therefore reads every entry and stops at no match: an early
-	 * stop tells the index of the word by the time of the call
-	 * (SEC-MEMORY-2). A bisection leaks the same index through its
-	 * branch path, so the comparison primitive alone is not
-	 * sufficient.
+	 * and that master is a secret (KEY-MASTER-3). SEC-MEMORY-2
+	 * therefore asks for timingsafe_bcmp(3) at each comparison.
+	 * That primitive alone is not sufficient here. An early stop
+	 * at a match tells the index of the word by the time of the
+	 * call. A bisection leaks the same index through its branch
+	 * path. The scan below therefore reads every entry, and it
+	 * selects the index with a mask. No rule asks for these two
+	 * properties, and the leak above is their reason.
 	 *
 	 * Each buffer holds the bytes of one word, and zero after
 	 * them. Two equal buffers are therefore two equal words. Every
