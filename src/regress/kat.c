@@ -68,6 +68,18 @@
 	"abandon abandon abandon abandon abandon"
 
 /*
+ * A 24-word master with a correct BIP39 checksum. Its entropy is 32
+ * zero bytes, and its words are the published BIP39 vector of that
+ * entropy. A master has 12 words, so the gate must reject this line
+ * on the count alone (D-22, KEY-MASTER-6).
+ */
+#define WORDS_24 \
+	"abandon abandon abandon abandon abandon abandon " \
+	"abandon abandon abandon abandon abandon abandon " \
+	"abandon abandon abandon abandon abandon abandon " \
+	"abandon abandon abandon abandon abandon art"
+
+/*
  * hexcheck(name, value, len, want):
  *	Compare the len bytes at value with the hex text at want. A
  *	difference prints the two values, and gives -1.
@@ -211,7 +223,7 @@ reject(const char *name, const char *line)
 /*
  * test_gate():
  *	The gate takes the test master. It rejects 11 words, 13
- *	words, an unknown word, and a wrong checksum.
+ *	words, 24 words, an unknown word, and a wrong checksum.
  */
 static int
 test_gate(void)
@@ -228,6 +240,8 @@ test_gate(void)
 	if (reject("11 words", WORDS_11) != 0)
 		rv = -1;
 	if (reject("13 words", KAT_TEST_MASTER " abandon") != 0)
+		rv = -1;
+	if (reject("24 words", WORDS_24) != 0)
 		rv = -1;
 	if (reject("an unknown word", WORDS_11 " fugu") != 0)
 		rv = -1;
