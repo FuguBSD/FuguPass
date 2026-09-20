@@ -462,6 +462,9 @@ test_reject(void)
 {
 	static const unsigned int	 repeated[2] = { 1, 1 };
 	static const unsigned int	 zeroindex[2] = { 0, 2 };
+	static const unsigned int	 bigindex[2] = {
+		DERIVE_ORACLE_MAX + 1, 2
+	};
 	unsigned char			 secret[DERIVE_KEYLEN];
 	unsigned char			 shares[2 * DERIVE_KEYLEN];
 	unsigned char			 got[DERIVE_KEYLEN];
@@ -498,6 +501,19 @@ test_reject(void)
 	 */
 	if (share_combine(zeroindex, shares, 2, got, sizeof(got)) == 0) {
 		warnx("an index of 0: share_combine() takes it");
+		rv = -1;
+	}
+
+	/*
+	 * An index above DERIVE_ORACLE_MAX gives -1 (share.h). A
+	 * removal of that half of the gate casts 256 to the evaluation
+	 * point 0, and p_b(0) is the secret (KEY-SHARE-4). That
+	 * removal gives the first share the weight 1 and the second
+	 * share the weight 0. share_combine() then gives 0, and the
+	 * caller takes the first share for the secret.
+	 */
+	if (share_combine(bigindex, shares, 2, got, sizeof(got)) == 0) {
+		warnx("an index above the maximum: share_combine() takes it");
 		rv = -1;
 	}
 
