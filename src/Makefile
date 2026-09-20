@@ -16,9 +16,10 @@
 # The build of the source. OpenBSD make reads this file, and GNU make
 # reads GNUmakefile for the document gates.
 #
-# The C sources sit flat in this directory. lib builds the archive of
-# them, and regress builds the tests of that archive. The layout
-# follows usr.bin/ssh of the OpenBSD tree.
+# The C sources sit flat in this directory, and the test sources sit
+# in regress. lib builds the archive of the flat sources, and regress
+# builds the tests of that archive. The layout follows usr.bin/ssh of
+# the OpenBSD tree.
 #
 # The source holds no program yet, so SUBDIR names these two
 # directories only. Each program gets a directory of its own, and

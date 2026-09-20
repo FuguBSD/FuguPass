@@ -284,9 +284,9 @@ ports tree must hold it before this port builds.
 - **PROG-BUILD-1** — The archive sources must sit flat in `src/`. An archive
   source is a source that more than one directory shares. `src/lib` must build
   the archive `libfugupass.a` from them with `.PATH`. Each program directory and
-  `src/regress` must link that archive, so each archive source compiles once. A
-  source that one directory alone uses must sit in that directory, as
-  `src/regress/kat.c` does.
+  `src/regress` must link that archive, so each archive source compiles once.
+  The test sources must sit in `src/regress`, and each other C source must sit
+  flat in `src/`.
 - **PROG-BUILD-2** — `src/Makefile` is the build entry point of the C code, and
   the OpenBSD `make` reads it. Each program must have a directory of its own
   under `src/`, and that directory must read `bsd.prog.mk`. `src/regress` holds
