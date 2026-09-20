@@ -85,8 +85,11 @@ the vectors. `docs/analysis/share-arithmetic-sources.md` names that
 implementation, and the source evaluation records both sources (TEST-SPLIT-5).
 The label strings come from `spec/keys.md`, which is specification and not an
 implementation. The vectors cover the thresholds 1, 2, and 3 with up to 5
-oracles, and threshold 1 holds the `k = 1` reduction. The committed header pins
-the C code.
+oracles, and threshold 1 holds the `k = 1` reduction. Each generator writes one
+header. `generate.py` extends `derive.h` with the custody labels and the
+coefficients, and the other two write `share.h`. `generate-share.py` derives its
+own coefficients, so `share.h` rests on the independent implementation alone.
+The committed headers pin the C code.
 
 ## Files
 
@@ -96,10 +99,10 @@ the C code.
 | `src/derive.c`, `src/derive.h`              | `X`, `t_ei`, `ck_ei`, `salt_ei`, `wk_ei`, the index and canary keys |
 | `src/pin.c`, `src/pin.h`                    | `pin_ei` through `bcrypt_pbkdf(3)`                                  |
 | `src/regress/share.c`                       | The tests below                                                     |
-| `tests/vectors/generate.py`                 | The eight custody labels and the coefficients                       |
+| `tests/vectors/generate.py`                 | The eight custody labels and the coefficients, into `derive.h`      |
 | `tests/vectors/generate-share.py`           | The share generator, outside the dependency set                     |
 | `tests/vectors/generate-pin.py`             | The pin generator, outside the dependency set                       |
-| `tests/vectors/share.h`                     | The committed vectors of the three generators                       |
+| `tests/vectors/share.h`                     | The committed vectors of the share and the pin generator            |
 | `docs/analysis/mask-composition.md`         | The analysis of TEST-ANALYSIS                                       |
 | `docs/analysis/share-split.md`              | The analysis of TEST-SPLIT-1                                        |
 | `docs/analysis/share-arithmetic-sources.md` | The source evaluation of TEST-SPLIT-5                               |
