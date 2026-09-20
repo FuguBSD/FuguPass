@@ -45,11 +45,12 @@ case that it covers.
 
 ## 3. The assumptions
 
-- **A1** — The mask is unpredictable. The oracle computes the record key as
-  `HMAC(key = server_random32, msg = entropy)`, with `server_random32` from
-  `arc4random_buf(3)` and `entropy` from the client (FuguOracle OPS-SET-3,
-  SEC-ENTROPY-4). The mask is `HMAC(key = record key, msg = pin_ei)` (FuguOracle
-  OPS-GET-4). An attacker needs the record key and `pin_ei` to compute the mask.
+- **A1** — The mask is unpredictable. The oracle computes its key share
+  `aes_key` as `HMAC(key = server_random32, msg = entropy)`, with
+  `server_random32` from `arc4random_buf(3)` and `entropy` from the client
+  (FuguOracle OPS-SET-3). The client draws that entropy from `arc4random(3)`
+  (SEC-ENTROPY-4). The mask is `HMAC(key = aes_key, msg = pin_ei)` (FuguOracle
+  OPS-GET-4). An attacker needs `aes_key` and `pin_ei` to compute the mask.
 - **A2** — HMAC-SHA256 is a pseudorandom function. `f` is HMAC-SHA256
   (KEY-DERIVE-1), and the mask meets the entropy condition of KEY-DERIVE-3 under
   A1.
@@ -68,17 +69,17 @@ The mask is stable for an unchanged record (KEY-MASK-1), so the same wrap key
 is safe, and the two-time-pad case does not arise.
 
 A reveal reads `c_ei`, computes `wk_ei`, and recovers one share. A reveal writes
-nothing. The count of plaintexts under `wk_ei` therefore stays at one for the
-life of the record. Key reuse harms a stream cipher when two plaintexts meet one
-keystream, and one plaintext meets this key.
+no wrap to the client's disk. The count of plaintexts under `wk_ei` therefore
+stays at one for the life of the record. Key reuse harms a stream cipher when
+two plaintexts meet one keystream, and one plaintext meets this key.
 
 The recurrence still costs three things, and each one is real.
 
 1. No forward secrecy exists. A breach of the record unmasks every wrap that the
    machine wrote before the breach. The attacker also needs the disk and the
    passphrase (OVW-RISKS-3).
-2. The rotation is manual. Only a `set_pin` draws a new record key (FuguOracle
-   OPS-SET-3), so a leaked mask stays valid until a re-enrollment.
+2. The rotation is manual. Only a `set_pin` gives a record a fresh key share
+   (FuguOracle OPS-SET-3), so a leaked mask stays valid until a re-enrollment.
 3. The client re-reads the same 32 bytes at every reveal. Each read is one more
    moment for a compromised endpoint to take the mask (OVW-RISKS-1). The erasure
    rules bound that window (SEC-MEMORY-1, SEC-MEMORY-6).
@@ -87,10 +88,11 @@ One case breaks the rule of one plaintext per key, and the specification names
 it. A threshold change alters every share, while `K_e`, the oracle index, and
 the label all stay the same (CER-PROVISION-15). A tool that wrote the new wrap
 under the old mask would publish `share_old ⊕ share_new` to a holder of both
-wraps. CER-PROVISION-15 forbids that case: the ceremony takes a fresh `set_pin`
-at every live oracle, so every mask rotates before the new wraps land. The
-specification states the availability reason for the rule. The confidentiality
-reason is the two-plaintext case, and section 6 states what it costs.
+wraps. CER-PROVISION-15 forbids that case. The ceremony takes a fresh `set_pin`
+for every record of this machine, at every live oracle. Every mask therefore
+rotates before the new wraps land. The specification states the availability
+reason and the confidentiality reason. The confidentiality reason is the
+two-plaintext case, and section 6 states what it costs.
 
 The opposite direction is safe. A passphrase change rotates the mask and keeps
 the share (ORC-ENROLL-4). Two wraps of one plaintext under two keys give the XOR
@@ -119,7 +121,7 @@ four other things over the raw mask.
    whole.
 
 The KDF gives nothing against a breached oracle record. That oracle holds the
-record key, and one passphrase guess gives `pin_ei` and then the mask
+key share, and one passphrase guess gives `pin_ei` and then the mask
 (SEC-FLOOR-2). The KDF adds one HMAC call to each guess, and the
 `bcrypt_pbkdf(3)` cost dominates the guess (KEY-PIN-3).
 
@@ -147,9 +149,10 @@ verifier, so it sits outside the letter of that rule. It still goes against the
 risk table. The search stays at the entropy of the master, 128 bits
 (KEY-MASTER-1), so the practical loss is small and the design rule breaks.
 
-**A predictable mask.** A failure of the oracle RNG gives the record key to an
-attacker. The client mixes its own entropy at `set_pin` (FuguOracle OPS-SET-3),
-so a prediction needs both draws. The client can detect neither failure.
+**A predictable mask.** A failure of the oracle RNG and a failure of the client
+draw together give the key share to an attacker. The key material mixes server
+entropy and client entropy (FuguOracle OPS-SET-3), so a prediction needs both
+draws. The client can detect neither failure.
 
 **A read of the mask.** Three paths give the mask away: a live oracle answer
 with the passphrase, a breached record with the passphrase, and a compromised

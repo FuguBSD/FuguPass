@@ -171,9 +171,10 @@ The freshness has a cost. The share of oracle `i` changes while `K_e` stays, so
 two shares of one entry at one oracle exist. Their XOR cancels the secret term
 and holds coefficient terms alone. An attacker who read both wraps under one
 mask would gain an offline test of a candidate master. CER-PROVISION-15 closes
-the case: the ceremony takes a fresh `set_pin` at every live oracle, so no wrap
-key covers two plaintexts. [mask-composition.md](mask-composition.md) states the
-same finding from the other side.
+the case. The ceremony takes a fresh `set_pin` for every record of this machine,
+at every live oracle. No wrap key then covers two plaintexts.
+[mask-composition.md](mask-composition.md) states the same finding from the
+other side.
 
 ### Across re-enrollments
 

@@ -17,7 +17,11 @@
 /*
  * The share split. One 32-byte secret splits across the oracle set,
  * byte-wise, with Shamir over GF(256) (KEY-SHARE-2). Any k shares
- * give the secret back, and k - 1 shares give nothing.
+ * give the secret back. The coefficients derive from the secret
+ * (KEY-SHARE-3), so k - 1 shares determine it. The claim against
+ * k - 1 shares is therefore computational: only the cost of a
+ * search protects the secret. docs/analysis/share-split.md states
+ * that bound.
  *
  * share_split() gives the share of one oracle. No function here
  * gives every share at once, so a caller cannot hold a share set

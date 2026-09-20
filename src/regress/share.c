@@ -200,8 +200,8 @@ testroot(unsigned char *root, size_t rootlen)
 /*
  * testfactor(x, xlen):
  *	The device factor X of the test master, for the machine name
- *	of the vectors (KEY-DEVICE-1). Every record key below comes
- *	from it.
+ *	of the vectors (KEY-DEVICE-1). test_client() and test_pin()
+ *	take it.
  */
 static int
 testfactor(unsigned char *x, size_t xlen)
