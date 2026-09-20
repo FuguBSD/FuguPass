@@ -17,8 +17,9 @@
 /*
  * The known-answer tests of the custody layer (TEST-SPLIT-4,
  * TEST-KAT-4). The parts are the field arithmetic, the share split,
- * the reconstruction, the client keys, the machine name gate, the
- * device factor, the pin secret, and the wrap keys.
+ * the reconstruction, the rejection gates, the client keys, the
+ * machine name gate, the device factor, the pin secret, and the wrap
+ * keys.
  * tests/vectors/share.h and tests/vectors/derive.h hold the vectors,
  * and every test reads them from there. A test needs no network and
  * no oracle (TEST-SPLIT-6).
@@ -440,6 +441,120 @@ test_single(void)
 }
 
 /*
+ * test_reject():
+ *	The documented rejection gates of share_combine(),
+ *	share_split() and pin_secret() give a failure (share.h,
+ *	pin.h). Each case below names the mutation that it catches.
+ *	Every one of these gates stands between a caller error and a
+ *	wrong key, and no caller sees the difference without it.
+ */
+static int
+test_reject(void)
+{
+	static const unsigned int	 repeated[2] = { 1, 1 };
+	static const unsigned int	 zeroindex[2] = { 0, 2 };
+	unsigned char			 secret[DERIVE_KEYLEN];
+	unsigned char			 shares[2 * DERIVE_KEYLEN];
+	unsigned char			 got[DERIVE_KEYLEN];
+	unsigned char			 salt[DERIVE_KEYLEN];
+	int				 rv = 0;
+
+	if (hexbytes("the split secret", KAT_SHARE_SECRET, secret,
+	    sizeof(secret)) != 0)
+		return -1;
+	if (hexbytes("the share of the oracle 1", share_k2[0], shares,
+	    DERIVE_KEYLEN) != 0)
+		return -1;
+	if (hexbytes("the share of the oracle 2", share_k2[1],
+	    &shares[DERIVE_KEYLEN], DERIVE_KEYLEN) != 0)
+		return -1;
+
+	/*
+	 * A repeated index gives -1 (share.h). A removal of that gate
+	 * gives a divisor of 0 for each weight. share_inv(0) gives 0,
+	 * so both weights go to 0. share_combine() then gives 0, and
+	 * the caller takes 32 zero bytes for the secret.
+	 */
+	if (share_combine(repeated, shares, 2, got, sizeof(got)) == 0) {
+		warnx("a repeated index: share_combine() takes it");
+		rv = -1;
+	}
+
+	/*
+	 * An index of 0 gives -1 (share.h). An oracle index is 1-based,
+	 * and 0 is the evaluation point of the secret (KEY-SHARE-5). A
+	 * removal of that gate gives the first share the weight 1 and
+	 * the second share the weight 0. share_combine() then gives 0,
+	 * and the caller takes the first share for the secret.
+	 */
+	if (share_combine(zeroindex, shares, 2, got, sizeof(got)) == 0) {
+		warnx("an index of 0: share_combine() takes it");
+		rv = -1;
+	}
+
+	/*
+	 * A count of 0 gives -1 (share.h). A removal of that gate runs
+	 * no step of the interpolation. share_combine() then gives 0,
+	 * and the caller takes 32 zero bytes for the secret.
+	 */
+	if (share_combine(set_k2, shares, 0, got, sizeof(got)) == 0) {
+		warnx("a count of 0: share_combine() takes it");
+		rv = -1;
+	}
+
+	/*
+	 * A threshold outside 1 to DERIVE_ORACLE_MAX gives -1
+	 * (share.h). The upper case carries the gate: a removal of it
+	 * takes the threshold 256, because every coefficient label of
+	 * that threshold fits its buffer. share_split() then gives 0
+	 * and a share of a threshold that KEY-SHARE-1 forbids.
+	 *
+	 * The case of the threshold 0 catches a gate that gives 0 in
+	 * place of -1. A removal of the whole gate still gives -1
+	 * there, by another path: threshold - 1 wraps to UINT_MAX, and
+	 * the label of that coefficient index needs 31 bytes of a
+	 * buffer of 28.
+	 */
+	if (share_split(secret, sizeof(secret), 0, 1, got, sizeof(got)) == 0) {
+		warnx("a threshold of 0: share_split() takes it");
+		rv = -1;
+	}
+	if (share_split(secret, sizeof(secret), DERIVE_ORACLE_MAX + 1, 1, got,
+	    sizeof(got)) == 0) {
+		warnx("a threshold above the maximum: share_split() takes it");
+		rv = -1;
+	}
+
+	/*
+	 * An oracle index above DERIVE_ORACLE_MAX gives -1 (share.h). A
+	 * removal of that gate casts 256 to the evaluation point 0, and
+	 * p_b(0) is the secret itself (KEY-SHARE-4). share_split() then
+	 * gives 0, and the caller takes the secret for a share.
+	 */
+	if (share_split(secret, sizeof(secret), 2, DERIVE_ORACLE_MAX + 1, got,
+	    sizeof(got)) == 0) {
+		warnx("an oracle index above the maximum: share_split() "
+		    "takes it");
+		rv = -1;
+	}
+
+	/*
+	 * An output length other than PIN_SECRETLEN gives -1 (pin.h). A
+	 * removal of that gate lets bcrypt_pbkdf(3) fill the shorter
+	 * buffer, because its output length is free. pin_secret() then
+	 * gives 0 and a pin secret that no oracle payload takes
+	 * (KEY-PIN-3).
+	 */
+	memset(salt, 'a', sizeof(salt));
+	if (pin_secret(KAT_PIN_PASSPHRASE, strlen(KAT_PIN_PASSPHRASE), salt,
+	    sizeof(salt), KAT_PIN_ROUNDS, got, PIN_SECRETLEN - 1) == 0) {
+		warnx("a short output: pin_secret() takes it");
+		rv = -1;
+	}
+	return rv;
+}
+
+/*
  * test_client():
  *	The client key of the record and the canary client key match
  *	the vectors, and the curve takes each one (KEY-CLIENT-1,
@@ -703,6 +818,7 @@ main(void)
 	rv |= test_split();
 	rv |= test_combine();
 	rv |= test_single();
+	rv |= test_reject();
 	rv |= test_client();
 	rv |= test_machine();
 	rv |= test_device();

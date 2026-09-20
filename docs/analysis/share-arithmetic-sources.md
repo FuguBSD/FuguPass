@@ -78,13 +78,14 @@ share format that this design does not take.
 
 The second path of D-15 therefore holds. KEY-SHARE-2 to KEY-SHARE-6 state the
 field, the polynomial, the coefficients, the evaluation and the reconstruction.
-The vectors below pin the outputs of the C against two independent references.
+The section below names the source of each vector set.
 
 ## The sources of the vectors
 
-Two generators write the vectors, and no part of either one belongs to this
-repository. `deps/` gains no entry for them, and the regress build needs no
-Python.
+This repository holds three generators, and they write the vectors. Two of them
+take the Python standard library alone. `tests/vectors/generate-pin.py` also
+calls the `bcrypt` module of PyPI, the one package outside that library. `deps/`
+gains no entry for that module, and the regress build needs no Python.
 
 `tests/vectors/generate-share.py` holds its own field, its own split and its own
 reconstruction. It writes the arithmetic from the definition of KEY-SHARE-2, in
@@ -104,5 +105,8 @@ version 5.0.0 of that module, on 2026-09-20. The developer installs the module
 into a throwaway environment under `scratch/`, which the repository ignores.
 
 `tests/vectors/generate.py` writes the label vectors of the derivation tree,
-with the `hmac` module alone. It covers each coefficient label of KEY-SHARE-3,
-so the derived coefficients of the C meet a second reference as well.
+with the `hmac` module alone. It writes coefficient values too, and no test
+reads them. `share_coeff()` is static in `src/share.c`, so no test can call it.
+Those values also split `KAT_TEST_ENTRY_KEY`, and the share vectors split
+`KAT_SHARE_SECRET`. The share vectors above pin the coefficients of the
+thresholds 2 and 3, through the share values.

@@ -162,10 +162,13 @@ run these steps in rule order.
   ([ORC-RECORDS](oracle.md#orc-records)). It must recompute every wrap on this
   machine, canaries and index wraps included. A stale wrap under a live mask
   would keep the old threshold reachable, so the tool must obtain fresh masks.
-  The second reason is confidentiality. A record that kept its mask would wrap
-  the old share and the new share under one wrap key. A holder of both wraps
-  reads the XOR of the two shares, and that value gives an offline test of a
-  candidate master. The tool must persist the change marker with the kind
+  That availability reason carries the fresh-mask duty. A record that kept its
+  mask would also wrap the old share and the new share under one wrap key. A
+  holder of both wraps reads the XOR of the two shares. That value gives an
+  offline test of a candidate master. The plate check value on the disk already
+  gives a cheaper test ([KEY-MASTER](keys.md#key-master),
+  [VAULT-CONFIG](vault.md#vault-config)), so the case adds no new capability
+  against the master. The tool must persist the change marker with the kind
   `threshold` before the first `set_pin`, in the machine-local set
   ([VAULT-LAYOUT](vault.md#vault-layout),
   [VAULT-FORMAT](vault.md#vault-format)). While the marker exists, a session

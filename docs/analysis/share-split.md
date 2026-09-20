@@ -170,11 +170,14 @@ the two sets are independent under B1. A threshold change derives a fresh set.
 The freshness has a cost. The share of oracle `i` changes while `K_e` stays, so
 two shares of one entry at one oracle exist. Their XOR cancels the secret term
 and holds coefficient terms alone. An attacker who read both wraps under one
-mask would gain an offline test of a candidate master. CER-PROVISION-15 closes
-the case. The ceremony takes a fresh `set_pin` for every record of this machine,
-at every live oracle. No wrap key then covers two plaintexts.
-[mask-composition.md](mask-composition.md) states the same finding from the
-other side.
+mask would gain an offline test of a candidate master. That test is not new. The
+plate check value on the disk already gives a cheaper one (KEY-MASTER-5,
+VAULT-CONFIG-5), so the case grants no new capability against the master. It
+breaks the one-time-pad model of the wrap, and CER-PROVISION-15 closes the case.
+The availability reason of that rule carries it. The ceremony takes a fresh
+`set_pin` for every record of this machine, at every live oracle. No wrap key
+then covers two plaintexts. [mask-composition.md](mask-composition.md) states
+the same finding from the other side.
 
 ### Across re-enrollments
 

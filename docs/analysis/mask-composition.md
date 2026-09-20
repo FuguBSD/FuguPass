@@ -143,11 +143,16 @@ Four things break the construction, and each one has a bound.
 `share_old ⊕ share_new`. The two polynomials share the constant term, so the XOR
 cancels the secret and holds coefficient terms alone. The value still tests a
 candidate master: a guess gives `root`, then `K_e`, then both coefficient sets,
-then both shares. The disk alone then holds an offline verifier of the master.
-SEC-FLOOR-1 forbids a passphrase verifier on the disk. This value is a master
-verifier, so it sits outside the letter of that rule. It still goes against the
-risk table. The search stays at the entropy of the master, 128 bits
-(KEY-MASTER-1), so the practical loss is small and the design rule breaks.
+then both shares. That test is not new. The machine-local set holds the config
+file, and the config file holds the plate check value (VAULT-LAYOUT-4,
+VAULT-CONFIG-1). One HMAC on `root` tests the same guess against that value
+(KEY-MASTER-5, VAULT-CONFIG-5). The case therefore gives the attacker no new
+capability against the master. SEC-FLOOR-1 forbids a passphrase verifier on the
+disk, and this value is not one. The risk table gives the same reason for a
+machine's disk, and it names no master verifier
+([OVW-RISKS](../../spec/overview.md#ovw-risks)). The search also stays at the
+entropy of the master, 128 bits (KEY-MASTER-1). What the case breaks is A3, and
+section 6 then covers neither wrap.
 
 **A predictable mask.** A failure of the oracle RNG and a failure of the client
 draw together give the key share to an attacker. The key material mixes server
@@ -172,12 +177,12 @@ quorum.
 
 ## 7. What an attacker gains when an assumption fails
 
-| Assumption | The failure                              | What the attacker gains                                                 |
-| ---------- | ---------------------------------------- | ----------------------------------------------------------------------- |
-| A1         | The oracle draw and the client draw fail | The mask, and then the share, with `pin_ei`                             |
-| A2         | HMAC-SHA256 is not a PRF                 | The computational claim of section 6 falls, and with it each claim here |
-| A3         | Two plaintexts meet one wrap key         | An offline test of a candidate master, from the disk alone              |
-| A4         | The oracle answer changes                | No secret. The wraps stop opening, and the plate restores the vault     |
+| Assumption | The failure                              | What the attacker gains                                                                                                    |
+| ---------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| A1         | The oracle draw and the client draw fail | The mask, and then the share, with `pin_ei`                                                                                |
+| A2         | HMAC-SHA256 is not a PRF                 | The computational claim of section 6 falls, and with it each claim here                                                    |
+| A3         | Two plaintexts meet one wrap key         | The XOR of the two shares. It tests a candidate master, and the plate check value on the disk tests one too (KEY-MASTER-5) |
+| A4         | The oracle answer changes                | No secret. The wraps stop opening, and the plate restores the vault                                                        |
 
 ## 8. Approval
 
