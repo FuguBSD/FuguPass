@@ -281,20 +281,26 @@ ports tree must hold it before this port builds.
 
 ## The build
 
-- **PROG-BUILD-1** — Every C source must sit flat in `src/`. `src/lib` must
-  build the archive `libfugupass.a` from the shared sources with `.PATH`. Each
-  program directory and `src/regress` must link that archive, so each source
-  compiles once.
+- **PROG-BUILD-1** — The archive sources must sit flat in `src/`. An archive
+  source is a source that more than one directory shares. `src/lib` must build
+  the archive `libfugupass.a` from them with `.PATH`. Each program directory and
+  `src/regress` must link that archive, so each archive source compiles once. A
+  source that one directory alone uses must sit in that directory, as
+  `src/regress/kat.c` does.
 - **PROG-BUILD-2** — `src/Makefile` is the build entry point of the C code, and
   the OpenBSD `make` reads it. Each program must have a directory of its own
   under `src/`, and that directory must read `bsd.prog.mk`. `src/regress` holds
   the tests, and it must read `bsd.regress.mk`.
-- **PROG-BUILD-3** — GNU `make` must read `GNUmakefile` of the repository root,
-  and that file must run the document gates only. The two file names keep the
-  two builds apart.
+- **PROG-BUILD-3** — The C build and the gates of the repository root must stay
+  apart. The OpenBSD `make` reads `src/Makefile`, and it builds the C code. GNU
+  `make` reads `GNUmakefile` of the repository root, and it runs the gates. The
+  two file names keep the two builds apart. The gates build no C code, so they
+  run on a machine that is not OpenBSD. This repository must not edit
+  `GNUmakefile`, because the org pack of FuguBSD/Tooling owns it.
 - **PROG-BUILD-4** — The build must take libsecp256k1 from `LOCALBASE`, the
   ports tree of the machine (D-15, [PROG-PORT](programs.md#prog-port)).
 
-The flat layout follows `usr.bin/ssh` of the OpenBSD tree. A program directory
-holds a Makefile only, and the archive keeps one object of each source. The
-document gates need no OpenBSD machine, and the C build needs one.
+The layout follows `usr.bin/ssh` of the OpenBSD tree. The archive sources sit
+flat, and each program directory holds a Makefile only. The archive keeps one
+object of each archive source. The C build needs an OpenBSD machine, and the
+gates of the repository root need none.
