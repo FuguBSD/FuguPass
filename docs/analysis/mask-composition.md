@@ -193,4 +193,4 @@ approval part of the acceptance of the custody layer. The approver reads
 sections 2, 3 and 7, and accepts the assumptions and the residual risks. The
 approver then replaces both placeholders of the line below.
 
-Approved by `<name>` on `<date>`.
+Approved by `D. Olsson` on `2026-09-21`.

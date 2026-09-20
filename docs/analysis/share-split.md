@@ -258,4 +258,4 @@ sections 2, 3 and 9, and accepts the move from an unconditional claim to a
 computational one. The approver then replaces both placeholders of the line
 below.
 
-Approved by `<name>` on `<date>`.
+Approved by `D. Olsson` on `2026-09-21`.
