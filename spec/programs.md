@@ -276,3 +276,25 @@ A vault file is ciphertext, so its paper QR is a safe backup object
 
 The Fugu repository holds the `devel/p5-Fugu` port (Fugu REL-PORT), and the
 ports tree must hold it before this port builds.
+
+<a id="prog-build"></a>
+
+## The build
+
+- **PROG-BUILD-1** — Every C source must sit flat in `src/`. `src/lib` must
+  build the archive `libfugupass.a` from the shared sources with `.PATH`. Each
+  program directory and `src/regress` must link that archive, so each source
+  compiles once.
+- **PROG-BUILD-2** — `src/Makefile` is the build entry point of the C code, and
+  the OpenBSD `make` reads it. Each program must have a directory of its own
+  under `src/`, and that directory must read `bsd.prog.mk`. `src/regress` holds
+  the tests, and it must read `bsd.regress.mk`.
+- **PROG-BUILD-3** — GNU `make` must read `GNUmakefile` of the repository root,
+  and that file must run the document gates only. The two file names keep the
+  two builds apart.
+- **PROG-BUILD-4** — The build must take libsecp256k1 from `LOCALBASE`, the
+  ports tree of the machine (D-15, [PROG-PORT](programs.md#prog-port)).
+
+The flat layout follows `usr.bin/ssh` of the OpenBSD tree. A program directory
+holds a Makefile only, and the archive keeps one object of each source. The
+document gates need no OpenBSD machine, and the C build needs one.

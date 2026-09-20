@@ -27,7 +27,7 @@ phase applies.
 | [OVW-SCOPE](overview.md#ovw-scope)           | n-a     | —       | Citation only.                                                                                                                                                          |
 | [OVW-VOCABULARY](overview.md#ovw-vocabulary) | done    | —       | [vocabulary.t](../t/fugupass/vocabulary.t) reads the five words and scans the tree outside `ports/`.                                                                    |
 | [OVW-RISKS](overview.md#ovw-risks)           | n-a     | —       | Citation only.                                                                                                                                                          |
-| [KEY-MASTER](keys.md#key-master)             | partial | P3      | KEY-MASTER-2 is absent. The scan path needs PROG-SCAN.                                                                                                                  |
+| [KEY-MASTER](keys.md#key-master)             | partial | P3      | KEY-MASTER-2 is absent. The SeedQR scan path and the BIP85-child path both enter by a scan, so each one needs PROG-SCAN and CER-CREATE.                                 |
 | [KEY-DERIVE](keys.md#key-derive)             | done    | P1      | [derive.c](../src/derive.c) holds `f` and the two labels of the table, and [kat.c](../src/regress/kat.c) pins the values.                                               |
 | [KEY-ENTRY](keys.md#key-entry)               | partial | P2      | KEY-ENTRY-1 and KEY-ENTRY-3 are absent. The slot reservation needs ENTRY-POOL, and the entry file needs VAULT-SEAL.                                                     |
 | [KEY-DEVICE](keys.md#key-device)             | open    | P2      | —                                                                                                                                                                       |
@@ -35,7 +35,7 @@ phase applies.
 | [KEY-PIN](keys.md#key-pin)                   | open    | P2      | —                                                                                                                                                                       |
 | [KEY-SHARE](keys.md#key-share)               | open    | P2      | —                                                                                                                                                                       |
 | [KEY-MASK](keys.md#key-mask)                 | open    | P2      | —                                                                                                                                                                       |
-| [KEY-BIP85](keys.md#key-bip85)               | partial | P2      | KEY-BIP85-5 and KEY-BIP85-6 are absent. The two candidates of a slot need ENTRY-POOL.                                                                                   |
+| [KEY-BIP85](keys.md#key-bip85)               | partial | P3      | KEY-BIP85-5 and KEY-BIP85-6 are absent. The two candidates of a slot need ENTRY-POOL, VAULT-SEAL, and CER-CREATE.                                                       |
 | [VAULT-LAYOUT](vault.md#vault-layout)        | open    | P1      | —                                                                                                                                                                       |
 | [VAULT-SEAL](vault.md#vault-seal)            | open    | P1      | —                                                                                                                                                                       |
 | [VAULT-FORMAT](vault.md#vault-format)        | open    | P1      | —                                                                                                                                                                       |
@@ -74,6 +74,7 @@ phase applies.
 | [PROG-SCAN](programs.md#prog-scan)           | open    | P3      | —                                                                                                                                                                       |
 | [PROG-QR](programs.md#prog-qr)               | open    | P3      | —                                                                                                                                                                       |
 | [PROG-PORT](programs.md#prog-port)           | open    | P4      | —                                                                                                                                                                       |
+| [PROG-BUILD](programs.md#prog-build)         | partial | P3      | The program directories of PROG-BUILD-2 are absent. They need PROG-SPLIT. [src/Makefile](../src/Makefile) is the build entry point.                                     |
 | [SEC-ENTROPY](security.md#sec-entropy)       | partial | P2      | SEC-ENTROPY-3, SEC-ENTROPY-4, SEC-ENTROPY-5, and SEC-ENTROPY-7 are absent. They need KEY-DEVICE, VAULT-SEAL, ORC-CONFORM, KEY-PIN, and KEY-SHARE.                       |
 | [SEC-MEMORY](security.md#sec-memory)         | partial | P3      | SEC-MEMORY-3 to SEC-MEMORY-6 are absent. They need PROG-IFACE, PROG-ONESHOT, CER-CREATE, and ENTRY-POOL.                                                                |
 | [SEC-FLOOR](security.md#sec-floor)           | open    | P4      | —                                                                                                                                                                       |
@@ -101,15 +102,15 @@ phase applies.
 
 The drift gate maps each document to the code that implements it.
 
-| Document      | Roots                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------- |
-| overview.md   | `t/fugupass/vocabulary.t`                                                                   |
-| keys.md       | `src/derive.c`, `src/bip85.c`, `src/wordlist.c`                                             |
-| vault.md      | `src/vault.c`, `src/seal.c`                                                                 |
-| entries.md    | `src/entry.c`                                                                               |
-| oracle.md     | `src/oracle.c`, `src/envelope.c`                                                            |
-| ceremonies.md | `src/ceremony.c`                                                                            |
-| recovery.md   | `src/recover.c`                                                                             |
-| programs.md   | `src/fugupass.c`, `bin/fugupass-repl`, `src/fugupass-scan.c`, `src/fugupass-qr.c`, `ports/` |
-| security.md   | `src/`                                                                                      |
-| testing.md    | `tests/`, `src/regress/`                                                                    |
+| Document      | Roots                                                                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| overview.md   | `t/fugupass/vocabulary.t`                                                                                                             |
+| keys.md       | `src/derive.c`, `src/bip85.c`, `src/wordlist.c`                                                                                       |
+| vault.md      | `src/vault.c`, `src/seal.c`                                                                                                           |
+| entries.md    | `src/entry.c`                                                                                                                         |
+| oracle.md     | `src/oracle.c`, `src/envelope.c`                                                                                                      |
+| ceremonies.md | `src/ceremony.c`                                                                                                                      |
+| recovery.md   | `src/recover.c`                                                                                                                       |
+| programs.md   | `src/Makefile`, `src/lib`, `src/regress`, `src/fugupass.c`, `bin/fugupass-repl`, `src/fugupass-scan.c`, `src/fugupass-qr.c`, `ports/` |
+| security.md   | `src/`                                                                                                                                |
+| testing.md    | `tests/`, `src/regress/`                                                                                                              |
