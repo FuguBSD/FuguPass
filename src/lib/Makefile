@@ -24,7 +24,7 @@
 .PATH:		${.CURDIR}/..
 
 LIB=		fugupass
-SRCS=		bip85.c derive.c pin.c share.c wordlist.c
+SRCS=		bip85.c derive.c entry.c pin.c seal.c share.c vault.c wordlist.c
 
 CFLAGS+=	-Wall -Wextra -Werror
 CFLAGS+=	-I${.CURDIR}/..
