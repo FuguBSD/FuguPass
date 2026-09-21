@@ -39,9 +39,10 @@ of 64 slots.
 **The sandbox comes first.** `main()` sets `RLIMIT_CORE` to zero, makes every
 unveil call, then pledges `stdio rpath wpath cpath flock proc exec inet dns tty`
 (PROG-SPLIT-3, SEC-MEMORY-3). The unveil list is the vault directory,
-`/dev/tty`, the three helpers, their runtime files, the resolver files, and
-`/etc/ssl/cert.pem` for a `https` oracle. The implementation adds the CA file to
-the list of PROG-SPLIT-3, as plan 004 states.
+`/dev/tty`, the three helpers, their runtime files, and the resolver files. The
+implementation adds `/etc/ssl/cert.pem` (`r`) to the unveil list of
+PROG-SPLIT-3. `libtls` reads the trust anchors of that file for a `https`
+oracle.
 
 **Text crosses the helper boundary.** The core process runs `fugupass-scan` as a
 child and reads one line of 12 words from its standard output. It parses no
