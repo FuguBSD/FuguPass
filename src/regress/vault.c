@@ -777,6 +777,8 @@ test_scan(void)
 		{ "a padded slot index", vault_slot_fields, "slot: 017\n", 0 },
 		{ "a slot index above 2^31 - 1", vault_slot_fields,
 		    "slot: 2147483648\n", 0 },
+		{ "the highest slot index", vault_slot_fields,
+		    "slot: 2147483647\n", 1 },
 		{ "a counter above 2^31 - 1", vault_counters_fields,
 		    "17-1: 2147483648\n", 1 },
 		{ "the highest counter", vault_counters_fields,

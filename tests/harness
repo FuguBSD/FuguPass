@@ -46,6 +46,12 @@
 # The harness fails when no counterparty is available. A pass over
 # zero legs is no pass.
 #
+# The harness builds the tree of HEAD in the guest, and it runs the
+# legs of the working tree. git status of src and tests must
+# therefore report no change, and no untracked file. A local build
+# leaves an obj directory that no ignore rule covers, so remove it
+# before a run.
+#
 # These are the environment variables:
 #
 #	FUGUPASS_BLIND_PIN_SERVER
@@ -260,7 +266,9 @@ sub build_guest ($root)
 		cwd     => $root,
 		timeout => $GUEST_TIMEOUT );
 	die "the harness builds HEAD, and src or tests holds a change "
-	    . "that no commit holds:\n$dirty"
+	    . "that no commit holds. Commit the change, or remove the "
+	    . "file. An untracked file counts, and no ignore rule "
+	    . "covers the obj directory of a build:\n$dirty"
 	    if $dirty =~ /\S/;
 
 	my $tar = File::Temp->new(

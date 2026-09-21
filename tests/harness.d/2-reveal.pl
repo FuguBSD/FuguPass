@@ -17,74 +17,78 @@
 
 # The reveal leg (ORC-REVEAL-4).
 #
-# Three causes give one answer shape: a wrong passphrase, a wiped
+# Three causes give one junk answer: a wrong passphrase, a wiped
 # record, and a counter below the stored one. Each one gives the
 # bytes of a mask, and the decrypt of the caller is the one junk
 # detector. The driver stands in for that decrypt, so each of the
 # three gives the state junk.
 #
-# The answer of the oracle is one AES key of a fixed length, and
-# the hex fields of the driver carry it. A defect of the oracle
-# shows in the state word or in the answer bytes, so this leg
-# compares those two.
+# The three causes act on one record, so one client key addresses
+# every call of this leg. A difference between two answers is then
+# the behavior of the oracle, and no second record.
+#
+# The rules of the oracle set the order of the calls. A correct
+# reveal persists the attempt count 0 (FuguOracle OPS-GET-4), so
+# the counter violation comes before the wrong attempts. A counter
+# violation burns no strike (ORC-COUNTER-6), and each wrong attempt
+# persists the counter of the client (FuguOracle OPS-GET-5). The
+# counters file therefore takes a value above the forged one again,
+# before the wrong attempts.
 
 use v5.36;
 
 return sub ($t)
 {
-	# The reveal of a live record, for the shape of an answer.
-	my $live = $t->vault('reveal-live');
-	is( $t->enroll($live)->{state}, 'ok', 'the live record enrolls' );
-	my $ok = $t->reveal($live);
-	is( $ok->{state}, 'ok', 'the live record reveals' );
+	my $vault = $t->vault('reveal');
+	my $file  = $t->counters($vault);
+	my $name  = $t->record($vault);
 
-	# A wrong passphrase.
-	my $bad = $t->vault('reveal-wrong');
-	is( $t->enroll($bad)->{state}, 'ok', 'the second record enrolls' );
-	my $wrong = $t->reveal( $bad, pass => ['wrong'] );
-	is( $wrong->{state}, 'junk', 'a wrong passphrase gives junk' );
+	is( $t->enroll($vault)->{state}, 'ok', 'the record enrolls' );
 
-	# A wiped record. The third wrong attempt destroys it
-	# (ORC-REVEAL-5).
-	my $gone = $t->vault('reveal-wiped');
-	is( $t->enroll($gone)->{state}, 'ok', 'the third record enrolls' );
+	# The live answer. The high counter goes on this reveal,
+	# because a counter violation needs a stored counter above the
+	# wall clock (ORC-COUNTER-1). A correct pin gives the same
+	# answer under any counter (FuguOracle OPS-GET-4).
+	$t->write_file( $file, "$name: " . $t->high_counter );
+	my $live = $t->reveal($vault);
+	is( $live->{state}, 'ok', 'the record reveals' );
+
+	# A counter below the stored one.
+	$t->write_file( $file, "$name: 1" );
+	my $stale = $t->reveal($vault);
+	is( $stale->{state}, 'junk',
+		'a counter below the stored one gives junk' );
+
+	# Three wrong attempts on that record. The first two burn
+	# strike 1 and strike 2, and the third destroys the key
+	# material of the record (ORC-REVEAL-5).
+	$t->write_file( $file, "$name: " . ( $t->high_counter + 1 ) );
+	my @wrong;
 	for my $attempt ( 1 .. 3 ) {
-		is( $t->reveal( $gone, pass => ['wrong'] )->{state},
-			'junk', "wrong attempt $attempt gives junk" );
+		push @wrong, $t->reveal( $vault, pass => ['wrong'] );
+		is( $wrong[-1]->{state}, 'junk',
+			"wrong attempt $attempt gives junk" );
 	}
-	my $wiped = $t->reveal($gone);
+
+	# The correct passphrase on the destroyed record.
+	my $wiped = $t->reveal($vault);
 	is( $wiped->{state}, 'junk',
-		'the correct passphrase on a wiped record gives junk' );
+		'the correct passphrase on the wiped record gives junk' );
 
-	# A counter below the stored one. An enrollment persists the
-	# stored counter 0 (FuguOracle OPS-SET-4), and a reveal
-	# advances it, so the forged high counter goes on a reveal.
-	# The reset file then sends a lower one (ORC-COUNTER-1).
-	my $stale = $t->vault('reveal-stale');
-	is( $t->enroll($stale)->{state}, 'ok', 'the fourth record enrolls' );
-	$t->write_file( $t->counters($stale),
-		$t->record($stale) . ': ' . $t->high_counter );
-	is( $t->reveal($stale)->{state},
-		'ok', 'the fourth record reveals with a high counter' );
-	$t->write_file( $t->counters($stale), $t->record($stale) . ': 1' );
-	my $low = $t->reveal($stale);
-	is( $low->{state}, 'junk', 'a counter below the stored one gives junk' );
-
-	# One answer shape for the three (ORC-REVEAL-4). Each case
-	# reports the state word of the other two, and each answer
-	# differs from the live answer and from the other two.
+	# The three junk answers of this one record, against the live
+	# answer of it and against each other. A junk answer takes a
+	# fresh random key (FuguOracle OPS-JUNK-1), so two junk
+	# answers of one record differ.
 	my @junk = (
-		[ 'the wrong passphrase', $wrong ],
+		[ 'the wrong passphrase', $wrong[0] ],
 		[ 'the wiped record',     $wiped ],
-		[ 'the stale counter',    $low ] );
+		[ 'the stale counter',    $stale ] );
 	for my $i ( 0 .. $#junk ) {
 		my ( $what, $answer ) = @{ $junk[$i] };
-		isnt( $answer->{mask}, $ok->{mask},
+		isnt( $answer->{mask}, $live->{mask},
 			"$what gives an answer other than the live answer" );
 		for my $j ( $i + 1 .. $#junk ) {
 			my ( $other, $second ) = @{ $junk[$j] };
-			is( $answer->{state}, $second->{state},
-				"$what and $other give one state word" );
 			isnt( $answer->{mask}, $second->{mask},
 				"$what and $other give two answers" );
 		}
