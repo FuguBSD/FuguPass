@@ -34,8 +34,9 @@ prose tokens, for example FuguOracle OPS-GET-4.
   a base64 string, and must hold no escape sequence. The reader must step over
   each unknown member, and must accept insignificant JSON whitespace. It must
   treat a duplicate `data` member, and every other shape, as malformed
-  (FuguOracle PROTO-HTTP-7). A malformed body, and a response of more than 4096
-  bytes, must be a transport failure.
+  (FuguOracle PROTO-HTTP-7). A malformed body of a `200` response must be a
+  transport failure. A response of more than 4096 bytes must be a transport
+  failure.
 
 The interop harness proves conformance against every available conforming oracle
 ([TEST-HARNESS](testing.md#test-harness)).
