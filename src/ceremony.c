@@ -66,6 +66,7 @@
 #include "bip85.h"
 #include "ceremony.h"
 #include "derive.h"
+#include "entry.h"
 #include "envelope.h"
 #include "fugupass.h"
 #include "helper.h"
@@ -271,8 +272,9 @@ step_factor(struct state *st)
  * step_config(st):
  *	CER-CREATE-3. The config file holds the ordered oracle set,
  *	the threshold, the machine name, the round count, the plate
- *	check value and the pool tunables (VAULT-CONFIG-1,
- *	KEY-MASTER-5, ENTRY-POOL-2, ENTRY-POOL-6).
+ *	check value, the pool tunables and the audit age
+ *	(VAULT-CONFIG-1, KEY-MASTER-5, ENTRY-POOL-2, ENTRY-POOL-6,
+ *	ENTRY-SHADOW-6).
  *
  *	The reader of vault.c holds each rule of the file, so this
  *	step parses the text before it writes the file. A wrong
@@ -319,9 +321,11 @@ step_config(struct state *st)
 	    "kdf-rounds: %u\n"
 	    "plate-check: %s\n"
 	    "pool-size: %u\n"
-	    "pool-watermark: %u\n",
+	    "pool-watermark: %u\n"
+	    "audit-age: %u\n",
 	    st->arg->threshold, st->arg->machine, st->arg->rounds, plate,
-	    CEREMONY_POOL_SIZE, CEREMONY_POOL_WATERMARK);
+	    CEREMONY_POOL_SIZE, CEREMONY_POOL_WATERMARK,
+	    ENTRY_AUDIT_AGE_DEFAULT);
 	if (n < 0 || (size_t)n >= CONFIG_MAX - len) {
 		warnx("the config: the text does not fit");
 		goto out;

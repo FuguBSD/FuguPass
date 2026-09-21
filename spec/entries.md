@@ -90,6 +90,10 @@ renders as a SeedQR code for a signer to scan ([PROG-QR](programs.md#prog-qr)).
   because derivation is deterministic ([KEY-ENTRY](keys.md#key-entry)).
 - **ENTRY-ROTATION-4** — Rotation of a stored entry seals the new secret in
   place, in the entry's own slot.
+- **ENTRY-ROTATION-5** — The `gen` command must rotate a derived entry of a name
+  that the index holds ([PROG-REPL](programs.md#prog-repl)). The `add` command
+  must rotate a stored entry of such a name. FuguPass holds no other rotation
+  command.
 
 Rotation of a derived entry is entry creation on a new slot. It consumes the
 lowest free slot, and it performs one reveal of that slot
@@ -160,6 +164,8 @@ it discards both candidates.
   verification date is older than a tunable age
   ([PROG-REPL](programs.md#prog-repl)).
 - **ENTRY-SHADOW-5** — The audit reads shadow metadata only.
+- **ENTRY-SHADOW-6** — The default audit age is 365 days. The config file holds
+  the tunable value ([VAULT-CONFIG](vault.md#vault-config)).
 
 Shadow entries are the catalog of the user's plates: locations, custodians, and
 verification dates. The single reveal path has no metadata exception (D-06). A
