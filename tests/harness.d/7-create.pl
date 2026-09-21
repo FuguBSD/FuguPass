@@ -22,6 +22,11 @@
 # three vaults: one whole ceremony, one mistyped passphrase, and one
 # refused enrollment with the re-run after it.
 #
+# The leg reads the command line of the frame and of the subcommand
+# first (PROG-ONESHOT-4, PROG-ONESHOT-6). A wrong command line stops
+# before the plate scan and before the passphrase read, so a fourth
+# vault takes those runs, and no ceremony runs in it.
+#
 # Each ceremony vault takes a machine name of its own. The device
 # factor comes from the master and the machine name, so two vaults
 # of one name address one record of a slot (KEY-DEVICE-1). A
@@ -44,6 +49,68 @@ return sub ($t)
 	is( $bad->{exit}, 2, 'an unknown subcommand exits 2' );
 	like( $bad->{error}, qr/^usage: /m,
 		'an unknown subcommand gives a usage line' );
+
+	# The command line of the subcommand (PROG-ONESHOT-6). Each
+	# case below stops before the plate scan and before the
+	# passphrase read, so each one runs over ssh with no
+	# terminal. The -d option belongs to the program, so it
+	# comes before the subcommand name.
+	#
+	# The oracle argument of a case is well formed, so the one
+	# wrong field of the case is the field that the gate reads.
+	my $empty  = $t->ceremony_vault('usage');
+	my $oracle = $t->foreign_key . q{ } . $t->url;
+	my @wrong  = (
+		{
+			what   => 'a malformed threshold',
+			argv   => [ '-k', '0' ],
+			reason => qr/the threshold is too small/
+		},
+		{
+			what   => 'a malformed round count',
+			argv   => [ '-r', 'often' ],
+			reason => qr/the round count is invalid/
+		},
+		{
+			what   => 'an absent mandatory option',
+			argv   => [],
+			reason => qr/the -k, -m and -r options/
+		},
+		{
+			what => 'a rejected machine name',
+			argv =>
+			    [ '-k', 1, '-m', 'Machine', '-r', 1, $oracle ],
+			reason => qr/the machine name takes lowercase letters/
+		},
+		{
+			what => 'a threshold above the oracle count',
+			argv => [
+				'-k', 2, '-m', $empty->{machine},
+				'-r', 1, $oracle
+			],
+			reason =>
+			    qr/the threshold is above the count of the oracle/
+		} );
+
+	for my $case (@wrong) {
+		my $run = $t->program( '-d', $empty->{dir}, 'create',
+			@{ $case->{argv} } );
+		is( $run->{exit}, 2, "$case->{what} exits 2" );
+		like( $run->{error}, $case->{reason},
+			"$case->{what} gives the reason" );
+		like( $run->{error}, qr/^usage: /m,
+			"$case->{what} gives a usage line" );
+	}
+
+	# The bound of the oracle set, the one gate of the ceremony
+	# that a command line reaches (VAULT-CONFIG-6). It stops the
+	# ceremony, so it gives the status 1 and no usage line.
+	my $many = $t->program(
+		'-d', $empty->{dir}, 'create', '-k', 1,
+		'-m', $empty->{machine}, '-r', 1, ('x') x 256 );
+	is( $many->{exit}, 1, 'an oracle set above the bound exits 1' );
+	like( $many->{error}, qr/the oracle set takes [0-9]+ positions/,
+		'an oracle set above the bound gives the reason' );
 
 	#
 	# The whole ceremony.

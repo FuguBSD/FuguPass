@@ -194,8 +194,11 @@ cmd_create(int argc, char *argv[], const char *vault)
 	argc -= optind;
 	argv += optind;
 	if (argc < 1 || arg.threshold == 0 || arg.machine == NULL ||
-	    arg.rounds == 0)
+	    arg.rounds == 0) {
+		warnx("the -k, -m and -r options and the oracle set are "
+		    "mandatory");
 		usage();
+	}
 
 	/*
 	 * These two gates run before the plate scan, so a wrong

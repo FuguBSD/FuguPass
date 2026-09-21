@@ -177,10 +177,12 @@ probe_vault(const char *vault)
  *
  *	The child sets RLIMIT_CORE to zero first, so the abort
  *	writes no core file. It exits 2 when the sandbox call
- *	itself fails, and 0 when the socket call returns.
+ *	itself fails, 3 when the socket call fails for another
+ *	reason, and 0 when the socket call gives a descriptor.
  *
  *	The call gives 0 for the signal, and -1 for every other
- *	outcome.
+ *	outcome. Each outcome takes a report of its own, so no
+ *	other failure reads as a pledge that takes the socket.
  */
 static int
 probe_pledge(const char *vault)
@@ -198,8 +200,11 @@ probe_pledge(const char *vault)
 			_exit(2);
 		if (sandbox_enter(vault) != 0)
 			_exit(2);
-		if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) != -1)
-			close(fd);
+		if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+			warn("socket");
+			_exit(3);
+		}
+		close(fd);
 		_exit(0);
 	}
 
@@ -211,12 +216,22 @@ probe_pledge(const char *vault)
 	}
 	if (WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT)
 		return 0;
+	if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+		warnx("the pledge takes a socket of AF_UNIX, and the "
+		    "promises are \"%s\"", SANDBOX_PROMISES);
+		return -1;
+	}
 	if (WIFEXITED(status) && WEXITSTATUS(status) == 2) {
 		warnx("the probe of the pledge: the sandbox call fails");
 		return -1;
 	}
-	warnx("the pledge takes a socket of AF_UNIX, and the promises are "
-	    "\"%s\"", SANDBOX_PROMISES);
+	if (WIFEXITED(status) && WEXITSTATUS(status) == 3) {
+		warnx("the probe of the pledge: the socket call fails for "
+		    "another reason");
+		return -1;
+	}
+	warnx("the probe of the pledge: the status of the child is %d, and "
+	    "SIGABRT is the outcome of a violation", status);
 	return -1;
 }
 

@@ -317,11 +317,15 @@ step_config(struct state *st)
 	int		 n, rv = -1;
 
 	if (derive_plate_check(st->root, sizeof(st->root), check,
-	    sizeof(check)) != 0)
+	    sizeof(check)) != 0) {
+		warnx("the config: the plate check value fails");
 		goto out;
+	}
 	hex(check, sizeof(check), plate);
-	if ((text = malloc(CONFIG_MAX)) == NULL)
+	if ((text = malloc(CONFIG_MAX)) == NULL) {
+		warn("the config");
 		goto out;
+	}
 
 	for (i = 0; i < st->arg->count; i++) {
 		n = snprintf(&text[len], CONFIG_MAX - len, "oracle-%u: %s\n",
@@ -419,8 +423,10 @@ step_canaries(struct state *st)
 	int			 rv;
 
 	if (derive_index_key(st->root, sizeof(st->root), st->idxkey,
-	    sizeof(st->idxkey)) != 0)
+	    sizeof(st->idxkey)) != 0) {
+		warnx("the index key fails");
 		return -1;
+	}
 	for (i = 1; i <= st->config.count; i++) {
 		if (st->config.oracle[i - 1].retired)
 			continue;
@@ -471,8 +477,10 @@ step_slot(struct state *st, uint32_t slot)
 	int			 n, rv = -1;
 
 	if (derive_entry_key(st->root, sizeof(st->root), slot, key,
-	    sizeof(key)) != 0)
+	    sizeof(key)) != 0) {
+		warnx("slot %" PRIu32 ": the entry key fails", slot);
 		goto out;
+	}
 	if (bip85_pwd_base64(st->root, sizeof(st->root), slot, password,
 	    sizeof(password)) != 0 ||
 	    bip85_bip39(st->root, sizeof(st->root), slot, mnemonic,
@@ -503,8 +511,11 @@ step_slot(struct state *st, uint32_t slot)
 	}
 	len = (size_t)n;
 
-	if (vault_entry_name(key, sizeof(key), name, sizeof(name)) != 0)
+	if (vault_entry_name(key, sizeof(key), name, sizeof(name)) != 0) {
+		warnx("slot %" PRIu32 ": the name of the entry file fails",
+		    slot);
 		goto out;
+	}
 	memset(&at, 0, sizeof(at));
 	at.name = name;
 	if (vault_path(path, sizeof(path), st->arg->vault, VAULT_FILE_ENTRY,
@@ -618,6 +629,9 @@ step_index(const struct state *st)
  *	(ORC-REVOKE-6, FuguOracle STORE-KEYS-3). The client key
  *	takes the device factor alone, so this call needs no
  *	passphrase and no master (KEY-CLIENT-1, KEY-CLIENT-4).
+ *
+ *	The call gives 0, and -1 with the report of the failure on
+ *	the standard error. The caller of it adds no report.
  */
 static int
 kit_name(const struct state *st, unsigned int oracle, uint32_t slot,
@@ -629,24 +643,37 @@ kit_name(const struct state *st, unsigned int oracle, uint32_t slot,
 	char		 text[2 * SHA256_DIGEST_LENGTH + 1];
 	int		 n, rv = -1;
 
-	if (outlen < KIT_NAME_MAX)
+	if (outlen < KIT_NAME_MAX) {
+		warnx("the kit: the record name of oracle %u does not fit",
+		    oracle);
 		goto out;
+	}
 	if (canary)
 		n = derive_client_key_canary(st->factor, sizeof(st->factor),
 		    oracle, client, sizeof(client));
 	else
 		n = derive_client_key(st->factor, sizeof(st->factor), oracle,
 		    slot, client, sizeof(client));
-	if (n != 0)
+	if (n != 0) {
+		warnx("the kit: the client key of oracle %u fails", oracle);
 		goto out;
-	if (envelope_pubkey(client, pub) != 0)
+	}
+	if (envelope_pubkey(client, pub) != 0) {
+		warnx("the kit: the client public key of oracle %u fails",
+		    oracle);
 		goto out;
-	if (SHA256(pub, sizeof(pub), digest) == NULL)
+	}
+	if (SHA256(pub, sizeof(pub), digest) == NULL) {
+		warnx("the kit: the hash of a client public key fails");
 		goto out;
+	}
 	hex(digest, sizeof(digest), text);
 	n = snprintf(out, outlen, "%s.pin", text);
-	if (n < 0 || (size_t)n >= outlen)
+	if (n < 0 || (size_t)n >= outlen) {
+		warnx("the kit: the record name of oracle %u does not fit",
+		    oracle);
 		goto out;
+	}
 	rv = 0;
 out:
 	/*
@@ -691,8 +718,10 @@ step_kit(const struct state *st)
 		    st->arg->vault);
 		goto out;
 	}
-	if ((text = malloc(KIT_MAX)) == NULL)
+	if ((text = malloc(KIT_MAX)) == NULL) {
+		warn("the kit");
 		goto out;
+	}
 
 	n = snprintf(text, KIT_MAX, "machine %s\n", st->arg->machine);
 	if (n < 0 || (size_t)n >= KIT_MAX) {
@@ -745,14 +774,22 @@ ceremony_create(const struct ceremony_create *arg)
 	int		 rv = -1;
 
 	if (arg == NULL || arg->vault == NULL || arg->machine == NULL ||
-	    arg->oracle == NULL || arg->count == 0 ||
-	    arg->count > DERIVE_ORACLE_MAX || arg->threshold == 0 ||
-	    arg->rounds == 0)
+	    arg->oracle == NULL || arg->count == 0 || arg->threshold == 0 ||
+	    arg->rounds == 0) {
+		warnx("the ceremony takes an incomplete argument set");
 		return -1;
+	}
+	if (arg->count > DERIVE_ORACLE_MAX) {
+		warnx("the oracle set takes %d positions at the most",
+		    DERIVE_ORACLE_MAX);
+		return -1;
+	}
 	if (machine_dir(arg->vault) != 0)
 		return -1;
-	if ((st = calloc(1, sizeof(*st))) == NULL)
+	if ((st = calloc(1, sizeof(*st))) == NULL) {
+		warn("the ceremony");
 		return -1;
+	}
 	st->arg = arg;
 
 	if (step_master(st) != 0)
