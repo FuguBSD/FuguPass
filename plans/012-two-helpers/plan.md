@@ -27,7 +27,8 @@ reads frames through the `video(4)` interface, decodes a QR code, and writes the
 decoded payload as text (PROG-SCAN-1). It accepts the Standard SeedQR form
 alone: 48 digits in numeric mode, mapped to 12 words of the word table. Every
 other digit count and every byte-mode code is a failure (PROG-SCAN-2,
-PROG-SCAN-3, D-22). It computes no checksum; the gate of plan 001 does.
+PROG-SCAN-3, D-22). It computes no checksum; the master gate of KEY-MASTER-6
+does.
 
 **The decoder and the encoder are named.** The scan helper decodes with a small
 ISC-licensed decoder, in tree or from a port. The render helper encodes with

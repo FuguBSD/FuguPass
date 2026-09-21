@@ -2,8 +2,7 @@
 
 ## Status
 
-Proposed. It waits on plan 001 for the build skeleton. Plan 005 waits on it. It
-is independent of plan 002.
+Proposed. It can land now. Plan 005 waits on it. It is independent of plan 002.
 
 Implements: ORC-CONFORM without ORC-CONFORM-2 and ORC-CONFORM-3. Implements:
 SEC-ENTROPY without SEC-ENTROPY-4. Defers: ORC-PROVISION, PROG-SPLIT,

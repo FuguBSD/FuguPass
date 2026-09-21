@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed. It waits on plan 001 for the entry key and the build skeleton.
+Proposed. It can land now.
 
 Implements: VAULT-LAYOUT, VAULT-SEAL, VAULT-FORMAT, VAULT-ATOMIC, ENTRY-MODEL,
 ENTRY-TYPES. Implements: TEST-KAT without TEST-KAT-3. Implements: VAULT-CONFIG
