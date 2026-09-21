@@ -13,19 +13,21 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-# kat and share, the two known-answer test programs. bsd.regress.mk
-# builds each program of PROGS and runs it, and a run of exit 0 is a
-# pass. kat holds the tests of the derivation tree, and share holds
-# the tests of the custody layer. bsd.prog.mk takes the source of
-# each program from the name of it, so kat.c and share.c need no
+# kat, share and vault, the three known-answer test programs.
+# bsd.regress.mk builds each program of PROGS and runs it, and a run
+# of exit 0 is a pass. kat holds the tests of the derivation tree,
+# share holds the tests of the custody layer, and vault holds the
+# tests of the vault on disk. bsd.prog.mk takes the source of each
+# program from the name of it, so kat.c, share.c and vault.c need no
 # SRCS line. Every test source sits in this one directory
 # (PROG-BUILD-1).
 #
 # Two include directories reach the headers of a test. The first one
 # holds the interfaces of the flat sources, and the second one holds
-# the vectors, as vectors/derive.h and vectors/share.h. Two files
-# share the name derive.h, and two files share the name share.h.
-# Neither directory holds the path of the other file of a name.
+# the vectors, as vectors/derive.h, vectors/share.h and
+# vectors/seal.h. Two files share the name derive.h, two files share
+# the name share.h, and two files share the name seal.h. Neither
+# directory holds the path of the other file of a name.
 #
 # The archive one directory up links nothing, so this directory owns
 # the link line of the three libraries. libsecp256k1 comes from the
@@ -38,7 +40,7 @@
 
 .include <bsd.own.mk>
 
-PROGS=		kat share
+PROGS=		kat share vault
 
 # bsd.prog.mk takes a manual page name from each name of PROGS, and
 # this directory holds no manual page. That line sets a value for an
