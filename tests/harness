@@ -248,8 +248,21 @@ sub free_port ()
 #	the copy needs no file list. A hand-written list of files
 #	goes stale, and a stale list hides a defect behind a green
 #	gate.
+#
+#	The build therefore takes HEAD, and load_legs() takes the
+#	legs of the working tree. One tree must be under test, so a
+#	change of src or tests that no commit holds stops the run.
 sub build_guest ($root)
 {
+	my $dirty = host_ok(
+		'git status',
+		[ 'git', 'status', '--porcelain', '--', 'src', 'tests' ],
+		cwd     => $root,
+		timeout => $GUEST_TIMEOUT );
+	die "the harness builds HEAD, and src or tests holds a change "
+	    . "that no commit holds:\n$dirty"
+	    if $dirty =~ /\S/;
+
 	my $tar = File::Temp->new(
 		TEMPLATE => 'fugupass-tree-XXXXXX',
 		TMPDIR   => 1,
@@ -382,14 +395,18 @@ sub upstream_start ($cp)
 		$cp->{pubkey} = unpack 'H*', $bytes;
 	}
 
+	# Each stream of each run takes a path of its own. Two
+	# handles on one path overwrite each other, and 3-states.pl
+	# restarts the server.
+	my $log = "$cp->{store}/server-" . ++$cp->{runs};
 	my $result = Fugu::Process->spawn_command(
 		cmd => [
 			$python,      '-c', $SERVER_PROGRAM, $cp->{store},
 			'0.0.0.0', $cp->{port}
 		],
 		env    => $env,
-		stdout => "$cp->{store}/server.log",
-		stderr => "$cp->{store}/server.log" );
+		stdout => "$log.out",
+		stderr => "$log.err" );
 	die "the upstream server did not start: $result->{error}\n"
 	    if !$result->{success};
 	$cp->{pid} = $result->{pid};

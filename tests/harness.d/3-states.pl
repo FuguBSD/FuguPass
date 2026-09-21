@@ -69,8 +69,7 @@ return sub ($t)
 	is( $status->{state}, 'status',
 		'an enrollment below the stored counter gives the HTTP error' );
 
-	# The junk answer, against the wrong static key of the same
-	# request.
+	# The junk answer, from a wrong passphrase.
 	my $bad = $t->vault('states-junk');
 	is( $t->enroll($bad)->{state}, 'ok', 'the third record enrolls' );
 	my $junk = $t->reveal( $bad, pass => ['wrong'] );

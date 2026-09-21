@@ -21,8 +21,9 @@
  * request() holds the one request of this file. It derives the
  * client key and the pin secret of the record, takes the counter,
  * draws the ephemeral values, and sends one POST. Each public
- * function calls it, so one record takes one request, and no path
- * of this file sends two requests for one record.
+ * function calls it. oracle_canary_enroll() calls it twice, and
+ * every other path sends one request for one record
+ * (ORC-CANARY-7).
  *
  * The steps come from the other files of the tree. derive.c holds
  * each label, pin.c holds the pin secret, share.c holds the split,
@@ -417,8 +418,10 @@ wrap_path(const struct oracle_ctx *ctx, uint32_t slot, char *out,
  *	(ORC-RECORDS-3).
  *
  *	The call gives 0, or one of the four states of oracle.h. A
- *	failure clears mask. The public function of the call holds
- *	the gate of the context, so this function reads ctx directly.
+ *	failure after the URL gate and the key gate clears mask, and
+ *	each caller clears mask as well. The public function of the
+ *	call holds the gate of the context, so this function reads
+ *	ctx directly.
  */
 static int
 request(const struct oracle_ctx *ctx, uint32_t slot, int canary,

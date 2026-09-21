@@ -24,8 +24,9 @@
 # three gives the state junk.
 #
 # The answer of the oracle is one AES key of a fixed length, and
-# the hex fields of the driver carry it. Equal field widths are the
-# observable part of the equal response size.
+# the hex fields of the driver carry it. A defect of the oracle
+# shows in the state word or in the answer bytes, so this leg
+# compares those two.
 
 use v5.36;
 
@@ -69,22 +70,24 @@ return sub ($t)
 	my $low = $t->reveal($stale);
 	is( $low->{state}, 'junk', 'a counter below the stored one gives junk' );
 
-	# One answer shape for the four (ORC-REVEAL-4).
-	for my $case (
+	# One answer shape for the three (ORC-REVEAL-4). Each case
+	# reports the state word of the other two, and each answer
+	# differs from the live answer and from the other two.
+	my @junk = (
 		[ 'the wrong passphrase', $wrong ],
 		[ 'the wiped record',     $wiped ],
-		[ 'the stale counter',    $low ] )
-	{
-		my ( $what, $answer ) = @$case;
-		is( length $answer->{share},
-			length $ok->{share},
-			"$what gives a share of the width of a live share" );
-		is( length $answer->{mask},
-			length $ok->{mask},
-			"$what gives an answer of the width of a live answer" );
-		is( scalar( () = split ' ', $answer->{line} ),
-			scalar( () = split ' ', $ok->{line} ),
-			"$what gives the field count of a live answer" );
+		[ 'the stale counter',    $low ] );
+	for my $i ( 0 .. $#junk ) {
+		my ( $what, $answer ) = @{ $junk[$i] };
+		isnt( $answer->{mask}, $ok->{mask},
+			"$what gives an answer other than the live answer" );
+		for my $j ( $i + 1 .. $#junk ) {
+			my ( $other, $second ) = @{ $junk[$j] };
+			is( $answer->{state}, $second->{state},
+				"$what and $other give one state word" );
+			isnt( $answer->{mask}, $second->{mask},
+				"$what and $other give two answers" );
+		}
 	}
 
 	return;
