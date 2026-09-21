@@ -89,7 +89,7 @@
 #define SLOT_MAX	(BIP85_PWD_MAX + BIP85_MNEMONIC_MAX + 96)
 
 /* The index of a new vault: the machine row and the pool rows. */
-#define INDEX_MAX	(DERIVE_MACHINE_MAX + CEREMONY_POOL_SIZE * 11 + 96)
+#define INDEX_MAX	(DERIVE_MACHINE_MAX + CEREMONY_POOL_MAX * 11 + 96)
 
 /* One record row of the kit: the oracle index and the file name. */
 #define KIT_LINE_MAX	(sizeof("record 255 ") + 2 * DERIVE_KEYLEN + \
@@ -97,7 +97,7 @@
 
 /* One oracle of the kit: the URL row, each slot, and the canary. */
 #define KIT_ORACLE_MAX	(sizeof("oracle 255 ") + VAULT_URL_MAX + 1 + \
-			    (CEREMONY_POOL_SIZE + 1) * KIT_LINE_MAX)
+			    (CEREMONY_POOL_MAX + 1) * KIT_LINE_MAX)
 
 /* The kit: the machine row, and one block of each position. */
 #define KIT_MAX		(DERIVE_ORACLE_MAX * KIT_ORACLE_MAX + \
@@ -324,7 +324,7 @@ step_config(struct state *st)
 	    "pool-watermark: %u\n"
 	    "audit-age: %u\n",
 	    st->arg->threshold, st->arg->machine, st->arg->rounds, plate,
-	    CEREMONY_POOL_SIZE, CEREMONY_POOL_WATERMARK,
+	    st->arg->pool, CEREMONY_POOL_WATERMARK,
 	    ENTRY_AUDIT_AGE_DEFAULT);
 	if (n < 0 || (size_t)n >= CONFIG_MAX - len) {
 		warnx("the config: the text does not fit");
@@ -527,8 +527,8 @@ out:
 /*
  * step_slots(st):
  *	CER-CREATE-6. The slot loop runs over each slot of the pool.
- *	The pool of a new vault holds CEREMONY_POOL_SIZE slots, and
- *	the slot indexes of it start at 0 (ENTRY-POOL-2,
+ *	The pool of a new vault holds the slots of the command line,
+ *	and the slot indexes of it start at 0 (ENTRY-POOL-2,
  *	KEY-ENTRY-1).
  */
 static int
@@ -536,7 +536,7 @@ step_slots(struct state *st)
 {
 	uint32_t	 slot;
 
-	for (slot = 0; slot < CEREMONY_POOL_SIZE; slot++) {
+	for (slot = 0; slot < st->arg->pool; slot++) {
 		if (step_slot(st, slot) != 0)
 			return -1;
 	}
@@ -567,7 +567,7 @@ step_index(const struct state *st)
 		return -1;
 	}
 	len = (size_t)n;
-	for (slot = 0; slot < CEREMONY_POOL_SIZE; slot++) {
+	for (slot = 0; slot < st->arg->pool; slot++) {
 		n = snprintf(&plain[len], sizeof(plain) - len, "%s%" PRIu32,
 		    slot == 0 ? "" : ",", slot);
 		if (n < 0 || (size_t)n >= sizeof(plain) - len) {
@@ -577,7 +577,7 @@ step_index(const struct state *st)
 		len += (size_t)n;
 	}
 	n = snprintf(&plain[len], sizeof(plain) - len, "\npool-next: %u\n",
-	    CEREMONY_POOL_SIZE);
+	    st->arg->pool);
 	if (n < 0 || (size_t)n >= sizeof(plain) - len) {
 		warnx("the index: the text does not fit");
 		return -1;
@@ -723,8 +723,8 @@ step_kit(const struct state *st)
 		len += (size_t)n;
 
 		/* One name of each slot, and one of the canary. */
-		for (slot = 0; slot <= CEREMONY_POOL_SIZE; slot++) {
-			if (kit_name(st, i, slot, slot == CEREMONY_POOL_SIZE,
+		for (slot = 0; slot <= st->arg->pool; slot++) {
+			if (kit_name(st, i, slot, slot == st->arg->pool,
 			    name, sizeof(name)) != 0)
 				goto out;
 			n = snprintf(&text[len], KIT_MAX - len,
@@ -756,13 +756,18 @@ ceremony_create(const struct ceremony_create *arg)
 
 	if (arg == NULL || arg->vault == NULL || arg->machine == NULL ||
 	    arg->oracle == NULL || arg->count == 0 || arg->threshold == 0 ||
-	    arg->rounds == 0) {
+	    arg->rounds == 0 || arg->pool == 0) {
 		warnx("the ceremony takes an incomplete argument set");
 		return -1;
 	}
 	if (arg->count > DERIVE_ORACLE_MAX) {
 		warnx("the oracle set takes %d positions at the most",
 		    DERIVE_ORACLE_MAX);
+		return -1;
+	}
+	if (arg->pool > CEREMONY_POOL_MAX) {
+		warnx("the pool takes %d slots at the most",
+		    CEREMONY_POOL_MAX);
 		return -1;
 	}
 	if (machine_dir(arg->vault) != 0)

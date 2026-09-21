@@ -1,0 +1,147 @@
+#!/usr/bin/expect -f
+#
+# Answer the terminal reads of one guest command on the console of
+# the guest (TEST-HARNESS-8).
+#
+# Usage: console.exp <host> <port> <command> <password> <marker>
+#         [<answer> ...]
+#
+# fuguvm expect prepends the host and the port, so the caller gives
+# the arguments after them. The command runs one shell script of the
+# guest, and that script writes the exit status of each step to a
+# file. An expect script reports its own run alone, so the caller
+# reads those files over fuguvm ssh.
+#
+# The script answers the prompts in the order of the answer list:
+# the passphrase of a ceremony, the passphrase of a session, and the
+# secret of an add. A prompt ends with a colon and a space, and the
+# shell prompt of the guest holds no colon. The command redirects
+# every other byte to a file, so the console carries the prompts and
+# the marker alone.
+#
+# The command echoes the marker as its last line, and that line ends
+# the run. A command that reads fewer prompts than the list holds
+# therefore stops the script, and it sends no answer to the shell.
+# The marker is no shell prompt, because the buffer can hold a
+# prompt of an earlier line.
+#
+# The console of the guest needs a login. fuguvm generates the root
+# password of an installation, and it keeps that password in the
+# state of the guest, so the caller gives the value here. The
+# default is the default of the installer.
+#
+# fuguvm ssh runs through libssh2 channel->exec, and that channel
+# carries no terminal. readpassphrase(3) reads /dev/tty, so every
+# command of the core process needs this console.
+
+# Use the environment variable when it exists. Otherwise use 600.
+# A ceremony enrolls one record for each slot of the pool, so it
+# runs for minutes.
+if {[info exists env(FUGUVM_TIMEOUT)]} {
+    set timeout $env(FUGUVM_TIMEOUT)
+} else {
+    set timeout 600
+}
+
+if {[llength $argv] < 5} {
+    puts stderr "Usage: console.exp <host> <port> <command> <password>\
+ <marker> \[<answer> ...\]"
+    exit 1
+}
+
+set host [lindex $argv 0]
+set port [lindex $argv 1]
+set cmd [lindex $argv 2]
+set password [lindex $argv 3]
+set marker [lindex $argv 4]
+set answers [lrange $argv 5 end]
+
+if {$password eq ""} {
+    set password "openbsd"
+}
+
+spawn telnet $host $port
+
+# A newline brings the login prompt or the shell prompt.
+send "\r"
+
+expect {
+    "login:" {
+        send "root\r"
+        expect "Password:"
+        send "$password\r"
+    }
+    -re {# $} {
+        # The console already holds a shell. This block takes the
+        # one prompt of it, so the newline below gives the prompt
+        # that the next block reads.
+        send "\r"
+    }
+    eof {
+        puts stderr "telnet could not connect to the console"
+        exit 1
+    }
+    timeout {
+        puts stderr "no login prompt and no shell prompt"
+        exit 1
+    }
+}
+
+expect {
+    -re {# $} {
+        send "$cmd\r"
+    }
+    timeout {
+        puts stderr "no shell prompt for the command"
+        exit 1
+    }
+}
+
+# One answer of each prompt, in order. The marker ends the command,
+# and every answer after it stays unsent.
+set ended 0
+foreach answer $answers {
+    if {$ended} {
+        break
+    }
+    expect {
+        -re {: $} {
+            send "$answer\r"
+        }
+        -ex $marker {
+            set ended 1
+        }
+        eof {
+            puts stderr "the console closed inside the command"
+            exit 1
+        }
+        timeout {
+            puts stderr "no prompt and no marker for an answer"
+            exit 1
+        }
+    }
+}
+
+if {!$ended} {
+    expect {
+        -ex $marker {}
+        timeout {
+            puts stderr "the command wrote no marker"
+            exit 1
+        }
+    }
+}
+
+expect {
+    -re {# $} {}
+    timeout {}
+}
+
+send "exit\r"
+
+expect {
+    "login:" {}
+    timeout {}
+}
+
+exit 0

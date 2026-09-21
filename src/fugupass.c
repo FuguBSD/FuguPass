@@ -29,12 +29,15 @@
  * no file holds. The ceremony makes the machine subdirectory inside
  * the vault directory (VAULT-LAYOUT-4).
  *
- * The frame dispatches on the first argument after the options, and
- * the table below holds one row of each subcommand (PROG-ONESHOT-4).
- * An unknown subcommand gives the usage and the status 2.
- * PROG-IFACE-1 gives the interactive session to a run with no
- * subcommand, and that session is not in this program yet. Such a
- * run gives the usage as well.
+ * The frame dispatches on the first argument after the options,
+ * over two tables (PROG-ONESHOT-4). The table below holds the
+ * subcommands of this file: the vault creation and the canary
+ * re-enrollment. commands_table of commands.h holds the six
+ * commands of the session, and commands_oneshot() runs one of them
+ * (PROG-ONESHOT-1, PROG-ONESHOT-2). A name that neither table holds
+ * gives the usage and the status 2. PROG-IFACE-1 gives the
+ * interactive session to a run with no subcommand, and that session
+ * is not in this program yet. Such a run gives the usage as well.
  *
  * A subcommand reads the options and the arguments of its own
  * command line, and ceremony.c holds the steps of a ceremony
@@ -60,9 +63,11 @@
 #include <unistd.h>
 
 #include "ceremony.h"
+#include "commands.h"
 #include "derive.h"
 #include "fugupass.h"
 #include "sandbox.h"
+#include "session.h"
 
 /* The vault directory of a run without the -d option, under HOME. */
 #define VAULT_DIR	".fugupass"
@@ -75,32 +80,44 @@ struct subcommand {
 };
 
 static int	 cmd_create(int, char *[], const char *);
+static int	 cmd_canary(int, char *[], const char *);
 static void	 usage(void);
 static int	 vault_dir(const char *, char *, size_t);
 
 /*
- * The subcommands of this program. usage() names each one, and
- * main() takes the first argument that matches a name here.
+ * The subcommands of this file. usage() names each one, and main()
+ * takes the first argument that matches a name here. Neither table
+ * of the frame holds a name of the other one.
  */
 static const struct subcommand commands[] = {
-	{ "create",	"-k threshold -m machine -r rounds oracle ...",
-	    cmd_create }
+	{ "create",	"-k threshold -m machine -r rounds [-p slots] "
+	    "oracle ...", cmd_create },
+	{ "canary",	"oracle", cmd_canary }
 };
 
 /*
  * usage():
  *	The usage lines, to the standard error, and the status 2.
- *	The table above gives one line of each subcommand.
+ *	The two tables of the frame give one line of each subcommand.
  */
 static void
 usage(void)
 {
-	size_t	 i;
+	const struct commands_cmd	*c;
+	const char			*lead = "usage:";
+	size_t				 i;
 
-	for (i = 0; i < nitems(commands); i++)
-		fprintf(stderr, "%s %s [-d directory] %s %s\n",
-		    i == 0 ? "usage:" : "      ", getprogname(),
-		    commands[i].name, commands[i].args);
+	for (i = 0; i < nitems(commands); i++) {
+		fprintf(stderr, "%s %s [-d directory] %s %s\n", lead,
+		    getprogname(), commands[i].name, commands[i].args);
+		lead = "      ";
+	}
+	for (c = commands_table; c->name != NULL; c++) {
+		fprintf(stderr, "%s %s [-d directory] %s%s%s\n", lead,
+		    getprogname(), c->name, c->args[0] == '\0' ? "" : " ",
+		    c->args);
+		lead = "      ";
+	}
 	exit(2);
 }
 
@@ -147,6 +164,9 @@ vault_dir(const char *opt, char *buf, size_t bufsize)
  *	first argument is position 1 (ORC-PROVISION-1,
  *	ORC-PROVISION-5).
  *
+ *	The slots of the pool come from -p, and a run without that
+ *	option takes CEREMONY_POOL_SIZE slots (ENTRY-POOL-2).
+ *
  *	The config reader holds the full bounds of the threshold and
  *	of the oracle set (VAULT-CONFIG-6). This function holds the
  *	form of each number, and the two gates below.
@@ -163,10 +183,11 @@ cmd_create(int argc, char *argv[], const char *vault)
 
 	memset(&arg, 0, sizeof(arg));
 	arg.vault = vault;
+	arg.pool = CEREMONY_POOL_SIZE;
 
 	optreset = 1;
 	optind = 1;
-	while ((ch = getopt(argc, argv, "k:m:r:")) != -1) {
+	while ((ch = getopt(argc, argv, "k:m:p:r:")) != -1) {
 		switch (ch) {
 		case 'k':
 			arg.threshold = (unsigned int)strtonum(optarg, 1,
@@ -178,6 +199,14 @@ cmd_create(int argc, char *argv[], const char *vault)
 			break;
 		case 'm':
 			arg.machine = optarg;
+			break;
+		case 'p':
+			arg.pool = (unsigned int)strtonum(optarg, 1,
+			    CEREMONY_POOL_MAX, &errstr);
+			if (errstr != NULL) {
+				warnx("the pool size is %s", errstr);
+				usage();
+			}
 			break;
 		case 'r':
 			arg.rounds = (unsigned int)strtonum(optarg, 1,
@@ -220,6 +249,43 @@ cmd_create(int argc, char *argv[], const char *vault)
 	arg.count = (unsigned int)argc;
 
 	return ceremony_create(&arg) == 0 ? 0 : 1;
+}
+
+/*
+ * cmd_canary(argc, argv, vault):
+ *	The canary re-enrollment of one oracle of the vault directory
+ *	vault (ORC-CANARY-5, PROG-ONESHOT-4). The one argument is the
+ *	position of that oracle in the ordered set (ORC-PROVISION-5).
+ *
+ *	The call opens the session, so the passphrase of the unlock
+ *	verifies at the canary record of each quorum oracle first
+ *	(ORC-CANARY-1). session.c then reads the passphrase a second
+ *	time, and it re-enrolls the record (ORC-CANARY-6).
+ *
+ *	A session that holds the index key re-wraps this machine's
+ *	index share of the oracle, and a session without it deletes
+ *	the dead wrap file (ORC-CANARY-8).
+ */
+static int
+cmd_canary(int argc, char *argv[], const char *vault)
+{
+	struct session	*s = NULL;
+	const char	*errstr;
+	unsigned int	 oracle;
+	int		 rv;
+
+	if (argc != 2)
+		usage();
+	oracle = (unsigned int)strtonum(argv[1], 1, DERIVE_ORACLE_MAX,
+	    &errstr);
+	if (errstr != NULL)
+		errx(1, "the oracle position is %s", errstr);
+
+	if (session_open(vault, &s) != 0)
+		return 1;
+	rv = session_canary(s, oracle);
+	session_close(s);
+	return rv == 0 ? 0 : 1;
 }
 
 int
@@ -281,11 +347,12 @@ fugupass_passphrase_new(char *buf, size_t bufsize)
 int
 main(int argc, char *argv[])
 {
-	struct rlimit	 nocore = { 0, 0 };
-	char		 vault[PATH_MAX];
-	const char	*dir = NULL;
-	size_t		 i;
-	int		 ch;
+	struct rlimit			 nocore = { 0, 0 };
+	const struct commands_cmd	*c;
+	char				 vault[PATH_MAX];
+	const char			*dir = NULL;
+	size_t				 i;
+	int				 ch;
 
 	/*
 	 * The first call of main(), before every other one: no crash
@@ -317,22 +384,30 @@ main(int argc, char *argv[])
 		usage();
 
 	/*
-	 * The frame reads the table before the sandbox, so a wrong
-	 * subcommand makes no vault directory. The sandbox comes
-	 * before the command line of the subcommand, so a rejected
-	 * option of a subcommand makes that directory.
+	 * The frame reads the two tables before the sandbox, so a
+	 * wrong subcommand makes no vault directory. The sandbox
+	 * comes before the command line of the subcommand, so a
+	 * rejected option of a subcommand makes that directory.
 	 */
 	for (i = 0; i < nitems(commands); i++) {
 		if (strcmp(argv[0], commands[i].name) == 0)
 			break;
 	}
-	if (i == nitems(commands))
-		usage();
+	if (i == nitems(commands)) {
+		for (c = commands_table; c->name != NULL; c++) {
+			if (strcmp(argv[0], c->name) == 0)
+				break;
+		}
+		if (c->name == NULL)
+			usage();
+	}
 
 	if (vault_dir(dir, vault, sizeof(vault)) != 0)
 		errx(1, "no vault directory");
 	if (sandbox_enter(vault) != 0)
 		err(1, "sandbox");
 
-	return commands[i].run(argc, argv, vault);
+	if (i < nitems(commands))
+		return commands[i].run(argc, argv, vault);
+	return commands_oneshot(vault, argc, argv);
 }
