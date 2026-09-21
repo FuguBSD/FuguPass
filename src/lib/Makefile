@@ -24,14 +24,15 @@
 .PATH:		${.CURDIR}/..
 
 LIB=		fugupass
-SRCS=		bip85.c derive.c entry.c pin.c seal.c share.c vault.c wordlist.c
+SRCS=		bip85.c derive.c entry.c envelope.c pin.c seal.c share.c \
+		vault.c wordlist.c
 
 CFLAGS+=	-Wall -Wextra -Werror
 CFLAGS+=	-I${.CURDIR}/..
 
 # libsecp256k1 comes from the ports tree, under LOCALBASE.
-# bip85.c reads its header, and each directory that links this
-# archive adds -L${LOCALBASE}/lib -lsecp256k1 to LDADD.
+# bip85.c and envelope.c read its header, and each directory that
+# links this archive adds -L${LOCALBASE}/lib -lsecp256k1 to LDADD.
 LOCALBASE?=	/usr/local
 
 CFLAGS+=	-I${LOCALBASE}/include

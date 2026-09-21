@@ -13,21 +13,24 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-# kat, share and vault, the three known-answer test programs.
-# bsd.regress.mk builds each program of PROGS and runs it, and a run
-# of exit 0 is a pass. kat holds the tests of the derivation tree,
-# share holds the tests of the custody layer, and vault holds the
-# tests of the vault on disk. bsd.prog.mk takes the source of each
-# program from the name of it, so kat.c, share.c and vault.c need no
-# SRCS line. Every test source sits in this one directory
+# envelope, kat, share and vault, the four known-answer test
+# programs. bsd.regress.mk builds each program of PROGS and runs it,
+# and a run of exit 0 is a pass. envelope holds the tests of the
+# oracle protocol, kat holds the tests of the derivation tree, share
+# holds the tests of the custody layer, and vault holds the tests of
+# the vault on disk. bsd.prog.mk takes the source of each program
+# from the name of it, so envelope.c, kat.c, share.c and vault.c need
+# no SRCS line. Every test source sits in this one directory
 # (PROG-BUILD-1).
 #
 # Two include directories reach the headers of a test. The first one
 # holds the interfaces of the flat sources, and the second one holds
-# the vectors, as vectors/derive.h, vectors/share.h and
-# vectors/seal.h. Two files share the name derive.h, two files share
-# the name share.h, and two files share the name seal.h. Neither
-# directory holds the path of the other file of a name.
+# the vectors, as vectors/derive.h, vectors/oracle.h, vectors/seal.h
+# and vectors/share.h. Two files share the name derive.h, two files
+# share the name share.h, and two files share the name seal.h.
+# Neither directory holds the path of the other file of a name.
+# envelope.c holds a name of its own in each directory: the interface
+# is envelope.h, and the vectors are vectors/oracle.h.
 #
 # The archive one directory up links nothing, so this directory owns
 # the link line of the three libraries. libsecp256k1 comes from the
@@ -40,7 +43,7 @@
 
 .include <bsd.own.mk>
 
-PROGS=		kat share vault
+PROGS=		envelope kat share vault
 
 # bsd.prog.mk takes a manual page name from each name of PROGS, and
 # this directory holds no manual page. That line sets a value for an
@@ -54,7 +57,7 @@ CFLAGS+=	-I${.CURDIR}/../../tests
 LOCALBASE?=	/usr/local
 LIBFUGUPASS=	${.CURDIR}/../lib
 
-# share.c reads <secp256k1.h> of the ports tree.
+# envelope.c and share.c read <secp256k1.h> of the ports tree.
 CFLAGS+=	-I${LOCALBASE}/include
 
 .if exists(${LIBFUGUPASS}/obj)
