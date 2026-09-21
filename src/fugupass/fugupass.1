@@ -89,8 +89,8 @@ The session unmasks one share of each answer, it reconstructs the
 key of the entry, and it opens the entry file of that key.
 A failure at one oracle moves that oracle out of the quorum, and the
 next reachable oracle takes the place.
-Each reveal tries each reachable oracle at most once, and it stops
-when no untried reachable oracle remains.
+Each reveal substitutes each reachable oracle at most once, and it
+stops when no untried reachable oracle remains.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds

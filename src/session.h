@@ -195,10 +195,11 @@ int	session_slot_ready(const struct session *, uint32_t);
  *
  *	The call sends one get_pin per quorum oracle, reconstructs
  *	the entry key from the k shares, and decrypts the file of
- *	that key (KEY-SHARE-6, VAULT-SEAL-4). A decrypt failure, an
- *	HTTP error, and a transport failure each substitute an
- *	oracle and try again, until no untried oracle remains
- *	(ORC-QUORUM-5). Each failed attempt names its quorum.
+ *	that key (KEY-SHARE-6, VAULT-SEAL-4). A decrypt failure and a
+ *	failed request each substitute an oracle and try again, until
+ *	no untried oracle remains (ORC-QUORUM-5). One call
+ *	substitutes each reachable oracle at most once, and each
+ *	failed attempt names its quorum.
  *
  *	The entry key leaves memory directly after the decrypt
  *	(SEC-MEMORY-6). The plaintext belongs to the session, and the
@@ -260,8 +261,9 @@ void	session_drop(struct session *);
  *	The enrollment takes two reads of the passphrase, so the call
  *	reads it again and requires the value of the unlock
  *	(ORC-CANARY-6, SEC-MEMORY-2). The unlock verified that value
- *	at the canary record of each quorum oracle, so this step
- *	holds a verifier (ORC-CANARY-1).
+ *	at the canary record of each quorum oracle, so this call
+ *	gives no warning of a missing verifier (ORC-CANARY-1,
+ *	ORC-CANARY-6).
  *
  *	The fresh canary mask kills this machine's index wrap of the
  *	oracle. A session that holds the index key re-wraps the index

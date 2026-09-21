@@ -308,12 +308,14 @@ record at one oracle.
   decrypt the entry file under `K_e` ([VAULT-SEAL](vault.md#vault-seal)). The
   decrypt failure is the only junk detector, and it does not name the failing
   oracle.
-- **ORC-QUORUM-5** — A decrypt failure, an HTTP error, or a transport failure
-  can happen at a quorum oracle. The tool can then substitute the next reachable
-  oracle, after the canary check of that oracle. The tool must try each
-  reachable oracle at most once per reveal as a substitute. It must stop the
-  substitutions when no untried reachable oracle remains. Every failure report
-  must name the quorum oracles of the attempt.
+- **ORC-QUORUM-5** — A decrypt failure or a failed request can happen at a
+  quorum oracle. A request fails at the oracle
+  ([ORC-REVEAL](oracle.md#orc-reveal)). It also fails at this machine, at a
+  record with no greater counter (ORC-COUNTER-5). The tool can then substitute
+  the next reachable oracle, after the canary check of that oracle. The tool
+  must try each reachable oracle at most once per reveal as a substitute. It
+  must stop the substitutions when no untried reachable oracle remains. Every
+  failure report must name the quorum oracles of the attempt.
 - **ORC-QUORUM-6** — With fewer than `k` reachable oracles, the tool must
   perform no reveal. It must report the state of each oracle, with the distinct
   states of [ORC-REVEAL](oracle.md#orc-reveal).
@@ -358,10 +360,9 @@ attempt, so the tool bounds the retries per record per session.
   client can re-enroll a wiped canary with `set_pin` at any time, without a
   ceremony.
 - **ORC-CANARY-6** — A canary enrollment must read the passphrase twice and must
-  require a match. The tool must warn that no verifier exists when no canary
-  record holds that passphrase ([CER-CREATE](ceremonies.md#cer-create)). The
-  tool must not warn when the unlock of the session verified that passphrase
-  (ORC-CANARY-1).
+  require a match. The tool must warn that no verifier exists when this session
+  verified the typed passphrase against no canary record. The tool must not warn
+  when the unlock of this session verified that passphrase (ORC-CANARY-1).
 - **ORC-CANARY-7** — The client must verify a fresh canary with one immediate
   `get_pin` round trip before the session proceeds.
 - **ORC-CANARY-8** — A canary re-enrollment at oracle `i` replaces that oracle's

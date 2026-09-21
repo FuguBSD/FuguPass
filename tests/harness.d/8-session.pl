@@ -254,9 +254,29 @@ sub entry_case ( $t, $topology )
 		    . '(ENTRY-ROTATION-4)' );
 	like( $stored->{out}, qr/^version: 1$/m,
 		'the rotation of add keeps the version (ENTRY-ROTATION-1)' );
+	like( $stored->{out}, qr/^username: u1$/m,
+		'the rotation of add carries the metadata of the old '
+		    . 'version into the new file (ENTRY-ROTATION-5)' );
 	is_deeply( [ terminal($stored) ], [$second],
 		'the rotation of add seals the new secret in the slot of '
 		    . 'the entry (ENTRY-ROTATION-4)' );
+
+	#
+	# A secret read that fails, on the same rotation. The read
+	# comes before the reveal of the old entry, so the entry
+	# records of that slot take no request (SEC-MEMORY-4,
+	# SEC-MEMORY-6). An empty line is a failed read.
+	#
+	my ($void) = $t->console( $vault,
+		{ argv => [ 'add', 'a1' ], answers => [ 'right', 'none' ] } );
+
+	isnt( $void->{exit}, 0,
+		'an empty secret stops the rotation of add' );
+	like( $void->{error}, qr/the secret: the read fails/,
+		'the report names the read of the secret' );
+	is_deeply( entry_counters($void), entry_counters($stored),
+		'the failed read of the secret leaves the records of the '
+		    . 'slot untouched (SEC-MEMORY-6)' );
 
 	#
 	# The totp code and the shadow audit (ENTRY-TYPES-3,
@@ -398,6 +418,10 @@ sub entry_case ( $t, $topology )
 			{ argv => [ 'canary', $last ],
 				answers => [ 'right', 'right' ] } );
 
+		is( $kill->{exit}, 0,
+			'the canary subcommand of that oracle passes '
+			    . '(ORC-CANARY-5)' )
+		    or diag( $kill->{error} );
 		like( $kill->{error},
 			qr/the index wrap of oracle $last is gone/,
 			'the report names the index wrap that the '
@@ -464,9 +488,10 @@ sub pool_case ( $t, $topology )
 
 # quorum_case($t):
 #	The reveal on every two-oracle quorum of the example
-#	topology, the decrypt failure with one mask, and the
+#	topology, the decrypt failure with one mask, the
 #	substitution after a decrypt failure and after a failed
-#	request (TEST-HARNESS-5, ORC-QUORUM-4, ORC-QUORUM-5).
+#	request, and the two reveals of one session (TEST-HARNESS-5,
+#	ORC-QUORUM-4, ORC-QUORUM-5).
 sub quorum_case ($t)
 {
 	my $secret = $t->answer('secret2');
@@ -477,11 +502,17 @@ sub quorum_case ($t)
 	is( $made->{exit}, 0, 'the creation of the quorum vault passes' )
 	    or diag( $made->{error} );
 
-	my ($add) = $t->console( $vault,
+	my ( $add, $derived ) = $t->console(
+		$vault,
 		{ argv => [ 'add', '-T', 'password', 'q1' ],
-			answers => [ 'right', 'secret2' ] } );
+			answers => [ 'right', 'secret2' ] },
+		{ argv => [ 'gen', '-T', 'password', 'g1' ],
+			answers => ['right'] } );
 	is( $add->{exit}, 0, 'add writes the entry of the quorum vault' )
 	    or diag( $add->{error} );
+	is( $derived->{exit}, 0,
+		'gen writes the derived entry of the quorum vault' )
+	    or diag( $derived->{error} );
 
 	# Every two-oracle quorum of the three (TEST-HARNESS-5). One
 	# stopped oracle leaves one quorum, so the session selects it
@@ -564,12 +595,55 @@ sub quorum_case ($t)
 		'the report names the failed request of the quorum oracle '
 		    . '(ORC-QUORUM-5)' );
 	is( $moved->{exit}, 0,
-		'the session substitutes an oracle after a failed request '
-		    . '(ORC-QUORUM-5)' )
+		'the session substitutes an oracle after a request that '
+		    . 'fails at this machine (ORC-QUORUM-5, ORC-COUNTER-5)' )
 	    or diag( $moved->{error} );
 	is_deeply( [ terminal($moved) ], [$secret],
 		'the quorum of the substitution reveals the entry '
 		    . '(ORC-QUORUM-5)' );
+
+	#
+	# Two reveals of one session. The rotation of gen reveals
+	# the slot of the old version, and it then consumes a new
+	# slot. The wrap of slot 1 at oracle 1 is stale, so the
+	# first reveal substitutes the third oracle and walks the
+	# candidates to the end. The wrap of slot 2 at oracle 3 is
+	# stale as well, so the second reveal needs a substitution
+	# of its own (ORC-QUORUM-5).
+	#
+	my $old  = $t->wrap( $vault, slot => 1, oracle => 1 );
+	my $new  = $t->wrap( $vault, slot => 2, oracle => 3 );
+	my $keep = "$vault->{dir}-wrap.old";
+	my $back = "$vault->{dir}-wrap.new";
+
+	$t->copy_file( $old, $keep );
+	$t->copy_file( $new, $back );
+	$t->copy_file( $t->wrap( $vault, slot => 0, oracle => 1 ), $old );
+	$t->copy_file( $t->wrap( $vault, slot => 0, oracle => 3 ), $new );
+
+	my ( $twice, $rotated ) = $t->console(
+		$vault,
+		{ argv => [ 'gen', 'g1' ], answers => ['right'] },
+		{ argv => [ 'show', 'g1' ], answers => ['right'] } );
+
+	$t->copy_file( $keep, $old );
+	$t->copy_file( $back, $new );
+
+	is( $twice->{exit}, 0,
+		'the second reveal of one session substitutes an oracle of '
+		    . 'its own (ORC-QUORUM-5)' )
+	    or diag( $twice->{error} );
+	like( $twice->{error},
+		qr/slot 1: the entry of this quorum does not open/,
+		'the reveal of the old version fails the decrypt first '
+		    . '(ORC-QUORUM-4)' );
+	like( $twice->{error},
+		qr/slot 2: the entry of this quorum does not open/,
+		'the consumption of the new slot fails the decrypt too '
+		    . '(ORC-QUORUM-4)' );
+	like( $rotated->{out}, qr/^slots: 1,2$/m,
+		'the rotation of the two reveals consumed the new slot '
+		    . '(ENTRY-ROTATION-1)' );
 	return;
 }
 

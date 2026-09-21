@@ -182,10 +182,15 @@ our %VECTOR = vectors("$RealBin/vectors/derive.h");
 #
 # The totp key is the key of the RFC 6238 test vector, as the hex of
 # the twenty ASCII bytes 12345678901234567890 (ENTRY-TYPES-3).
+#
+# The answer 'none' is the empty line. The core process takes an
+# empty read of readpassphrase(3) as a failed read, so a step names
+# this answer to stop a terminal read.
 our %ANSWER = (
 	right    => 'correct horse battery staple',
 	wrong    => 'wrong horse battery staple',
 	other    => 'other horse battery staple',
+	none     => '',
 	secret   => 'the stored secret of one entry',
 	secret2  => 'the second stored secret of one entry',
 	totp_key => '3132333435363738393031323334353637383930' );

@@ -357,8 +357,8 @@ out:
  * step_passphrase(st):
  *	CER-CREATE-4. readpassphrase(3) reads the passphrase twice,
  *	and a mismatch stops the ceremony (SEC-MEMORY-4). The
- *	ceremony enrolls a canary under this value, so the warning
- *	of ORC-CANARY-6 comes first.
+ *	ceremony verifies this value against no canary record, so
+ *	the warning of ORC-CANARY-6 comes first.
  */
 static int
 step_passphrase(struct state *st)

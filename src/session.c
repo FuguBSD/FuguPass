@@ -43,10 +43,12 @@
  *
  * substitute() takes the next untried candidate, after the canary
  * check of it (ORC-QUORUM-5). Each reveal starts that walk again,
- * so one reveal holds one attempt of each reachable oracle. The
- * substitutions of one reveal end when the walk runs out. The
- * session quorum keeps each substitution, so a later reveal of the
- * session starts from the same oracles.
+ * so one reveal substitutes each reachable oracle at most once. An
+ * attempt asks each quorum oracle again, so an oracle that stays
+ * in the quorum can take one request in every attempt of that
+ * reveal. The substitutions of one reveal end when the walk runs
+ * out. The session quorum keeps each substitution, so a later
+ * reveal of the session starts from the same oracles.
  *
  * The steps come from the other files of the tree. oracle.c holds
  * each record, each mask and each wrap, share.c holds the
@@ -116,7 +118,7 @@
  * cand holds the candidates of ORC-QUORUM-2, in preference order.
  * next is the first untried candidate of the walk. The open takes
  * one walk, and each reveal takes one of its own, so one reveal
- * tries each reachable oracle at most once (ORC-QUORUM-5).
+ * substitutes each reachable oracle at most once (ORC-QUORUM-5).
  *
  * state[i] is the last state of oracle i, for the report of a
  * refusal (ORC-QUORUM-6). passed counts the canary checks that
@@ -902,8 +904,8 @@ entry_open(struct session *s, const unsigned char *key)
  *	quorum in turn. Each attempt names its quorum oracles, and
  *	the substitutions end when no untried oracle remains
  *	(ORC-QUORUM-5). The walk of the substitutions starts at the
- *	first candidate, so each reveal holds one attempt of each
- *	reachable oracle.
+ *	first candidate, so each reveal substitutes each reachable
+ *	oracle at most once.
  *
  *	keep holds the entry key in the session for session_seal(),
  *	and the key of every other reveal leaves memory directly
@@ -1238,7 +1240,9 @@ session_canary(struct session *s, unsigned int oracle)
 	 * A canary enrollment takes two reads of the passphrase
 	 * (ORC-CANARY-6). The unlock of the session read it once,
 	 * and this step reads it again. The comparison runs in
-	 * constant time (SEC-MEMORY-2).
+	 * constant time (SEC-MEMORY-2). The unlock verified that
+	 * value at each quorum oracle, so this step gives no warning
+	 * of a missing verifier (ORC-CANARY-1, ORC-CANARY-6).
 	 */
 	if (fugupass_passphrase("Passphrase again: ", again,
 	    sizeof(again)) != 0) {
