@@ -270,6 +270,18 @@ int	vault_scan(const char *, size_t, const struct vault_field *,
 	    vault_scan_cb, void *);
 
 /*
+ * vault_number(text, len, max, out):
+ *	The value of the unpadded decimal ASCII of len bytes at text,
+ *	to out (VAULT-FORMAT-7). A leading zero, a character that is
+ *	not a digit, and a value above max each give -1.
+ *
+ *	vault_scan() takes this rule for each number of a file, and a
+ *	caller that reads a number out of a scanned value takes this
+ *	same call with the bound of that number.
+ */
+int	vault_number(const char *, size_t, uint32_t, uint32_t *);
+
+/*
  * vault_write(path, data, datalen):
  *	Write the datalen bytes at data to path, atomically
  *	(VAULT-ATOMIC-1). The sequence is mkstemp(3) in the

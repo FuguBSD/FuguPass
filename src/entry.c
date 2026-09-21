@@ -31,6 +31,10 @@
  *
  * No row repeats, because each field of an entry takes one line.
  *
+ * vault_number() of vault.c reads one slot index of the slots
+ * list, with SLOT_MAX as the bound (VAULT-FORMAT-7). This file
+ * holds no parser of that value.
+ *
  * HMAC comes from libcrypto, for the TOTP code alone
  * (ENTRY-TYPES-3). No other library enters this file.
  */
@@ -173,34 +177,6 @@ const struct entry_type_row entry_types[ENTRY_TYPE_MAX] = {
 };
 
 /*
- * slot_number(text, len, out):
- *	The value of the unpadded decimal ASCII of len bytes at
- *	text, to out (VAULT-FORMAT-7). A leading zero, a character
- *	that is not a digit, and a value above SLOT_MAX each give
- *	-1. The scanner of vault.c holds this same rule for a file,
- *	and this function reads the value that the scanner took.
- */
-static int
-slot_number(const char *text, size_t len, uint32_t *out)
-{
-	uint64_t	 value = 0;
-	size_t		 i;
-
-	/* 10 digits hold every value below 2^32. */
-	if (len == 0 || len > 10 || (len > 1 && text[0] == '0'))
-		return -1;
-	for (i = 0; i < len; i++) {
-		if (text[i] < '0' || text[i] > '9')
-			return -1;
-		value = value * 10 + (uint64_t)(text[i] - '0');
-	}
-	if (value > (uint64_t)SLOT_MAX)
-		return -1;
-	*out = (uint32_t)value;
-	return 0;
-}
-
-/*
  * name_eq(name, namelen, text):
  *	1 when the namelen bytes at name are the string at text, and
  *	0 for every other pair. A name of a table holds no NUL byte,
@@ -284,7 +260,7 @@ entry_version(const char *slots, size_t slotslen, uint32_t slot,
 		comma = memchr(&slots[at], ',', slotslen - at);
 		part = (comma == NULL) ? slotslen - at :
 		    (size_t)(comma - slots) - at;
-		if (slot_number(&slots[at], part, &value) != 0)
+		if (vault_number(&slots[at], part, SLOT_MAX, &value) != 0)
 			return -1;
 		position++;
 		if (value == slot) {

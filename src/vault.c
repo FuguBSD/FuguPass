@@ -173,14 +173,8 @@ digits(const char *text, size_t len, uint32_t *out)
 	return 0;
 }
 
-/*
- * number(text, len, max, out):
- *	The value of the unpadded decimal ASCII of len bytes at
- *	text, to out (VAULT-FORMAT-7). A leading zero, a character
- *	that is not a digit, and a value above max each give -1.
- */
-static int
-number(const char *text, size_t len, uint32_t max, uint32_t *out)
+int
+vault_number(const char *text, size_t len, uint32_t max, uint32_t *out)
 {
 	uint64_t	 value = 0;
 	size_t		 i;
@@ -260,7 +254,7 @@ slots_ok(const char *text, size_t len)
 	for (;;) {
 		comma = memchr(text + at, ',', len - at);
 		part = (comma == NULL) ? len - at : (size_t)(comma - text) - at;
-		if (number(text + at, part, SLOT_MAX, &slot) != 0)
+		if (vault_number(text + at, part, SLOT_MAX, &slot) != 0)
 			return -1;
 		if (comma == NULL)
 			return 0;
@@ -305,12 +299,12 @@ record_ok(const char *text, size_t len)
 	if ((hyphen = memchr(text, '-', len)) == NULL)
 		return -1;
 	head = (size_t)(hyphen - text);
-	if (number(&hyphen[1], len - head - 1, DERIVE_ORACLE_MAX,
+	if (vault_number(&hyphen[1], len - head - 1, DERIVE_ORACLE_MAX,
 	    &value) != 0 || value == 0)
 		return -1;
 	if (head == sizeof(canary) - 1 && memcmp(text, canary, head) == 0)
 		return 0;
-	return number(text, head, SLOT_MAX, &value);
+	return vault_number(text, head, SLOT_MAX, &value);
 }
 
 /*
@@ -379,7 +373,7 @@ value_ok(enum vault_value form, const char *text, size_t len)
 	case VAULT_VALUE_WORD:
 		return word_ok(text, len);
 	case VAULT_VALUE_NUMBER:
-		return number(text, len, SLOT_MAX, &value);
+		return vault_number(text, len, SLOT_MAX, &value);
 	case VAULT_VALUE_SLOTS:
 		return slots_ok(text, len);
 	case VAULT_VALUE_DATE:
@@ -421,7 +415,7 @@ match_name(const struct vault_field *field, const char *name, size_t namelen,
 	case VAULT_NAME_ORACLE:
 		if (namelen <= head || memcmp(name, field->name, head) != 0)
 			return -1;
-		if (number(&name[head], namelen - head, DERIVE_ORACLE_MAX,
+		if (vault_number(&name[head], namelen - head, DERIVE_ORACLE_MAX,
 		    &value) != 0 || value == 0)
 			return -1;
 		line->oracle = (unsigned int)value;
@@ -430,11 +424,11 @@ match_name(const struct vault_field *field, const char *name, size_t namelen,
 		if ((hyphen = memchr(name, '-', namelen)) == NULL)
 			return -1;
 		head = (size_t)(hyphen - name);
-		if (number(name, head, SLOT_MAX, &value) != 0)
+		if (vault_number(name, head, SLOT_MAX, &value) != 0)
 			return -1;
 		line->slot = value;
-		if (number(&hyphen[1], namelen - head - 1, DERIVE_ORACLE_MAX,
-		    &value) != 0 || value == 0)
+		if (vault_number(&hyphen[1], namelen - head - 1,
+		    DERIVE_ORACLE_MAX, &value) != 0 || value == 0)
 			return -1;
 		line->oracle = (unsigned int)value;
 		return 0;
@@ -771,7 +765,7 @@ config_line(const struct vault_line *line, void *arg)
 	}
 
 	/* The table holds every other field to a number. */
-	if (number(line->value, line->valuelen, SLOT_MAX, &value) != 0)
+	if (vault_number(line->value, line->valuelen, SLOT_MAX, &value) != 0)
 		return -1;
 	if (strcmp(name, "threshold") == 0) {
 		cfg->threshold = value;
