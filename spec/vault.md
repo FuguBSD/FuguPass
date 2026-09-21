@@ -101,8 +101,8 @@ The client can never learn the cause from the seal
   [VAULT-CONFIG](vault.md#vault-config) defines the config fields.
 - **VAULT-FORMAT-4** — A sealed file that holds a secret places the secret block
   first: the secret fields, then the metadata fields.
-- **VAULT-FORMAT-5** — A line has at most 4096 bytes. The reader must reject a
-  longer line.
+- **VAULT-FORMAT-5** — A line has at most 4096 bytes. The count includes the
+  line feed that ends the line. The reader must reject a longer line.
 - **VAULT-FORMAT-6** — The reader must be a strict scanner. It must reject an
   unknown field, and it must not use a YAML or a JSON library.
 - **VAULT-FORMAT-7** — A value must not hold a line feed. A slot index in a
