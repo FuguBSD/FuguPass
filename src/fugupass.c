@@ -38,7 +38,9 @@
  *
  * A subcommand reads the options and the arguments of its own
  * command line, and ceremony.c holds the steps of a ceremony
- * (PROG-ONESHOT-5, PROG-ONESHOT-6, CER-CREATE).
+ * (PROG-ONESHOT-5, PROG-ONESHOT-6, CER-CREATE). A wrong command
+ * line of a subcommand gives the reason, the usage and the status
+ * 2.
  *
  * The passphrase enters here, through readpassphrase(3) of the
  * terminal (SEC-MEMORY-4, PROG-IFACE-3). No argument and no
@@ -169,8 +171,10 @@ cmd_create(int argc, char *argv[], const char *vault)
 		case 'k':
 			arg.threshold = (unsigned int)strtonum(optarg, 1,
 			    DERIVE_ORACLE_MAX, &errstr);
-			if (errstr != NULL)
-				errx(1, "the threshold is %s", errstr);
+			if (errstr != NULL) {
+				warnx("the threshold is %s", errstr);
+				usage();
+			}
 			break;
 		case 'm':
 			arg.machine = optarg;
@@ -178,8 +182,10 @@ cmd_create(int argc, char *argv[], const char *vault)
 		case 'r':
 			arg.rounds = (unsigned int)strtonum(optarg, 1,
 			    INT_MAX, &errstr);
-			if (errstr != NULL)
-				errx(1, "the round count is %s", errstr);
+			if (errstr != NULL) {
+				warnx("the round count is %s", errstr);
+				usage();
+			}
 			break;
 		default:
 			usage();
@@ -197,11 +203,15 @@ cmd_create(int argc, char *argv[], const char *vault)
 	 * full rule of each one, because a retired position counts
 	 * against the threshold there (VAULT-CONFIG-6).
 	 */
-	if (derive_machine_check(arg.machine, strlen(arg.machine)) != 0)
-		errx(1, "the machine name takes lowercase letters, digits "
+	if (derive_machine_check(arg.machine, strlen(arg.machine)) != 0) {
+		warnx("the machine name takes lowercase letters, digits "
 		    "and hyphens, 1 to %d bytes", DERIVE_MACHINE_MAX);
-	if (arg.threshold > (unsigned int)argc)
-		errx(1, "the threshold is above the count of the oracle set");
+		usage();
+	}
+	if (arg.threshold > (unsigned int)argc) {
+		warnx("the threshold is above the count of the oracle set");
+		usage();
+	}
 
 	arg.oracle = (const char *const *)argv;
 	arg.count = (unsigned int)argc;
@@ -305,7 +315,9 @@ main(int argc, char *argv[])
 
 	/*
 	 * The frame reads the table before the sandbox, so a wrong
-	 * subcommand makes no vault directory.
+	 * subcommand makes no vault directory. The sandbox comes
+	 * before the command line of the subcommand, so a rejected
+	 * option of a subcommand makes that directory.
 	 */
 	for (i = 0; i < nitems(commands); i++) {
 		if (strcmp(argv[0], commands[i].name) == 0)

@@ -48,8 +48,9 @@ return sub ($t)
 	#
 	# The whole ceremony.
 	#
-	my $vault = $t->ceremony_vault('main');
-	my $run   = $t->create($vault);
+	my $vault  = $t->ceremony_vault('main');
+	my @before = $t->records;
+	my $run    = $t->create($vault);
 	is( $run->{exit}, 0, 'the creation ceremony passes' )
 	    or diag( $run->{error} );
 
@@ -108,6 +109,16 @@ return sub ($t)
 	my %once = map { $_ => 1 } @record;
 	is( scalar keys %once, 65,
 		'each record file name of the kit is a name of its own' );
+
+	# The names must be the record files that the oracle now
+	# holds. The two sets before and after the ceremony give the
+	# records of it, and a wrong hash input in the kit names 65
+	# unique files that no store holds.
+	my %before = map { $_ => 1 } @before;
+	my @fresh  = sort grep { !$before{$_} } $t->records;
+	is_deeply( \@fresh, [ sort @record ],
+		'the kit names the record files that the ceremony stored '
+		    . 'at the oracle (ORC-REVOKE-6)' );
 
 	#
 	# The mistyped second passphrase (CER-CREATE-4).

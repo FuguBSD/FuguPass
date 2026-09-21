@@ -206,8 +206,11 @@ machine_dir(const char *vault)
 	int	 n;
 
 	n = snprintf(path, sizeof(path), "%s/%s", vault, VAULT_MACHINE_DIR);
-	if (n < 0 || (size_t)n >= sizeof(path))
+	if (n < 0 || (size_t)n >= sizeof(path)) {
+		warnx("%s: the path of the machine directory does not fit",
+		    vault);
 		return -1;
+	}
 	if (mkdir(path, S_IRWXU) == -1 && errno != EEXIST) {
 		warn("%s", path);
 		return -1;
@@ -275,8 +278,11 @@ step_factor(struct state *st)
 		return -1;
 	}
 	if (vault_path(path, sizeof(path), st->arg->vault, VAULT_FILE_FACTOR,
-	    NULL) != 0)
+	    NULL) != 0) {
+		warnx("%s: the path of the factor file does not fit",
+		    st->arg->vault);
 		return -1;
+	}
 	if (vault_write(path, st->factor, sizeof(st->factor)) != 0) {
 		warn("%s", path);
 		return -1;
@@ -320,8 +326,10 @@ step_config(struct state *st)
 	for (i = 0; i < st->arg->count; i++) {
 		n = snprintf(&text[len], CONFIG_MAX - len, "oracle-%u: %s\n",
 		    i + 1, st->arg->oracle[i]);
-		if (n < 0 || (size_t)n >= CONFIG_MAX - len)
+		if (n < 0 || (size_t)n >= CONFIG_MAX - len) {
+			warnx("the config: the oracle set does not fit");
 			goto out;
+		}
 		len += (size_t)n;
 	}
 	n = snprintf(&text[len], CONFIG_MAX - len,
@@ -333,8 +341,10 @@ step_config(struct state *st)
 	    "pool-watermark: %u\n",
 	    st->arg->threshold, st->arg->machine, st->arg->rounds, plate,
 	    CEREMONY_POOL_SIZE, CEREMONY_POOL_WATERMARK);
-	if (n < 0 || (size_t)n >= CONFIG_MAX - len)
+	if (n < 0 || (size_t)n >= CONFIG_MAX - len) {
+		warnx("the config: the text does not fit");
 		goto out;
+	}
 	len += (size_t)n;
 
 	if (vault_config_read(text, len, &st->config) != 0) {
@@ -342,8 +352,11 @@ step_config(struct state *st)
 		goto out;
 	}
 	if (vault_path(path, sizeof(path), st->arg->vault, VAULT_FILE_CONFIG,
-	    NULL) != 0)
+	    NULL) != 0) {
+		warnx("%s: the path of the config file does not fit",
+		    st->arg->vault);
 		goto out;
+	}
 	if (vault_write(path, (const unsigned char *)text, len) != 0) {
 		warn("%s", path);
 		goto out;
@@ -484,8 +497,10 @@ step_slot(struct state *st, uint32_t slot)
 	    "candidate-password: %s\n"
 	    "candidate-mnemonic: %s\n"
 	    "slot: %" PRIu32 "\n", password, mnemonic, slot);
-	if (n < 0 || (size_t)n >= sizeof(plain))
+	if (n < 0 || (size_t)n >= sizeof(plain)) {
+		warnx("slot %" PRIu32 ": the text does not fit", slot);
 		goto out;
+	}
 	len = (size_t)n;
 
 	if (vault_entry_name(key, sizeof(key), name, sizeof(name)) != 0)
@@ -493,8 +508,11 @@ step_slot(struct state *st, uint32_t slot)
 	memset(&at, 0, sizeof(at));
 	at.name = name;
 	if (vault_path(path, sizeof(path), st->arg->vault, VAULT_FILE_ENTRY,
-	    &at) != 0)
+	    &at) != 0) {
+		warnx("%s: the path of the entry file does not fit",
+		    st->arg->vault);
 		goto out;
+	}
 	if (vault_seal_write(path, key, sizeof(key),
 	    (const unsigned char *)plain, len, sealed, sizeof(sealed)) != 0) {
 		warn("%s", path);
@@ -552,25 +570,34 @@ step_index(const struct state *st)
 
 	n = snprintf(plain, sizeof(plain), "machine: %s\npool-free: ",
 	    st->arg->machine);
-	if (n < 0 || (size_t)n >= sizeof(plain))
+	if (n < 0 || (size_t)n >= sizeof(plain)) {
+		warnx("the index: the text does not fit");
 		return -1;
+	}
 	len = (size_t)n;
 	for (slot = 0; slot < CEREMONY_POOL_SIZE; slot++) {
 		n = snprintf(&plain[len], sizeof(plain) - len, "%s%" PRIu32,
 		    slot == 0 ? "" : ",", slot);
-		if (n < 0 || (size_t)n >= sizeof(plain) - len)
+		if (n < 0 || (size_t)n >= sizeof(plain) - len) {
+			warnx("the index: the text does not fit");
 			return -1;
+		}
 		len += (size_t)n;
 	}
 	n = snprintf(&plain[len], sizeof(plain) - len, "\npool-next: %u\n",
 	    CEREMONY_POOL_SIZE);
-	if (n < 0 || (size_t)n >= sizeof(plain) - len)
+	if (n < 0 || (size_t)n >= sizeof(plain) - len) {
+		warnx("the index: the text does not fit");
 		return -1;
+	}
 	len += (size_t)n;
 
 	if (vault_path(path, sizeof(path), st->arg->vault, VAULT_FILE_INDEX,
-	    NULL) != 0)
+	    NULL) != 0) {
+		warnx("%s: the path of the index file does not fit",
+		    st->arg->vault);
 		return -1;
+	}
 	if (vault_seal_write(path, st->idxkey, sizeof(st->idxkey),
 	    (const unsigned char *)plain, len, sealed, sizeof(sealed)) != 0) {
 		warn("%s", path);
@@ -658,16 +685,20 @@ step_kit(const struct state *st)
 	unsigned int	 i;
 	int		 n, rv = -1;
 
-	n = snprintf(path, sizeof(path), "%s/%s/%s", st->arg->vault,
-	    VAULT_MACHINE_DIR, CEREMONY_KIT_FILE);
-	if (n < 0 || (size_t)n >= sizeof(path))
+	if (vault_path(path, sizeof(path), st->arg->vault, VAULT_FILE_KIT,
+	    NULL) != 0) {
+		warnx("%s: the path of the kit does not fit",
+		    st->arg->vault);
 		goto out;
+	}
 	if ((text = malloc(KIT_MAX)) == NULL)
 		goto out;
 
 	n = snprintf(text, KIT_MAX, "machine %s\n", st->arg->machine);
-	if (n < 0 || (size_t)n >= KIT_MAX)
+	if (n < 0 || (size_t)n >= KIT_MAX) {
+		warnx("the kit: the text does not fit");
 		goto out;
+	}
 	len = (size_t)n;
 
 	for (i = 1; i <= st->config.count; i++) {
@@ -675,8 +706,10 @@ step_kit(const struct state *st)
 			continue;
 		n = snprintf(&text[len], KIT_MAX - len, "oracle %u %s\n", i,
 		    st->config.oracle[i - 1].url);
-		if (n < 0 || (size_t)n >= KIT_MAX - len)
+		if (n < 0 || (size_t)n >= KIT_MAX - len) {
+			warnx("the kit: the text does not fit");
 			goto out;
+		}
 		len += (size_t)n;
 
 		/* One name of each slot, and one of the canary. */
@@ -686,8 +719,10 @@ step_kit(const struct state *st)
 				goto out;
 			n = snprintf(&text[len], KIT_MAX - len,
 			    "record %u %s\n", i, name);
-			if (n < 0 || (size_t)n >= KIT_MAX - len)
+			if (n < 0 || (size_t)n >= KIT_MAX - len) {
+				warnx("the kit: the text does not fit");
 				goto out;
+			}
 			len += (size_t)n;
 		}
 	}

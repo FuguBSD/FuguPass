@@ -26,6 +26,9 @@
  * system, and the parent keeps the right to remove the work
  * directory. The child exits 0 when every probe passes.
  *
+ * A violation of the pledge kills the process, so the probe of the
+ * pledge takes a second child of its own.
+ *
  * OpenBSD answers a hidden path with ENOENT, and an unveiled path
  * of another permission with EACCES. The probes below read those
  * two values.
@@ -43,6 +46,8 @@
  */
 
 #include <sys/types.h>
+#include <sys/resource.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 
@@ -50,6 +55,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,6 +73,7 @@
 static int	 probe_hidden(const char *);
 static int	 probe_readonly(const char *);
 static int	 probe_vault(const char *);
+static int	 probe_pledge(const char *);
 static int	 child(const char *, const char *, int);
 static int	 writefile(const char *);
 static void	 rmtree(const char *);
@@ -157,6 +164,60 @@ probe_vault(const char *vault)
 	}
 	close(fd);
 	return 0;
+}
+
+/*
+ * probe_pledge(vault):
+ *	The pledge must stop a syscall outside SANDBOX_PROMISES.
+ *	That promise list holds inet and dns, and it holds no unix,
+ *	so a socket of AF_UNIX is such a syscall. pledge(2) kills
+ *	the process of a violation with SIGABRT, so this probe runs
+ *	in a child of its own, and it reads the signal of that
+ *	child.
+ *
+ *	The child sets RLIMIT_CORE to zero first, so the abort
+ *	writes no core file. It exits 2 when the sandbox call
+ *	itself fails, and 0 when the socket call returns.
+ *
+ *	The call gives 0 for the signal, and -1 for every other
+ *	outcome.
+ */
+static int
+probe_pledge(const char *vault)
+{
+	struct rlimit	 nocore = { 0, 0 };
+	pid_t		 pid, done;
+	int		 fd, status;
+
+	if ((pid = fork()) == -1) {
+		warn("fork");
+		return -1;
+	}
+	if (pid == 0) {
+		if (setrlimit(RLIMIT_CORE, &nocore) == -1)
+			_exit(2);
+		if (sandbox_enter(vault) != 0)
+			_exit(2);
+		if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) != -1)
+			close(fd);
+		_exit(0);
+	}
+
+	while ((done = waitpid(pid, &status, 0)) == -1 && errno == EINTR)
+		;
+	if (done != pid) {
+		warn("waitpid");
+		return -1;
+	}
+	if (WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT)
+		return 0;
+	if (WIFEXITED(status) && WEXITSTATUS(status) == 2) {
+		warnx("the probe of the pledge: the sandbox call fails");
+		return -1;
+	}
+	warnx("the pledge takes a socket of AF_UNIX, and the promises are "
+	    "\"%s\"", SANDBOX_PROMISES);
+	return -1;
 }
 
 /*
@@ -288,6 +349,10 @@ main(void)
 		goto out;
 	}
 	if (WEXITSTATUS(status) != 0)
+		goto out;
+
+	/* The pledge, after the list: the child of it dies. */
+	if (probe_pledge(vault) != 0)
 		goto out;
 	rv = 0;
 out:

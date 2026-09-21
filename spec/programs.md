@@ -208,8 +208,8 @@ actions.
   ([ORC-PROVISION](oracle.md#orc-provision)). The first argument is position 1.
   The subcommand must take the machine name from `-m`
   ([KEY-DEVICE](keys.md#key-device)), and the `bcrypt_pbkdf(3)` round count from
-  `-r` ([KEY-PIN](keys.md#key-pin)). The two options and the argument list are
-  mandatory.
+  `-r` ([KEY-PIN](keys.md#key-pin)). The `-k`, `-m` and `-r` options and the
+  argument list are mandatory.
 - **PROG-ONESHOT-7** — The `create` subcommand must write the revocation kit
   ([ORC-REVOKE](oracle.md#orc-revoke)) at the path of
   [VAULT-LAYOUT](vault.md#vault-layout). It must print the path of that file.

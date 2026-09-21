@@ -31,9 +31,6 @@
 #define CEREMONY_POOL_SIZE	64	/* ENTRY-POOL-2 */
 #define CEREMONY_POOL_WATERMARK	8	/* ENTRY-POOL-6 */
 
-/* The leaf name of the revocation kit, in the machine-local set. */
-#define CEREMONY_KIT_FILE	"revocation-kit"
-
 /*
  * The arguments of one vault creation. The command line of the
  * create subcommand carries each of them (PROG-ONESHOT-5,

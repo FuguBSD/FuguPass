@@ -29,11 +29,11 @@
 # the guest, and it takes the driver src/regress/oracle-client of
 # that build (TEST-HARNESS-7). The second part is the counterparty
 # table below: one data record for each counterparty, with the
-# probe, the start, the stop and the release of it (TEST-HARNESS-4,
-# TEST-HARNESS-6). The third part is tests/harness.d, one file for
-# each leg. A leg reads the counterparty through the methods of the
-# Counterparty package alone, so no leg branches on the
-# counterparty (TEST-HARNESS-4).
+# probe, the start, the stop, the release and the record list of it
+# (TEST-HARNESS-4, TEST-HARNESS-6). The third part is
+# tests/harness.d, one file for each leg. A leg reads the
+# counterparty through the methods of the Counterparty package
+# alone, so no leg branches on the counterparty (TEST-HARNESS-4).
 #
 # The harness runs no shell on the host: each host command is a
 # list, and Fugu::Process runs it (TEST-HARNESS-6). A guest command
@@ -222,17 +222,19 @@ flask_server().run(host=sys.argv[2], port=int(sys.argv[3]))
 PYTHON
 
 # The counterparties that this harness drives (TEST-HARNESS-2). Each
-# record holds the name and the four steps of the run. probe() gives
-# undef when the counterparty is available, and the reason when it
-# is not. start() sets url, pubkey and records_at_start. A leg reads
-# no member of this table.
+# record holds the name, the four steps of the run, and the record
+# list of the store. probe() gives undef when the counterparty is
+# available, and the reason when it is not. start() sets url, pubkey
+# and records_at_start. records() gives the record file names of the
+# store of the moment. A leg reads no member of this table.
 my @COUNTERPARTY = (
 	{
 		name    => 'blind_pin_server',
 		probe   => \&upstream_probe,
 		start   => \&upstream_start,
 		stop    => \&upstream_stop,
-		release => \&upstream_release
+		release => \&upstream_release,
+		records => \&upstream_records
 	} );
 
 # The counterparties that run now. The end block stops each one, so
@@ -541,9 +543,17 @@ sub upstream_start ($cp)
 	    or die "the upstream server never answered on port "
 	    . "$cp->{port}\n";
 
-	$cp->{records_at_start} //=
-	    scalar( () = glob "$cp->{store}/pins/*.pin" );
+	$cp->{records_at_start} //= scalar( () = upstream_records($cp) );
 	return;
+}
+
+# upstream_records($cp):
+#	The record file names of the store of this counterparty.
+#	pindb.py of the upstream server holds one file of each
+#	record in the pins directory of the store.
+sub upstream_records ($cp)
+{
+	return map { basename($_) } glob "$cp->{store}/pins/*.pin";
 }
 
 sub upstream_stop ($cp)
@@ -564,9 +574,9 @@ package Counterparty;
 
 # The counterparty of one run. A leg reads it through these methods
 # alone, so no leg branches on the counterparty (TEST-HARNESS-4).
-# The record of the table holds the four steps, and the object holds
-# the state of the run: the URL, the static public key, and the
-# record count of the store at the start.
+# The record of the table holds the four steps and the record list,
+# and the object holds the state of the run: the URL, the static
+# public key, and the record count of the store at the start.
 
 use v5.36;
 
@@ -586,6 +596,13 @@ sub release ($self) { $self->{recipe}{release}->($self); return }
 #	The count of the records that the store of the counterparty
 #	held when this run started it (TEST-MASK-6).
 sub records_at_start ($self) { return $self->{records_at_start} }
+
+# $cp->records:
+#	The record file names that the store of the counterparty
+#	holds now. A leg reads the set before a step and after it,
+#	and the difference is the records of that step
+#	(ORC-REVOKE-6).
+sub records ($self) { return $self->{recipe}{records}->($self) }
 
 # $cp->url:
 #	The URL of this counterparty. A ceremony report names the

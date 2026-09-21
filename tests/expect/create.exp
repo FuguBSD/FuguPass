@@ -62,7 +62,10 @@ expect {
         send "$password\r"
     }
     "#" {
-        # The console already holds a shell.
+        # The console already holds a shell. This block takes the
+        # one prompt of it, so the newline below gives the prompt
+        # that the next block reads.
+        send "\r"
     }
     eof {
         puts stderr "telnet could not connect to the console"
