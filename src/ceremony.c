@@ -43,9 +43,10 @@
  * (ORC-ENROLL-3).
  *
  * The report of a failed step goes to the standard error, and a
- * failed enrollment names its oracle (CER-CREATE-6). The four
- * states of oracle.h take four texts, because the tool must hold
- * them apart (ORC-REVEAL-6, ORC-REVEAL-8).
+ * failed enrollment names its oracle (CER-CREATE-6).
+ * oracle_state_text() gives the text of each state of a request,
+ * and the tool holds the four states apart (ORC-REVEAL-6,
+ * ORC-REVEAL-8).
  */
 
 #include <sys/stat.h>
@@ -121,7 +122,6 @@ struct state {
 	size_t				 passlen;
 };
 
-static const char	*state_text(int);
 static void		 hex(const unsigned char *, size_t, char *);
 static void		 ctx_of(struct oracle_ctx *, const struct state *,
 			    unsigned int);
@@ -137,29 +137,6 @@ static int		 step_index(const struct state *);
 static int		 kit_name(const struct state *, unsigned int, uint32_t,
 			    int, char *, size_t);
 static int		 step_kit(const struct state *);
-
-/*
- * state_text(state):
- *	The text of one state of oracle.h. The four failure states
- *	are distinct, and the report of each one is distinct as well
- *	(ORC-REVEAL-6, ORC-REVEAL-8).
- */
-static const char *
-state_text(int state)
-{
-	switch (state) {
-	case ORACLE_ESTATUS:
-		return "the oracle answers an HTTP error";
-	case ORACLE_ETRANSPORT:
-		return "the transport fails";
-	case ORACLE_EAUTH:
-		return "the answer fails the authentication of the oracle";
-	case ORACLE_EJUNK:
-		return "the answer is junk";
-	default:
-		return "the request fails";
-	}
-}
 
 /*
  * hex(in, inlen, out):
@@ -435,7 +412,7 @@ step_canaries(struct state *st)
 		    st->idxkey, sizeof(st->idxkey));
 		if (rv != 0) {
 			warnx("the canary of oracle %u (%s): %s", i,
-			    st->config.oracle[i - 1].url, state_text(rv));
+			    st->config.oracle[i - 1].url, oracle_state_text(rv));
 			return -1;
 		}
 	}
@@ -496,7 +473,7 @@ step_slot(struct state *st, uint32_t slot)
 		n = oracle_enroll(&ctx, slot, key, sizeof(key));
 		if (n != 0) {
 			warnx("slot %" PRIu32 " at oracle %u (%s): %s", slot,
-			    i, st->config.oracle[i - 1].url, state_text(n));
+			    i, st->config.oracle[i - 1].url, oracle_state_text(n));
 			goto out;
 		}
 	}

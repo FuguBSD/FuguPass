@@ -73,9 +73,9 @@
  * This file reconstructs no entry key, and it opens no entry:
  * ORC-QUORUM holds that work. It creates no vault, and it drives no
  * terminal. The caller reads each passphrase, and it writes each
- * report. The session canary check of ORC-CANARY-1 is absent as
- * well, and the dead index wrap of a canary re-enrollment stays for
- * the caller (ORC-CANARY-8).
+ * report. oracle_canary_check() holds the canary check of one
+ * oracle, and session.c holds the order of the checks and the
+ * quorum (ORC-CANARY-1, ORC-CANARY-4).
  *
  * Each function clears every secret of the call on each exit path
  * (SEC-MEMORY-1). The caller clears the buffers that it owns, and it
@@ -135,6 +135,15 @@ struct oracle_ctx {
 	size_t				 passlen;
 	unsigned int			 oracle;	/* the index i */
 };
+
+/*
+ * oracle_state_text(state):
+ *	The text of one state of this file, for a report. The four
+ *	failure states take four texts, because the tool must hold
+ *	them apart (ORC-REVEAL-6, ORC-REVEAL-8). Every other value
+ *	takes the text of a failed request.
+ */
+const char	*oracle_state_text(int);
 
 /*
  * oracle_enroll(ctx, slot, key, keylen):
@@ -245,5 +254,47 @@ int	oracle_canary_enroll(const struct oracle_ctx *, const char *, size_t);
  */
 int	oracle_canary_index(const struct oracle_ctx *, const char *, size_t,
 	    const unsigned char *, size_t);
+
+/*
+ * oracle_canary_check(ctx, idxkey, idxkeylen, share, sharelen, live):
+ *	Verify the passphrase of ctx at the canary record of the
+ *	oracle of ctx, and give this machine's index share of that
+ *	oracle to the sharelen bytes at share (ORC-CANARY-1,
+ *	ORC-CANARY-3). sharelen must be DERIVE_KEYLEN.
+ *
+ *	The request is one get_pin under the canary client key
+ *	(ORC-REVEAL-1). The call opens the canary check seal of the
+ *	oracle under f(s_canary_i, "fugupass/v1/canary-check" || i),
+ *	and it compares the plaintext with the 32 zero bytes of the
+ *	check value (ORC-CANARY-2, KEY-MASK-5). The comparison takes
+ *	constant time (SEC-MEMORY-2).
+ *
+ *	A failed open and a plaintext other than the check value
+ *	each give ORACLE_EJUNK. That state is cause-ambiguous: a
+ *	wrong passphrase, a wiped record, a counter behind the
+ *	record, and a stale canary check seal of this machine each
+ *	give it (ORC-CANARY-9). An absent seal file gives -1, and it
+ *	is no answer of the oracle.
+ *
+ *	live takes 1 when share holds share(K_idx, i), and 0 when
+ *	this machine's index wrap of the oracle is absent. An absent
+ *	wrap is the dead state of a canary re-enrollment without
+ *	K_idx (ORC-CANARY-8). The unmask is
+ *	share(K_idx, i) = c_idx_i XOR
+ *	f(s_canary_i, "fugupass/v1/wrap-index" || i) (KEY-MASK-7).
+ *
+ *	idxkey holds the index key K_idx of idxkeylen bytes, and it
+ *	heals a dead wrap: the call re-derives share(K_idx, i) and
+ *	writes the wrap of it under the canary mask of this request
+ *	(ORC-CANARY-8, KEY-SHARE-5, VAULT-ATOMIC-1). A NULL idxkey
+ *	heals nothing, and it leaves live at 0 for a dead wrap. A
+ *	live wrap takes no write, because the wrap key and the share
+ *	of it stay the same (KEY-MASK-10).
+ *
+ *	The share must not persist on disk, and the caller clears
+ *	share (KEY-SHARE-8).
+ */
+int	oracle_canary_check(const struct oracle_ctx *, const unsigned char *,
+	    size_t, unsigned char *, size_t, int *);
 
 #endif /* ORACLE_H */

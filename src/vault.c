@@ -16,8 +16,8 @@
 
 /*
  * The vault on disk: the paths, the scanner, the writer, the
- * sealed pair, and the config. vault.h states the interface and
- * the table contract.
+ * reader, the sealed pair, and the config. vault.h states the
+ * interface and the table contract.
  *
  * The scanner holds one rule set, and the tables hold the fields.
  * A new file kind adds a table, and it adds no branch here. The
@@ -751,6 +751,35 @@ out:
 	if (rv != 0 && !moved)
 		unlink(tmp);
 	return rv;
+}
+
+int
+vault_read(const char *path, unsigned char *buf, size_t bufsize, size_t *len)
+{
+	ssize_t	 got;
+	size_t	 at = 0;
+	int	 fd;
+
+	if (path == NULL || buf == NULL || bufsize == 0 || len == NULL)
+		return -1;
+	*len = 0;
+	if ((fd = open(path, O_RDONLY)) == -1)
+		return (errno == ENOENT) ? 0 : -1;
+	while (at < bufsize) {
+		got = read(fd, &buf[at], bufsize - at);
+		if (got == -1) {
+			if (errno == EINTR)
+				continue;
+			close(fd);
+			return -1;
+		}
+		if (got == 0)
+			break;
+		at += (size_t)got;
+	}
+	close(fd);
+	*len = at;
+	return 0;
 }
 
 int

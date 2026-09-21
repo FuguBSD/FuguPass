@@ -319,6 +319,24 @@ int	vault_number(const char *, size_t, uint32_t, uint32_t *);
 int	vault_write(const char *, const unsigned char *, size_t);
 
 /*
+ * vault_read(path, buf, bufsize, len):
+ *	The bytes of the file at path, to the bufsize bytes at buf,
+ *	and the count of them to len. An absent file gives 0 with a
+ *	count of 0. A file of the vault can be absent: the counters
+ *	file and an index wrap each carry that state
+ *	(ORC-COUNTER-3, ORC-CANARY-8), and a caller reads the count.
+ *
+ *	The read stops at bufsize bytes. A caller gives one byte
+ *	more than the longest file that it takes, so a count of
+ *	bufsize names a file that is too long. Every other failure
+ *	gives -1.
+ *
+ *	A file of the vault can hold a secret, so the caller clears
+ *	buf (SEC-MEMORY-1).
+ */
+int	vault_read(const char *, unsigned char *, size_t, size_t *);
+
+/*
  * vault_seal_write(path, key, keylen, plain, plainlen, buf, buflen):
  *	Seal the plainlen bytes at plain under the key of keylen
  *	bytes at key, and write the sealed bytes to path

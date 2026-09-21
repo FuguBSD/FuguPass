@@ -24,15 +24,17 @@
  * function reaches it. canary() calls it twice, and every other
  * path sends one request for one record (ORC-CANARY-7).
  *
- * canary() carries the two public canary functions. The index wrap
- * of an oracle takes the canary mask of that oracle, so the wrap
- * rides on the enrollment and sends no request of its own
- * (ORC-CANARY-3, KEY-MASK-7).
+ * canary() carries the two canary enrollments, and
+ * oracle_canary_check() is the canary check of one oracle. The
+ * index wrap of an oracle takes the canary mask of that oracle, so
+ * the wrap rides on the request of the canary and sends none of its
+ * own (ORC-CANARY-3, KEY-MASK-7).
  *
  * The steps come from the other files of the tree. derive.c holds
  * each label, pin.c holds the pin secret, share.c holds the split,
  * envelope.c holds the protocol, http.c holds the transport, seal.c
- * holds the seal, and vault.c holds every path and the one writer.
+ * holds the seal, and vault.c holds every path, the one reader and
+ * the one writer.
  * This file adds the record: the addresses, the counter, and the
  * order of the steps.
  *
@@ -45,8 +47,6 @@
  * secret, so the two buffers of it take no clear (ORC-COUNTER-3).
  */
 
-#include <errno.h>
-#include <fcntl.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <stddef.h>
@@ -55,7 +55,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 
 #include "derive.h"
 #include "envelope.h"
@@ -105,7 +104,6 @@ static int	key_bytes(const char *, unsigned char *, size_t);
 static int	request_url(const struct vault_oracle *, const char *, char *,
 		    size_t);
 static int	record_name(uint32_t, int, unsigned int, char *, size_t);
-static int	read_file(const char *, unsigned char *, size_t, size_t *);
 static int	counter_line(const struct vault_line *, void *);
 static int	counter_take(const char *, uint32_t, int, unsigned int,
 		    uint32_t *);
@@ -114,6 +112,23 @@ static int	request(const struct oracle_ctx *, uint32_t, int,
 		    const unsigned char *, unsigned char *);
 static int	canary(const struct oracle_ctx *, const char *, size_t,
 		    const unsigned char *, size_t);
+
+const char *
+oracle_state_text(int state)
+{
+	switch (state) {
+	case ORACLE_ESTATUS:
+		return "the oracle answers an HTTP error";
+	case ORACLE_ETRANSPORT:
+		return "the transport fails";
+	case ORACLE_EAUTH:
+		return "the answer fails the authentication of the oracle";
+	case ORACLE_EJUNK:
+		return "the answer is junk";
+	default:
+		return "the request fails";
+	}
+}
 
 /*
  * ctx_ok(ctx):
@@ -238,43 +253,6 @@ record_name(uint32_t slot, int canary, unsigned int oracle, char *out,
 }
 
 /*
- * read_file(path, buf, bufsize, len):
- *	The bytes of the file at path, to buf, and the count of them
- *	to len. An absent file gives 0 with a count of 0, because the
- *	loss of the counters file is safe (ORC-COUNTER-3).
- *
- *	The read stops at bufsize bytes. A caller gives one byte more
- *	than the longest file that it takes, so a count of bufsize
- *	names a file that is too long.
- */
-static int
-read_file(const char *path, unsigned char *buf, size_t bufsize, size_t *len)
-{
-	ssize_t	 got;
-	size_t	 at = 0;
-	int	 fd;
-
-	*len = 0;
-	if ((fd = open(path, O_RDONLY)) == -1)
-		return (errno == ENOENT) ? 0 : -1;
-	while (at < bufsize) {
-		got = read(fd, &buf[at], bufsize - at);
-		if (got == -1) {
-			if (errno == EINTR)
-				continue;
-			close(fd);
-			return -1;
-		}
-		if (got == 0)
-			break;
-		at += (size_t)got;
-	}
-	close(fd);
-	*len = at;
-	return 0;
-}
-
-/*
  * counter_line(line, arg):
  *	Take one line of the counters file to the state at arg. The
  *	line of the record of this request gives the stored counter,
@@ -355,7 +333,7 @@ counter_take(const char *vault, uint32_t slot, int canary,
 	st.name = name;
 	st.out = lines;
 	st.outsize = COUNTERS_MAX + COUNTER_LINE;
-	if (read_file(path, (unsigned char *)text, COUNTERS_MAX + 1,
+	if (vault_read(path, (unsigned char *)text, COUNTERS_MAX + 1,
 	    &textlen) != 0 || textlen > COUNTERS_MAX)
 		goto out;
 	if (textlen != 0 && vault_scan(text, textlen, vault_counters_fields,
@@ -625,7 +603,7 @@ oracle_reveal(const struct oracle_ctx *ctx, uint32_t slot, unsigned char *out,
 		goto out;
 
 	/* The buffer takes one byte more, so a longer file fails. */
-	if (read_file(path, wrap, sizeof(wrap), &wraplen) != 0 ||
+	if (vault_read(path, wrap, sizeof(wrap), &wraplen) != 0 ||
 	    wraplen != DERIVE_KEYLEN)
 		goto out;
 	for (i = 0; i < outlen; i++)
@@ -769,4 +747,134 @@ oracle_canary_index(const struct oracle_ctx *ctx, const char *again,
 	if (idxkey == NULL || idxkeylen != DERIVE_KEYLEN)
 		return -1;
 	return canary(ctx, again, againlen, idxkey, idxkeylen);
+}
+
+int
+oracle_canary_check(const struct oracle_ctx *ctx, const unsigned char *idxkey,
+    size_t idxkeylen, unsigned char *share, size_t sharelen, int *live)
+{
+	struct vault_at	 at;
+	unsigned char	 mask[ENVELOPE_MASKLEN];
+	unsigned char	 sealkey[DERIVE_KEYLEN];
+	unsigned char	 wrapkey[DERIVE_KEYLEN];
+	unsigned char	 wrap[DERIVE_KEYLEN + 1];
+	unsigned char	 check[ORACLE_CHECKLEN];
+	unsigned char	 zero[ORACLE_CHECKLEN];
+	unsigned char	 sealed[ORACLE_CHECKLEN + SEAL_OVERHEAD + 1];
+	char		 path[PATH_MAX];
+	size_t		 i, len = 0;
+	int		 rv;
+
+	if (ctx_ok(ctx) != 0 || share == NULL || sharelen != DERIVE_KEYLEN ||
+	    live == NULL)
+		return -1;
+	if (idxkey != NULL && idxkeylen != DERIVE_KEYLEN)
+		return -1;
+	*live = 0;
+
+	/* The canary record takes no slot index (ORC-RECORDS-2). */
+	if ((rv = request(ctx, 0, 1, NULL, mask)) != 0)
+		goto out;
+
+	/*
+	 * The canary check value of this oracle seals under
+	 * f(s_canary_i, "fugupass/v1/canary-check" || i), and a
+	 * wrong mask opens nothing (ORC-CANARY-2, KEY-MASK-5). The
+	 * open of the seal and the comparison of the plaintext are
+	 * the verification of the passphrase (ORC-CANARY-1).
+	 */
+	rv = -1;
+	if (derive_canary_check_key(mask, sizeof(mask), ctx->oracle, sealkey,
+	    sizeof(sealkey)) != 0)
+		goto out;
+	memset(&at, 0, sizeof(at));
+	at.oracle = ctx->oracle;
+	if (vault_path(path, sizeof(path), ctx->vault, VAULT_FILE_CANARY,
+	    &at) != 0)
+		goto out;
+
+	/* The buffer takes one byte more, so a longer file fails. */
+	if (vault_read(path, sealed, sizeof(sealed), &len) != 0 ||
+	    len != ORACLE_CHECKLEN + SEAL_OVERHEAD)
+		goto out;
+	if (seal_open(sealkey, sizeof(sealkey), sealed, len, check,
+	    sizeof(check)) != 0) {
+		rv = ORACLE_EJUNK;
+		goto out;
+	}
+
+	/*
+	 * The check value is 32 zero bytes, and the comparison of it
+	 * holds no branch on the plaintext (ORC-CANARY-2,
+	 * SEC-MEMORY-2).
+	 */
+	memset(zero, 0, sizeof(zero));
+	if (timingsafe_bcmp(check, zero, sizeof(check)) != 0) {
+		rv = ORACLE_EJUNK;
+		goto out;
+	}
+
+	/*
+	 * The canary mask of this request also unwraps this
+	 * machine's index share of the oracle, so the index opens
+	 * with no request of its own (ORC-CANARY-3, KEY-MASK-7).
+	 */
+	rv = -1;
+	memset(&at, 0, sizeof(at));
+	at.oracle = ctx->oracle;
+	if (vault_path(path, sizeof(path), ctx->vault, VAULT_FILE_WRAP_INDEX,
+	    &at) != 0)
+		goto out;
+	if (derive_index_wrap_key(mask, sizeof(mask), ctx->oracle, wrapkey,
+	    sizeof(wrapkey)) != 0)
+		goto out;
+	if (vault_read(path, wrap, sizeof(wrap), &len) != 0)
+		goto out;
+	if (len == DERIVE_KEYLEN) {
+		for (i = 0; i < sharelen; i++)
+			share[i] = wrap[i] ^ wrapkey[i];
+		*live = 1;
+		rv = 0;
+		goto out;
+	}
+
+	/*
+	 * An absent wrap is the dead state of ORC-CANARY-8, and a
+	 * file of each other length is a failure of this machine.
+	 */
+	if (len != 0)
+		goto out;
+	if (idxkey == NULL) {
+		rv = 0;
+		goto out;
+	}
+
+	/*
+	 * The heal of a dead wrap: share(K_idx, i) re-derives from
+	 * K_idx, and the fresh canary mask wraps it again
+	 * (ORC-CANARY-8, KEY-SHARE-5, KEY-MASK-7).
+	 */
+	if (share_split(idxkey, idxkeylen, ctx->config->threshold, ctx->oracle,
+	    share, sharelen) != 0)
+		goto out;
+	for (i = 0; i < sharelen; i++)
+		wrap[i] = share[i] ^ wrapkey[i];
+	if (vault_write(path, wrap, DERIVE_KEYLEN) != 0)
+		goto out;
+	*live = 1;
+	rv = 0;
+out:
+	/*
+	 * The mask, the two derived keys and the wrap leave memory
+	 * here (KEY-MASK-2, SEC-MEMORY-1). The check value is a
+	 * public constant, and the seal of it sits on disk, so the
+	 * two buffers of them take no clear.
+	 */
+	explicit_bzero(mask, sizeof(mask));
+	explicit_bzero(sealkey, sizeof(sealkey));
+	explicit_bzero(wrapkey, sizeof(wrapkey));
+	explicit_bzero(wrap, sizeof(wrap));
+	if (rv != 0 || *live == 0)
+		explicit_bzero(share, sharelen);
+	return rv;
 }
