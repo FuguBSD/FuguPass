@@ -53,6 +53,14 @@
  * VAULT_FIELD_REPEAT. The scanner holds the form of such a name,
  * and the caller holds the rule that one index takes one line.
  *
+ * vault_seal_write() and vault_seal_read() are the pair that
+ * takes a sealed file of the tree. The first one seals a
+ * plaintext with seal.h and writes it with vault_write(). The
+ * second one reads the file, opens it, and gives the plaintext to
+ * vault_scan(). The caller holds the key and the field table, so
+ * the pair adds no file kind: the entry file goes under K_e, and
+ * the index goes under K_idx (KEY-ENTRY-3, VAULT-INDEX-1).
+ *
  * vault_config_read() reads the config file, and it holds the
  * position rule of the oracle list (VAULT-CONFIG-6).
  * vault_config_change() holds the half of that rule that one file
@@ -70,6 +78,7 @@
 #include <stdint.h>
 
 #include "derive.h"
+#include "seal.h"
 
 /*
  * The bytes of one line, with the line feed of it
@@ -299,6 +308,46 @@ int	vault_number(const char *, size_t, uint32_t, uint32_t *);
  *	directory and the machine-local subdirectory.
  */
 int	vault_write(const char *, const unsigned char *, size_t);
+
+/*
+ * vault_seal_write(path, key, keylen, plain, plainlen, buf, buflen):
+ *	Seal the plainlen bytes at plain under the key of keylen
+ *	bytes at key, and write the sealed bytes to path
+ *	(VAULT-SEAL-1, VAULT-ATOMIC-1). plainlen must be 1 or more,
+ *	and keylen must be SEAL_KEYLEN. The seal holds the key gate.
+ *
+ *	buf takes the sealed bytes, so buflen must be plainlen plus
+ *	SEAL_OVERHEAD, or more. Those bytes are public
+ *	(VAULT-BACKUP-1), so the call leaves them at buf. The
+ *	plaintext at plain belongs to the caller, and the caller
+ *	clears it (SEC-MEMORY-1).
+ *
+ *	The call gives -1 on every failure. A failed seal writes no
+ *	file.
+ */
+int	vault_seal_write(const char *, const unsigned char *, size_t,
+	    const unsigned char *, size_t, unsigned char *, size_t);
+
+/*
+ * vault_seal_read(path, key, keylen, buf, buflen, table, cb, arg):
+ *	Read the sealed file at path, open it under the key of
+ *	keylen bytes at key, and read the plaintext of it with the
+ *	field table at table (VAULT-SEAL-1, VAULT-FORMAT-6). Each
+ *	line reaches cb with arg, as vault_scan() states. keylen
+ *	must be SEAL_KEYLEN, and the open holds that gate.
+ *
+ *	buf takes the bytes of the file, and then the plaintext of
+ *	them, so buflen must take the two. A file of SEAL_OVERHEAD
+ *	bytes or fewer gives -1, and a file that buflen does not
+ *	take gives -1.
+ *
+ *	The call gives -1 on every failure, and it names no cause
+ *	(VAULT-SEAL-4). It clears buf on each exit path, because buf
+ *	holds the plaintext (SEC-MEMORY-1).
+ */
+int	vault_seal_read(const char *, const unsigned char *, size_t,
+	    unsigned char *, size_t, const struct vault_field *,
+	    vault_scan_cb, void *);
 
 /*
  * vault_config_read(text, textlen, cfg):

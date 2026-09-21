@@ -15,8 +15,9 @@
  */
 
 /*
- * The vault on disk: the paths, the scanner, the writer, and the
- * config. vault.h states the interface and the table contract.
+ * The vault on disk: the paths, the scanner, the writer, the
+ * sealed pair, and the config. vault.h states the interface and
+ * the table contract.
  *
  * The scanner holds one rule set, and the tables hold the fields.
  * A new file kind adds a table, and it adds no branch here. The
@@ -27,6 +28,10 @@
  * The layout table holds the paths of VAULT-LAYOUT. The want
  * member of a row names the indexes that the name of that file
  * takes, so one function builds every path.
+ *
+ * The sealed pair holds no rule of its own. It calls the seal of
+ * seal.c, the writer above and the scanner above, and it holds
+ * the bounds of the buffer between them.
  *
  * SHA-256 comes from libcrypto, for the entry file name alone
  * (VAULT-LAYOUT-5). No other library enters this file.
@@ -45,6 +50,7 @@
 #include <openssl/sha.h>
 
 #include "derive.h"
+#include "seal.h"
 #include "vault.h"
 
 /* The indexes that the name of one file kind takes. */
@@ -666,6 +672,87 @@ out:
 	 */
 	if (rv != 0 && !moved)
 		unlink(tmp);
+	return rv;
+}
+
+int
+vault_seal_write(const char *path, const unsigned char *key, size_t keylen,
+    const unsigned char *plain, size_t plainlen, unsigned char *buf,
+    size_t buflen)
+{
+	size_t	 sealedlen;
+
+	/*
+	 * A plaintext of 0 bytes is no vault file, and the gate of
+	 * it stops the overflow of the sum below.
+	 */
+	if (plain == NULL || buf == NULL || plainlen == 0 ||
+	    plainlen > SIZE_MAX - SEAL_OVERHEAD)
+		return -1;
+	sealedlen = plainlen + SEAL_OVERHEAD;
+	if (buflen < sealedlen)
+		return -1;
+
+	/* A failed seal leaves no plaintext at buf (seal.h). */
+	if (seal_seal(key, keylen, plain, plainlen, buf, sealedlen) != 0)
+		return -1;
+	return vault_write(path, buf, sealedlen);
+}
+
+int
+vault_seal_read(const char *path, const unsigned char *key, size_t keylen,
+    unsigned char *buf, size_t buflen, const struct vault_field *table,
+    vault_scan_cb cb, void *arg)
+{
+	ssize_t	 got;
+	size_t	 plainlen, sealedlen = 0;
+	int	 fd, rv = -1;
+
+	if (path == NULL || buf == NULL)
+		return -1;
+	if ((fd = open(path, O_RDONLY)) == -1)
+		return -1;
+
+	/*
+	 * The read stops at buflen bytes. A file of that many bytes
+	 * leaves no room for the plaintext of it, so the fit gate
+	 * below holds a longer file too.
+	 */
+	while (sealedlen < buflen) {
+		got = read(fd, &buf[sealedlen], buflen - sealedlen);
+		if (got == -1) {
+			if (errno == EINTR)
+				continue;
+			goto out;
+		}
+		if (got == 0)
+			break;
+		sealedlen += (size_t)got;
+	}
+
+	/* The gate of the short file holds the subtraction below. */
+	if (sealedlen <= SEAL_OVERHEAD)
+		goto out;
+	plainlen = sealedlen - SEAL_OVERHEAD;
+
+	/* The plaintext takes the bytes of buf after the file. */
+	if (plainlen > buflen - sealedlen)
+		goto out;
+	if (seal_open(key, keylen, buf, sealedlen, &buf[sealedlen],
+	    plainlen) != 0)
+		goto out;
+	rv = vault_scan((const char *)&buf[sealedlen], plainlen, table, cb,
+	    arg);
+out:
+	close(fd);
+
+	/*
+	 * buf holds the plaintext of the file, so each exit path
+	 * clears it (SEC-MEMORY-1). Every failure above gives this
+	 * one -1, with no message and no cause, so a caller learns
+	 * nothing of the key (VAULT-SEAL-4).
+	 */
+	explicit_bzero(buf, buflen);
 	return rv;
 }
 

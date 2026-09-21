@@ -18,7 +18,8 @@
  * The tests of the vault on disk. The parts here are the seal and
  * the open of it (TEST-KAT-2), the strict scanner with the field
  * table of each file kind, the config file, the atomic write, the
- * directory layout, the entry model, and the TOTP code.
+ * directory layout, the entry model, the TOTP code, and the
+ * sealed file of a vault.
  * tests/vectors/seal.h holds the seal vectors, and every seal test
  * reads them from there. The TOTP vectors of RFC 6238 sit with the
  * test of them. A test needs no network and no oracle
@@ -1769,6 +1770,265 @@ test_totp(void)
 	return rv;
 }
 
+/*
+ * The buffer of a sealed file below. It takes the bytes of the
+ * file, and then the plaintext of them (vault.h). The longest file
+ * of a test here holds about 200 bytes.
+ */
+#define SEALBUF		1024
+
+/*
+ * sealread(name, path, key, table, want):
+ *	Read the sealed file at path under key, with the field
+ *	table at table, and compare the plaintext of it with want.
+ *	A wrong value prints the name and gives -1.
+ */
+static int
+sealread(const char *name, const char *path, const unsigned char *key,
+    const struct vault_field *table, const char *want)
+{
+	struct build	 built;
+	unsigned char	 buf[SEALBUF];
+
+	memset(&built, 0, sizeof(built));
+	if (vault_seal_read(path, key, SEAL_KEYLEN, buf, sizeof(buf), table,
+	    rebuild, &built) != 0) {
+		warnx("%s: the read of the sealed file fails", name);
+		return -1;
+	}
+	if (strcmp(built.text, want) != 0) {
+		warnx("%s: the round trip gives %s", name, built.text);
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * badread(name, path, key, sealed, sealedlen):
+ *	Write the sealedlen bytes at sealed to path, and read the
+ *	file back under key, with the field table of a password
+ *	entry. The read must give -1, and no byte of a plaintext
+ *	must reach the callback. Each case of the caller takes this
+ *	one value, so the read names no cause (VAULT-SEAL-4).
+ */
+static int
+badread(const char *name, const char *path, const unsigned char *key,
+    const unsigned char *sealed, size_t sealedlen)
+{
+	struct build	 built;
+	unsigned char	 buf[SEALBUF];
+	int		 got, rv = 0;
+
+	memset(&built, 0, sizeof(built));
+	if (vault_write(path, sealed, sealedlen) != 0) {
+		warnx("%s: the write of the file fails", name);
+		return -1;
+	}
+	got = vault_seal_read(path, key, SEAL_KEYLEN, buf, sizeof(buf),
+	    entry_types[ENTRY_TYPE_PASSWORD].fields, rebuild, &built);
+	if (got != -1) {
+		warnx("%s: the sealed read gives %d, and each failure gives "
+		    "-1", name, got);
+		rv = -1;
+	}
+	if (built.at != 0) {
+		warnx("%s: %zu bytes of a plaintext reach the callback", name,
+		    built.at);
+		rv = -1;
+	}
+	return rv;
+}
+
+/*
+ * test_sealfile():
+ *	A vault file goes to disk under one key, and it comes back
+ *	through that key. The entry file of a slot seals under K_e
+ *	at the name of vault_entry_name(), and the index seals
+ *	under K_idx at the name of the layout (KEY-ENTRY-3,
+ *	VAULT-INDEX-1). The two keys come from the root of the
+ *	test, so each file takes the key of the specification
+ *	(KEY-ENTRY-2, KEY-MASK-6). No oracle touches this vault
+ *	(TEST-KAT-5).
+ *
+ *	A wrong key, a short file, a truncated file, a changed byte
+ *	and a plaintext that the field table rejects each give the
+ *	one failure of the seal (VAULT-SEAL-4). A buffer that the
+ *	file does not fit gives that failure too, and a buffer that
+ *	the sealed bytes do not fit writes no file.
+ */
+static int
+test_sealfile(void)
+{
+	static const unsigned char	 root[DERIVE_ROOTLEN] = { 0 };
+	struct vault_at	 at;
+	unsigned char	 entrykey[DERIVE_KEYLEN];
+	unsigned char	 indexkey[DERIVE_KEYLEN];
+	unsigned char	 wrong[DERIVE_KEYLEN];
+	unsigned char	 buf[SEALBUF], sealed[SEALBUF], got[SEALBUF];
+	char		 vault[] = "vault-seal.XXXXXXXX";
+	char		 name[VAULT_NAMELEN];
+	char		 path[PATH_MAX], expect[PATH_MAX];
+	size_t		 gotlen, indexlen, lines = 0, plainlen, sealedlen;
+	int		 rv = 0;
+
+	/*
+	 * The root of the test is 64 zero bytes, a public constant.
+	 * Slot 17 is the slot of the entry file below.
+	 */
+	if (derive_entry_key(root, sizeof(root), 17, entrykey,
+	    sizeof(entrykey)) != 0 ||
+	    derive_index_key(root, sizeof(root), indexkey,
+	    sizeof(indexkey)) != 0) {
+		warnx("the keys of the sealed files: a derivation fails");
+		return -1;
+	}
+	if (vault_entry_name(entrykey, sizeof(entrykey), name,
+	    sizeof(name)) != 0) {
+		warnx("the entry file name: the call fails");
+		return -1;
+	}
+	if (mkdtemp(vault) == NULL) {
+		warn("mkdtemp");
+		return -1;
+	}
+	memset(&at, 0, sizeof(at));
+	at.name = name;
+	if (vault_path(path, sizeof(path), vault, VAULT_FILE_ENTRY,
+	    &at) != 0) {
+		warnx("the entry path: the call fails");
+		rv = -1;
+		goto out;
+	}
+	snprintf(expect, sizeof(expect), "%s/%s", vault, name);
+	if (strcmp(path, expect) != 0) {
+		warnx("the entry path is %s, and the layout takes %s", path,
+		    expect);
+		rv = -1;
+		goto out;
+	}
+	plainlen = strlen(text_password);
+	sealedlen = plainlen + SEAL_OVERHEAD;
+
+	/* A buffer that the sealed bytes do not fit writes no file. */
+	if (vault_seal_write(path, entrykey, sizeof(entrykey),
+	    (const unsigned char *)text_password, plainlen, buf,
+	    sealedlen - 1) == 0) {
+		warnx("a buffer of one byte too few: the sealed write takes "
+		    "it");
+		rv = -1;
+	}
+	if (access(path, F_OK) == 0) {
+		warnx("a failed sealed write: the file of it exists");
+		rv = -1;
+	}
+
+	/* The entry file of the slot seals under K_e (KEY-ENTRY-3). */
+	if (vault_seal_write(path, entrykey, sizeof(entrykey),
+	    (const unsigned char *)text_password, plainlen, buf,
+	    sizeof(buf)) != 0) {
+		warnx("the entry file: the sealed write fails");
+		rv = -1;
+		goto out;
+	}
+	if (slurp(path, got, sizeof(got), &gotlen) != 0) {
+		rv = -1;
+		goto out;
+	}
+	if (gotlen != sealedlen) {
+		warnx("the entry file holds %zu bytes, and a seal of that "
+		    "plaintext takes %zu", gotlen, sealedlen);
+		rv = -1;
+		goto out;
+	}
+	if (got[SEAL_OFF_VERSION] != SEAL_VERSION) {
+		warnx("the entry file holds the version %02x, and the layout "
+		    "takes %02x", got[SEAL_OFF_VERSION], SEAL_VERSION);
+		rv = -1;
+	}
+	if (sealread("the entry file", path, entrykey,
+	    entry_types[ENTRY_TYPE_PASSWORD].fields, text_password) != 0)
+		rv = -1;
+
+	/* A buffer that the file fills leaves no room for the plaintext. */
+	if (vault_seal_read(path, entrykey, sizeof(entrykey), buf, sealedlen,
+	    entry_types[ENTRY_TYPE_PASSWORD].fields, count_lines,
+	    &lines) == 0) {
+		warnx("a buffer that the file fills: the sealed read takes "
+		    "it");
+		rv = -1;
+	}
+
+	/* The index seals under K_idx (VAULT-INDEX-1). */
+	indexlen = strlen(text_index);
+	if (vault_path(path, sizeof(path), vault, VAULT_FILE_INDEX,
+	    NULL) != 0) {
+		warnx("the index path: the call fails");
+		rv = -1;
+		goto out;
+	}
+	if (vault_seal_write(path, indexkey, sizeof(indexkey),
+	    (const unsigned char *)text_index, indexlen, buf,
+	    sizeof(buf)) != 0) {
+		warnx("the index: the sealed write fails");
+		rv = -1;
+		goto out;
+	}
+	if (sealread("the index", path, indexkey, vault_index_fields,
+	    text_index) != 0)
+		rv = -1;
+
+	/*
+	 * Each case below takes the entry path, and vault_write()
+	 * puts the exact bytes of the case there.
+	 */
+	if (vault_path(path, sizeof(path), vault, VAULT_FILE_ENTRY,
+	    &at) != 0) {
+		warnx("the entry path: the call fails");
+		rv = -1;
+		goto out;
+	}
+	if (seal_seal(entrykey, sizeof(entrykey),
+	    (const unsigned char *)text_password, plainlen, sealed,
+	    sealedlen) != 0) {
+		warnx("the seal of the entry file: the call fails");
+		rv = -1;
+		goto out;
+	}
+	memcpy(wrong, entrykey, sizeof(wrong));
+	wrong[0] ^= 0x01;
+	if (badread("a wrong key", path, wrong, sealed, sealedlen) != 0)
+		rv = -1;
+	if (badread("a file of the seal overhead alone", path, entrykey,
+	    sealed, SEAL_OVERHEAD) != 0)
+		rv = -1;
+	if (badread("a truncated file", path, entrykey, sealed,
+	    sealedlen - 1) != 0)
+		rv = -1;
+	sealed[SEAL_OFF_BODY] ^= 0x01;
+	if (badread("a changed byte of the body", path, entrykey, sealed,
+	    sealedlen) != 0)
+		rv = -1;
+
+	/*
+	 * The file below holds the index text under the entry key.
+	 * The field table of a password entry holds no field of
+	 * that text, so the scan of it fails (VAULT-FORMAT-6).
+	 */
+	if (seal_seal(entrykey, sizeof(entrykey),
+	    (const unsigned char *)text_index, indexlen, sealed,
+	    indexlen + SEAL_OVERHEAD) != 0) {
+		warnx("the seal of the index text: the call fails");
+		rv = -1;
+		goto out;
+	}
+	if (badread("a plaintext that the field table rejects", path,
+	    entrykey, sealed, indexlen + SEAL_OVERHEAD) != 0)
+		rv = -1;
+out:
+	rmtree(vault);
+	return rv;
+}
+
 int
 main(void)
 {
@@ -1786,5 +2046,6 @@ main(void)
 	rv |= test_entries();
 	rv |= test_model();
 	rv |= test_totp();
+	rv |= test_sealfile();
 	return rv != 0;
 }
