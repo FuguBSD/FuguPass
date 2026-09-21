@@ -17,23 +17,29 @@
 
 # The reveal leg (ORC-REVEAL-4).
 #
-# Three causes give one junk answer: a wrong passphrase, a wiped
-# record, and a counter below the stored one. Each one gives the
-# bytes of a mask, and the decrypt of the caller is the one junk
-# detector. The driver stands in for that decrypt, so each of the
-# three gives the state junk.
+# Three causes give one state word, junk: a wrong passphrase, a
+# wiped record, and a counter below the stored one. The caller
+# cannot learn the cause from the response bytes (ORC-REVEAL-4).
+# Each one gives the bytes of a mask, and the decrypt of the
+# caller is the one junk detector. The driver stands in for that
+# decrypt, so each of the three gives the state junk.
 #
 # The three causes act on one record, so one client key addresses
 # every call of this leg. A difference between two answers is then
 # the behavior of the oracle, and no second record.
 #
 # The rules of the oracle set the order of the calls. A correct
-# reveal persists the attempt count 0 (FuguOracle OPS-GET-4), so
-# the counter violation comes before the wrong attempts. A counter
-# violation burns no strike (ORC-COUNTER-6), and each wrong attempt
-# persists the counter of the client (FuguOracle OPS-GET-5). The
-# counters file therefore takes a value above the forged one again,
-# before the wrong attempts.
+# pin resets the attempt count to 0 (FuguOracle OPS-GET-4), so
+# the live reveal comes before the wrong attempts. The wipe
+# prevents a counter violation after the third strike
+# (ORC-REVEAL-5): FuguOracle OPS-WIPE-1 persists
+# replay_counter = 0xFFFFFFFF. A counter violation burns no
+# strike (ORC-COUNTER-6). The first two wrong attempts persist
+# the counter of the client (FuguOracle OPS-GET-5). The third
+# attempt takes FuguOracle OPS-GET-6, and OPS-WIPE-1 persists
+# count = 3 and replay_counter = 0xFFFFFFFF. The counters file
+# therefore takes a value above the forged one again, before the
+# wrong attempts.
 
 use v5.36;
 
@@ -46,9 +52,11 @@ return sub ($t)
 	is( $t->enroll($vault)->{state}, 'ok', 'the record enrolls' );
 
 	# The live answer. The high counter goes on this reveal,
-	# because a counter violation needs a stored counter above the
-	# wall clock (ORC-COUNTER-1). A correct pin gives the same
-	# answer under any counter (FuguOracle OPS-GET-4).
+	# because a later counter violation needs a stored counter
+	# above the wall clock (ORC-COUNTER-1). FuguOracle OPS-GET-2
+	# enforces anti-replay before the pin comparison of
+	# OPS-GET-3, so a correct pin under a too-low counter gives
+	# junk. The stale case below is the counterexample.
 	$t->write_file( $file, "$name: " . $t->high_counter );
 	my $live = $t->reveal($vault);
 	is( $live->{state}, 'ok', 'the record reveals' );
@@ -78,7 +86,9 @@ return sub ($t)
 	# The three junk answers of this one record, against the live
 	# answer of it and against each other. A junk answer takes a
 	# fresh random key (FuguOracle OPS-JUNK-1), so two junk
-	# answers of one record differ.
+	# answers of one record differ. These comparisons prove
+	# FuguOracle OPS-JUNK-1. They do not prove that the response
+	# bytes hide the cause (ORC-REVEAL-4).
 	my @junk = (
 		[ 'the wrong passphrase', $wrong[0] ],
 		[ 'the wiped record',     $wiped ],
