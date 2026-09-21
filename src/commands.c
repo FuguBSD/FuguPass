@@ -43,12 +43,18 @@
  * records and the wraps of the slot stay as they are, because no
  * step of this file writes one (ENTRY-POOL-5).
  *
- * The entry type carries the field table of an entry file, and the
- * index holds no type (ENTRY-TYPES-5, VAULT-INDEX-2). type_of()
- * therefore reads one entry file with the table of each type, and
- * it takes the table that the file passes and names. The audit
- * reads each entry of the index that way, and it reports the shadow
- * entries alone (ENTRY-SHADOW-4).
+ * The index names the type of each entry, and the type carries the
+ * field table of an entry file (VAULT-INDEX-2, ENTRY-TYPES-5).
+ * index_type() therefore takes the type of one entry from the open
+ * index, and it sends no request. A command that refuses an entry
+ * of the wrong type refuses it there, before the reveal.
+ *
+ * The entry file owns the type, and the index holds a copy of it.
+ * file_type() proves that the file of a reveal agrees with the
+ * index. The audit takes the type of each entry from the index, it
+ * reveals the shadow entries alone, and it sends no request for an
+ * entry of another type (ENTRY-SHADOW-4, ENTRY-SHADOW-5,
+ * PROG-REPL-4).
  *
  * Every record goes to the standard output, and every report goes
  * to the standard error (PROG-ONESHOT-3). A secret goes to
@@ -148,7 +154,9 @@ static int	 index_ready(const struct session *);
 static int	 entry_find(const struct session *, const char *,
 		     const struct session_entry **);
 static int	 type_line(const struct vault_line *, void *);
-static int	 type_of(const char *, size_t, enum entry_type *);
+static int	 index_type(const struct session_entry *, enum entry_type *);
+static int	 file_type(const struct session_entry *, enum entry_type,
+		     const char *, size_t);
 static const struct vault_field *field_of(enum entry_type, const char *);
 static int	 own_field(const char *);
 static int	 meta_line(const struct vault_line *, void *);
@@ -410,32 +418,47 @@ type_line(const struct vault_line *line, void *arg)
 }
 
 /*
- * type_of(plain, plainlen, out):
- *	The entry type of the entry file of plainlen bytes at plain,
- *	to out. The index holds no type, so this call reads the file
- *	with the field table of each type (ENTRY-TYPES-5,
- *	VAULT-INDEX-2).
+ * index_type(e, out):
+ *	The entry type of the index entry e, to out (VAULT-INDEX-2,
+ *	ENTRY-TYPES-1). The call reads the open index alone, so it
+ *	sends no oracle request.
  *
- *	The type of the file is the type that the table of it takes,
- *	and that the type line of it names. A file that no pair of
- *	the two holds gives -1.
+ *	A type name that this tool does not hold gives -1 with a
+ *	report.
  */
 static int
-type_of(const char *plain, size_t plainlen, enum entry_type *out)
+index_type(const struct session_entry *e, enum entry_type *out)
 {
-	enum entry_type	 named;
-	size_t		 i;
-
-	for (i = 0; i < (size_t)ENTRY_TYPE_MAX; i++) {
-		named = ENTRY_TYPE_MAX;
-		if (vault_scan(plain, plainlen, entry_types[i].fields,
-		    type_line, &named) != 0)
-			continue;
-		if (named != (enum entry_type)i)
-			continue;
-		*out = named;
-		return 0;
+	if (entry_type_find(e->type, strlen(e->type), out) != 0) {
+		warnx("the entry %s: the index names the type %s, and this "
+		    "tool holds no type of that name", e->name, e->type);
+		return -1;
 	}
+	return 0;
+}
+
+/*
+ * file_type(e, type, plain, plainlen):
+ *	0 when the entry file of plainlen bytes at plain holds one
+ *	entry of the type type (ENTRY-TYPES-5). The file owns the
+ *	type, and the index holds a copy of it, so each reveal takes
+ *	this gate (VAULT-INDEX-2).
+ *
+ *	The file agrees when the field table of the type takes it,
+ *	and when the type line of it names that type. A file of
+ *	another shape gives -1 with a report.
+ */
+static int
+file_type(const struct session_entry *e, enum entry_type type,
+    const char *plain, size_t plainlen)
+{
+	enum entry_type	 named = ENTRY_TYPE_MAX;
+
+	if (vault_scan(plain, plainlen, entry_types[type].fields, type_line,
+	    &named) == 0 && named == type)
+		return 0;
+	warnx("the entry %s: the index names the type %s, and the file of it "
+	    "holds no entry of that type", e->name, entry_types[type].name);
 	return -1;
 }
 
@@ -775,13 +798,22 @@ create(struct session *s, struct newentry *ne)
 	text_init(&body, body.at, SESSION_PLAIN_MAX);
 
 	/*
-	 * A rotation reads the current entry first: the type of it,
-	 * and the metadata that the new file carries
-	 * (ENTRY-ROTATION-5). The read of add holds the entry key of
-	 * the slot, because the seal of add takes that same key
-	 * (ENTRY-ROTATION-4).
+	 * A rotation takes the type of the entry from the index, so
+	 * a command line of the wrong type refuses before the quorum
+	 * event (VAULT-INDEX-2). It then reads the current entry:
+	 * the metadata that the new file carries, and the proof that
+	 * the file holds that type (ENTRY-ROTATION-5). The read of
+	 * add holds the entry key of the slot, because the seal of
+	 * add takes that same key (ENTRY-ROTATION-4).
 	 */
 	if (old != NULL) {
+		if (index_type(old, &type) != 0)
+			goto out;
+		if (ne->typeset && ne->type != type) {
+			warnx("the entry %s holds the type %s", ne->name,
+			    entry_types[type].name);
+			goto out;
+		}
 		if (ne->derived) {
 			if (session_reveal(s, old->slot, &plain,
 			    &plainlen) != 0)
@@ -789,16 +821,8 @@ create(struct session *s, struct newentry *ne)
 		} else if (session_consume(s, old->slot, &plain,
 		    &plainlen) != 0)
 			goto out;
-		if (type_of(plain, plainlen, &type) != 0) {
-			warnx("the entry %s: the file holds no entry of a "
-			    "type of this tool", ne->name);
+		if (file_type(old, type, plain, plainlen) != 0)
 			goto out;
-		}
-		if (ne->typeset && ne->type != type) {
-			warnx("the entry %s holds the type %s", ne->name,
-			    entry_types[type].name);
-			goto out;
-		}
 		m.text = &meta;
 		m.entry = ne;
 		if (vault_scan(plain, plainlen, entry_types[type].fields,
@@ -932,12 +956,12 @@ create(struct session *s, struct newentry *ne)
 	/*
 	 * The index holds the consumed slot before the entry file
 	 * exists (ENTRY-POOL-8). A rotation of add writes no index:
-	 * the entry keeps the slot, the file name and the slot list
-	 * of it (ENTRY-ROTATION-4).
+	 * the entry keeps the slot, the file name, the type and the
+	 * slot list of it (ENTRY-ROTATION-4).
 	 */
 	if (consumes) {
-		n = snprintf(line, sizeof(line), "%s %s %s", session_file(s),
-		    list, ne->name);
+		n = snprintf(line, sizeof(line), "%s %s %s %s",
+		    session_file(s), entry_types[type].name, list, ne->name);
 		if (n < 0 || (size_t)n >= sizeof(line))
 			goto out;
 		if (index_write(s, drop[0] == '\0' ? NULL : drop, line,
@@ -1124,7 +1148,9 @@ cmd_ls(struct session *s, int argc, char *argv[])
  *	PROG-OUTPUT-1). The reveal is one quorum event (PROG-REPL-4).
  *
  *	The words of a mnemonic take the -w option (PROG-OUTPUT-2,
- *	PROG-ONESHOT-9).
+ *	PROG-ONESHOT-9). The index names the type of the entry, so a
+ *	mnemonic without that option refuses before the reveal
+ *	(VAULT-INDEX-2).
  */
 static int
 cmd_show(struct session *s, int argc, char *argv[])
@@ -1156,18 +1182,17 @@ cmd_show(struct session *s, int argc, char *argv[])
 		warnx("the index holds no entry of the name %s", argv[0]);
 		return -1;
 	}
-	if (session_reveal(s, e->slot, &plain, &plainlen) != 0)
+	if (index_type(e, &type) != 0)
 		return -1;
-	if (type_of(plain, plainlen, &type) != 0) {
-		warnx("the entry %s: the file holds no entry of a type of "
-		    "this tool", argv[0]);
-		return -1;
-	}
 	if (type == ENTRY_TYPE_MNEMONIC && !words) {
 		warnx("the entry %s holds a mnemonic, and the -w option "
 		    "prints the words of it", argv[0]);
 		return -1;
 	}
+	if (session_reveal(s, e->slot, &plain, &plainlen) != 0)
+		return -1;
+	if (file_type(e, type, plain, plainlen) != 0)
+		return -1;
 	return vault_scan(plain, plainlen, entry_types[type].fields,
 	    show_line, NULL);
 }
@@ -1218,13 +1243,16 @@ cmd_totp(struct session *s, int argc, char *argv[])
 		warnx("the index holds no entry of the name %s", argv[1]);
 		return -1;
 	}
-	if (session_reveal(s, e->slot, &plain, &plainlen) != 0)
+	if (index_type(e, &type) != 0)
 		return -1;
-	if (type_of(plain, plainlen, &type) != 0 ||
-	    type != ENTRY_TYPE_TOTP) {
+	if (type != ENTRY_TYPE_TOTP) {
 		warnx("the entry %s holds no totp entry", argv[1]);
 		return -1;
 	}
+	if (session_reveal(s, e->slot, &plain, &plainlen) != 0)
+		return -1;
+	if (file_type(e, type, plain, plainlen) != 0)
+		return -1;
 
 	memset(&t, 0, sizeof(t));
 	memset(key, 0, sizeof(key));
@@ -1263,10 +1291,10 @@ out:
  *	stale, and this command prints one line of each one
  *	(PROG-ONESHOT-9).
  *
- *	The index holds no entry type, so the audit reveals each
- *	entry of it, and it reads the metadata of the shadow entries
- *	alone (ENTRY-SHADOW-5, VAULT-INDEX-2). Each reveal is one
- *	quorum event (PROG-REPL-4).
+ *	The index names the type of each entry, so the audit reveals
+ *	the shadow entries alone (ENTRY-SHADOW-5, VAULT-INDEX-2). An
+ *	entry of another type takes no oracle request, and each
+ *	reveal of a shadow entry is one quorum event (PROG-REPL-4).
  */
 static int
 cmd_audit(struct session *s, int argc, char *argv[])
@@ -1302,15 +1330,14 @@ cmd_audit(struct session *s, int argc, char *argv[])
 	if ((list = session_list(s, &count)) == NULL)
 		return -1;
 	for (i = 0; i < count; i++) {
-		if (session_reveal(s, list[i].slot, &plain, &plainlen) != 0)
+		if (index_type(&list[i], &type) != 0)
 			return -1;
-		if (type_of(plain, plainlen, &type) != 0) {
-			warnx("the entry %s: the file holds no entry of a "
-			    "type of this tool", list[i].name);
-			return -1;
-		}
 		if (type != ENTRY_TYPE_SHADOW)
 			continue;
+		if (session_reveal(s, list[i].slot, &plain, &plainlen) != 0)
+			return -1;
+		if (file_type(&list[i], type, plain, plainlen) != 0)
+			return -1;
 		memset(&entry, 0, sizeof(entry));
 		if (vault_scan(plain, plainlen, entry_types[type].fields,
 		    date_line, &entry) != 0)

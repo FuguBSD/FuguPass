@@ -83,7 +83,8 @@ renders as a SeedQR code for a signer to scan ([PROG-QR](programs.md#prog-qr)).
 - **ENTRY-ROTATION-1** — Rotation of a derived entry increments the version. The
   rotation consumes a new slot ([ENTRY-POOL](entries.md#entry-pool)). The
   version of an entry is the position of its slot in `slots`
-  ([ENTRY-TYPES](entries.md#entry-types)).
+  ([ENTRY-TYPES](entries.md#entry-types)). This rule owns that value, and the
+  `version` metadata field of an entry file records it.
 - **ENTRY-ROTATION-2** — The entry metadata records the slot list of all
   versions.
 - **ENTRY-ROTATION-3** — Every old version of a derived entry stays recoverable,

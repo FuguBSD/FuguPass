@@ -92,11 +92,11 @@
 
 /*
  * The bytes of the shortest entry line of the index: the name, the
- * colon and the space, the file name, one space, one slot index,
- * one space, one byte of the entry name, and the line feed
- * (VAULT-FORMAT-1, VAULT-VALUE_ENTRY).
+ * colon and the space, the file name, one space, one byte of the
+ * type name, one space, one slot index, one space, one byte of the
+ * entry name, and the line feed (VAULT-FORMAT-1, VAULT-VALUE_ENTRY).
  */
-#define ENTRY_LINE_MIN	(sizeof("entry: ") - 1 + 2 * DERIVE_KEYLEN + 5)
+#define ENTRY_LINE_MIN	(sizeof("entry: ") - 1 + 2 * DERIVE_KEYLEN + 7)
 
 /* The state of one oracle in this session, for the reports. */
 #define STATE_PASS	0	/* the canary check of it passes */
@@ -488,17 +488,18 @@ last_slot(const char *slots, uint32_t *out)
  *	in the text of session_index() (VAULT-INDEX-2).
  *
  *	The scanner holds the form of the value: the file name of
- *	2 * DERIVE_KEYLEN hex bytes, one space, the slot list, one
- *	space, and the entry name. The copy of the value takes the
- *	two spaces as terminators, so the three parts are three
- *	strings. The entry name comes last, so it can hold a space.
+ *	2 * DERIVE_KEYLEN hex bytes, the type name, the slot list,
+ *	and the entry name, with one space between two parts. The
+ *	copy of the value takes the three spaces as terminators, so
+ *	the four parts are four strings. The entry name comes last,
+ *	so it can hold a space.
  */
 static int
 index_line(const struct vault_line *line, void *arg)
 {
 	struct session		*s = arg;
 	struct session_entry	*e;
-	char			*at, *slots, *space;
+	char			*at, *type, *slots, *space;
 
 	if (strcmp(line->field->name, "entry") != 0)
 		return 0;
@@ -512,7 +513,11 @@ index_line(const struct vault_line *line, void *arg)
 	s->arenalen += line->valuelen + 1;
 
 	at[2 * DERIVE_KEYLEN] = '\0';
-	slots = &at[2 * DERIVE_KEYLEN + 1];
+	type = &at[2 * DERIVE_KEYLEN + 1];
+	if ((space = strchr(type, ' ')) == NULL)
+		return -1;
+	*space = '\0';
+	slots = &space[1];
 	if ((space = strchr(slots, ' ')) == NULL)
 		return -1;
 	*space = '\0';
@@ -520,6 +525,7 @@ index_line(const struct vault_line *line, void *arg)
 	e = &s->list[s->listlen];
 	memset(e, 0, sizeof(*e));
 	e->file = at;
+	e->type = type;
 	e->slots = slots;
 	e->name = &space[1];
 	if (last_slot(slots, &e->slot) != 0)

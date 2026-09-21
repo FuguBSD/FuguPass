@@ -80,18 +80,21 @@
 struct session;
 
 /*
- * One entry of the open index (VAULT-INDEX-2). The three strings
- * are the three parts of the entry value, and they live until the
+ * One entry of the open index (VAULT-INDEX-2). The four strings
+ * are the four parts of the entry value, and they live until the
  * session closes or writes the index (VAULT-FORMAT).
  *
  * file is the entry file name of the current version, of
- * 2 * DERIVE_KEYLEN bytes. slots is the slot list of every version,
- * and slot is the current slot: the last index of that list
- * (ENTRY-ROTATION-2). The entry name comes last in the value, so it
- * can hold a space.
+ * 2 * DERIVE_KEYLEN bytes. type is the type name of the entry, and
+ * this file resolves no type name: the entry model above it holds
+ * the types (ENTRY-TYPES-1). slots is the slot list of every
+ * version, and slot is the current slot: the last index of that
+ * list (ENTRY-ROTATION-2). The entry name comes last in the value,
+ * so it can hold a space.
  */
 struct session_entry {
 	const char	*file;
+	const char	*type;
 	const char	*slots;
 	const char	*name;
 	uint32_t	 slot;

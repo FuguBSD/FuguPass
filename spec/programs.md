@@ -143,7 +143,10 @@ through Fugu.
   `k` `get_pin` requests ([ORC-QUORUM](oracle.md#orc-quorum), D-07). `add` and
   `gen` consume one pool slot each, with one quorum reveal of the consumed slot
   ([ENTRY-POOL](entries.md#entry-pool)). `audit` reads shadow metadata through
-  quorum reveals ([ENTRY-SHADOW](entries.md#entry-shadow)).
+  quorum reveals ([ENTRY-SHADOW](entries.md#entry-shadow)). It must take the
+  type of each entry from the index, and it must reveal the shadow entries
+  alone. It must send no oracle request for an entry of another type
+  ([VAULT-INDEX](vault.md#vault-index)).
 - **PROG-REPL-5** — With fewer than `k` reachable oracles, the tool must perform
   no reveal and must report the state of each oracle
   ([ORC-QUORUM](oracle.md#orc-quorum)). An HTTP error or a transport failure can

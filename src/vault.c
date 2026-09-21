@@ -334,31 +334,47 @@ machine_ok(const char *text, size_t len)
 /*
  * entry_ok(text, len):
  *	0 when the len bytes at text hold one entry of the index:
- *	the entry file name, one space, the slot list, one space,
- *	and the entry name (VAULT-INDEX-2). The entry name comes
- *	last, so it can hold a space.
+ *	the entry file name, the type name, the slot list, and the
+ *	entry name, with one space between two parts
+ *	(VAULT-INDEX-2). The entry name comes last, so it can hold a
+ *	space.
+ *
+ *	An index of a vault of an earlier tool holds the three parts
+ *	without the type. The slot list of such a value sits where
+ *	the type name belongs, and the entry name sits where the
+ *	slot list belongs. This call rejects that value, so the
+ *	session reports the index and reads no entry of it.
  */
 static int
 entry_ok(const char *text, size_t len)
 {
-	const char	*first, *second;
-	size_t		 head, list;
+	const char	*space;
+	size_t		 at, part;
 
-	if ((first = memchr(text, ' ', len)) == NULL)
+	/* The entry file of the current version (VAULT-LAYOUT-5). */
+	part = 2 * DERIVE_KEYLEN;
+	if (len <= part || text[part] != ' ' || hex_ok(text, part) != 0)
 		return -1;
-	head = (size_t)(first - text);
-	if (head != 2 * DERIVE_KEYLEN || hex_ok(text, head) != 0)
+	at = part + 1;
+
+	/* The type name of the entry (ENTRY-TYPES-1). */
+	if ((space = memchr(&text[at], ' ', len - at)) == NULL)
 		return -1;
-	if ((second = memchr(&first[1], ' ', len - head - 1)) == NULL)
+	part = (size_t)(space - &text[at]);
+	if (word_ok(&text[at], part) != 0)
 		return -1;
-	list = (size_t)(second - first) - 1;
-	if (slots_ok(&first[1], list) != 0)
+	at += part + 1;
+
+	/* The slot list of every version (ENTRY-ROTATION-2). */
+	if ((space = memchr(&text[at], ' ', len - at)) == NULL)
 		return -1;
+	part = (size_t)(space - &text[at]);
+	if (slots_ok(&text[at], part) != 0)
+		return -1;
+	at += part + 1;
 
 	/* The entry name is the rest, and it holds 1 byte or more. */
-	if ((size_t)(second - text) + 1 >= len)
-		return -1;
-	return 0;
+	return at < len ? 0 : -1;
 }
 
 /*
