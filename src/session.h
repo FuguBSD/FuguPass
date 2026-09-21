@@ -265,8 +265,9 @@ void	session_drop(struct session *);
  *
  *	The fresh canary mask kills this machine's index wrap of the
  *	oracle. A session that holds the index key re-wraps the index
- *	share at once, and a session without it deletes the wrap file
- *	and reports the dead state (ORC-CANARY-8).
+ *	share at once, and every other path of the enrollment leaves
+ *	no wrap file. The call reports each wrap that the enrollment
+ *	took away (ORC-CANARY-8).
  */
 int	session_canary(struct session *, unsigned int);
 

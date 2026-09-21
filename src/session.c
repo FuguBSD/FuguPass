@@ -65,7 +65,6 @@
  */
 
 #include <err.h>
-#include <errno.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <stddef.h>
@@ -160,6 +159,7 @@ static int		 factor_read(struct session *);
 static int		 wrap_live(const struct session *, unsigned int);
 static void		 candidates(struct session *);
 static void		 canary_report(const struct session *, unsigned int);
+static void		 wrap_report(unsigned int);
 static int		 canary_take(struct session *, unsigned int,
 			     const unsigned char *, unsigned char *, int *);
 static void		 quorum_report(const struct session *);
@@ -351,6 +351,19 @@ canary_report(const struct session *s, unsigned int oracle)
 		    "the record, or a stale canary check seal of this "
 		    "machine", s->first, oracle);
 	warnx("the session sends no entry request to oracle %u", oracle);
+}
+
+/*
+ * wrap_report(oracle):
+ *	The report of one index wrap of this machine that a canary
+ *	enrollment killed and removed. The provisioning ceremony
+ *	writes such a wrap again (ORC-CANARY-8).
+ */
+static void
+wrap_report(unsigned int oracle)
+{
+	warnx("the index wrap of oracle %u is gone: the provisioning "
+	    "ceremony writes it again", oracle);
 }
 
 /*
@@ -1177,11 +1190,9 @@ int
 session_canary(struct session *s, unsigned int oracle)
 {
 	struct oracle_ctx	 ctx;
-	struct vault_at		 at;
 	char			 again[FUGUPASS_PASS_MAX];
-	char			 path[PATH_MAX];
 	size_t			 len;
-	int			 n, rv = -1;
+	int			 live, n, rv = -1;
 
 	if (s == NULL || oracle == 0 || oracle > s->config.count ||
 	    s->config.oracle[oracle - 1].retired)
@@ -1208,7 +1219,11 @@ session_canary(struct session *s, unsigned int oracle)
 	 * The canary mask of the fresh record wraps this machine's
 	 * index share of the oracle, so a session that holds K_idx
 	 * re-wraps with the enrollment (ORC-CANARY-3, ORC-CANARY-8).
+	 * Every other path of the enrollment leaves no wrap file, so
+	 * this step reads the file before it, and it reports a
+	 * removal.
 	 */
+	live = wrap_live(s, oracle);
 	ctx_of(&ctx, s, oracle);
 	if (s->opened)
 		n = oracle_canary_index(&ctx, again, len, s->idxkey,
@@ -1218,29 +1233,12 @@ session_canary(struct session *s, unsigned int oracle)
 	if (n != 0) {
 		warnx("the canary of oracle %u (%s): %s", oracle,
 		    s->config.oracle[oracle - 1].url, oracle_state_text(n));
+		if (live && !wrap_live(s, oracle))
+			wrap_report(oracle);
 		goto out;
 	}
-	if (s->opened) {
-		rv = 0;
-		goto out;
-	}
-
-	/*
-	 * The session holds no index key, so this machine's index
-	 * wrap of the oracle is dead, and the file of it goes. The
-	 * absent file is the detectable state (ORC-CANARY-8).
-	 */
-	memset(&at, 0, sizeof(at));
-	at.oracle = oracle;
-	if (vault_path(path, sizeof(path), s->vault, VAULT_FILE_WRAP_INDEX,
-	    &at) != 0)
-		goto out;
-	if (unlink(path) == -1 && errno != ENOENT) {
-		warn("%s", path);
-		goto out;
-	}
-	warnx("the index wrap of oracle %u is gone: the provisioning "
-	    "ceremony writes it again", oracle);
+	if (!s->opened)
+		wrap_report(oracle);
 	rv = 0;
 out:
 	explicit_bzero(again, sizeof(again));

@@ -15,7 +15,7 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-# The canary leg (ORC-CANARY-6, ORC-CANARY-7).
+# The canary leg (ORC-CANARY-6, ORC-CANARY-7, ORC-CANARY-8).
 #
 # A canary enrollment reads the passphrase twice, enrolls the canary
 # record, and proves it with one immediate get_pin. It then seals
@@ -27,6 +27,15 @@
 # request. The driver reports that with the word error, because one
 # value of the record client reports every local failure. The leg
 # therefore also proves that the vault holds no seal.
+#
+# The third case is a failure after the set_pin. A directory at the
+# path of the canary seal stops the seal write, and every step
+# before that write passes: another step gives the state of the
+# oracle, and the word error names a local failure alone. The
+# set_pin therefore replaced the canary mask, and that mask killed
+# this machine's index wrap of the oracle. The wrap file must go,
+# because the absent file is the one detectable dead state
+# (ORC-CANARY-8).
 
 use v5.36;
 
@@ -59,6 +68,20 @@ return sub ($t)
 		    . '(ORC-CANARY-6)' );
 	is( $t->file_exists( $t->seal($typo) ),
 		0, 'the stopped enrollment wrote no canary seal' );
+
+	# The vault of the first case holds the counters of the
+	# canary record, so this case takes that vault again.
+	my $dead = $t->index_wrap($vault);
+	$t->write_file( $dead, 'dead' );
+	$t->remove_file( $t->seal($vault) );
+	$t->make_dir( $t->seal($vault) );
+
+	my $after = $t->canary($vault);
+	is( $after->{state}, 'error',
+		'a canary seal write that fails stops the enrollment' );
+	is( $t->file_exists($dead),
+		0, 'the failure after the set_pin took the dead index '
+		    . 'wrap away (ORC-CANARY-8)' );
 
 	return;
 };

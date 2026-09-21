@@ -229,7 +229,10 @@ int	oracle_reveal(const struct oracle_ctx *, uint32_t, unsigned char *,
  *	so a caller can re-enroll one at any time (ORC-CANARY-5). A
  *	re-enrollment replaces the canary mask of the oracle, and it
  *	therefore kills this machine's index wrap of that oracle. The
- *	caller holds that rule (ORC-CANARY-8).
+ *	call removes that wrap file, and the absent file is the
+ *	detectable dead state (ORC-CANARY-8). A failure before the
+ *	set_pin leaves the file as it was. The caller reports the
+ *	removal.
  */
 int	oracle_canary_enroll(const struct oracle_ctx *, const char *, size_t);
 
@@ -246,6 +249,10 @@ int	oracle_canary_enroll(const struct oracle_ctx *, const char *, size_t);
  *	f(s_canary_i, "fugupass/v1/wrap-index" || i), and the call
  *	writes it to machine/wrap.index.<i> (KEY-MASK-7,
  *	VAULT-ATOMIC-1).
+ *
+ *	A failure after the set_pin removes this machine's index wrap
+ *	file of the oracle, because the fresh mask killed that wrap
+ *	and no fresh wrap reached the disk (ORC-CANARY-8).
  *
  *	A ceremony that holds K_idx takes this call, and every other
  *	caller takes oracle_canary_enroll() (CER-CREATE-5,

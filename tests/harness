@@ -945,6 +945,17 @@ sub remove_file ( $, $path )
 	return;
 }
 
+# $cp->make_dir($path):
+#	A directory of the guest at the path $path. A leg puts one
+#	where a file of a vault belongs, so the write of that file
+#	fails at the rename (VAULT-ATOMIC-2).
+sub make_dir ( $, $path )
+{
+	main::guest_ok( "the directory $path",
+		'mkdir -p ' . main::_shq($path) );
+	return;
+}
+
 # $cp->copy_file($from, $to):
 #	The file $from of the guest, at the path $to. A leg replaces
 #	one wrap of a slot with the wrap of an other slot, and the

@@ -206,8 +206,8 @@ is an accepted FuguOracle transport risk, and TLS mitigates it.
   verification is the canary check decrypt of ORC-ENROLL-8. On a decrypt failure
   with an untried reachable oracle, the tool can retry with a different quorum.
   It runs the canary check of each substitute oracle first (ORC-QUORUM-5). A
-  decrypt failure with no untried quorum must stop the change before any
-  `set_pin` of that slot. The client must report the failing slot and each
+  decrypt failure with no untried reachable oracle must stop the change before
+  any `set_pin` of that slot. The client must report the failing slot and each
   quorum used. The change stays incomplete, and the marker records the progress
   (ORC-ENROLL-10).
 - **ORC-ENROLL-10** — The client must persist the change marker with the kind
@@ -369,7 +369,8 @@ attempt, so the tool bounds the retries per record per session.
   index and holds `K_idx` must re-wrap every dead index wrap of this machine at
   once. A client without `K_idx` must delete this machine's index wrap file of
   oracle `i` ([VAULT-LAYOUT](vault.md#vault-layout)), so the dead state is
-  detectable. The index opens while the session quorum covers `k` live index
+  detectable. A re-enrollment that fails after the `set_pin` must also delete
+  that file. The index opens while the session quorum covers `k` live index
   wraps of this machine (ORC-QUORUM-2). While the quorum cannot cover `k` live
   index wraps, the session cannot resolve an entry name. The tool must report
   each dead or unreachable index wrap, and must name the provisioning ceremony

@@ -28,7 +28,9 @@
  * oracle_canary_check() is the canary check of one oracle. The
  * index wrap of an oracle takes the canary mask of that oracle, so
  * the wrap rides on the request of the canary and sends none of its
- * own (ORC-CANARY-3, KEY-MASK-7).
+ * own (ORC-CANARY-3, KEY-MASK-7). An enrollment that replaced the
+ * mask leaves a fresh index wrap of that oracle, or no wrap file of
+ * it (ORC-CANARY-8).
  *
  * The steps come from the other files of the tree. derive.c holds
  * each label, pin.c holds the pin secret, share.c holds the split,
@@ -47,6 +49,7 @@
  * secret, so the two buffers of it take no clear (ORC-COUNTER-3).
  */
 
+#include <errno.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <stddef.h>
@@ -55,6 +58,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "derive.h"
 #include "envelope.h"
@@ -108,6 +112,7 @@ static int	counter_line(const struct vault_line *, void *);
 static int	counter_take(const char *, uint32_t, int, unsigned int,
 		    uint32_t *);
 static int	wrap_path(const struct oracle_ctx *, uint32_t, char *, size_t);
+static int	wrap_index_drop(const struct oracle_ctx *);
 static int	request(const struct oracle_ctx *, uint32_t, int,
 		    const unsigned char *, unsigned char *);
 static int	canary(const struct oracle_ctx *, const char *, size_t,
@@ -383,6 +388,31 @@ wrap_path(const struct oracle_ctx *ctx, uint32_t slot, char *out,
 }
 
 /*
+ * wrap_index_drop(ctx):
+ *	Remove this machine's index wrap file of the oracle of ctx
+ *	(VAULT-LAYOUT-4). A canary enrollment replaced the canary
+ *	mask of that oracle, so the wrap is dead, and the absent
+ *	file is the detectable state of it (ORC-CANARY-8).
+ *
+ *	An absent file gives 0, and a removal that fails gives -1.
+ */
+static int
+wrap_index_drop(const struct oracle_ctx *ctx)
+{
+	struct vault_at	 at;
+	char		 path[PATH_MAX];
+
+	memset(&at, 0, sizeof(at));
+	at.oracle = ctx->oracle;
+	if (vault_path(path, sizeof(path), ctx->vault, VAULT_FILE_WRAP_INDEX,
+	    &at) != 0)
+		return -1;
+	if (unlink(path) == -1 && errno != ENOENT)
+		return -1;
+	return 0;
+}
+
+/*
  * request(ctx, slot, canary, entropy, mask):
  *	One request of one record, and the mask of the answer to the
  *	ENVELOPE_MASKLEN bytes at mask. canary takes the canary
@@ -624,6 +654,10 @@ out:
  *	wrap of that oracle when idxkey holds K_idx. A NULL idxkey
  *	writes no index wrap. The two public functions of this file
  *	hold the gate of each argument.
+ *
+ *	The set_pin of the enrollment kills this machine's index
+ *	wrap of the oracle, so a path that writes no fresh wrap
+ *	removes the wrap file (ORC-CANARY-8).
  */
 static int
 canary(const struct oracle_ctx *ctx, const char *again, size_t againlen,
@@ -640,7 +674,7 @@ canary(const struct oracle_ctx *ctx, const char *again, size_t againlen,
 	unsigned char	 sealed[ORACLE_CHECKLEN + SEAL_OVERHEAD];
 	char		 path[PATH_MAX];
 	size_t		 i;
-	int		 rv;
+	int		 enrolled = 0, wrapped = 0, rv;
 
 	if (ctx_ok(ctx) != 0 || again == NULL)
 		return -1;
@@ -657,6 +691,13 @@ canary(const struct oracle_ctx *ctx, const char *again, size_t againlen,
 	arc4random_buf(entropy, sizeof(entropy));
 	if ((rv = request(ctx, 0, 1, entropy, mask)) != 0)
 		goto out;
+
+	/*
+	 * The set_pin replaced the canary mask of the oracle, so
+	 * this machine's index wrap of it is dead from here on
+	 * (ORC-CANARY-8).
+	 */
+	enrolled = 1;
 
 	/*
 	 * One immediate get_pin proves that the fresh record answers
@@ -717,6 +758,7 @@ canary(const struct oracle_ctx *ctx, const char *again, size_t againlen,
 		goto out;
 	if (vault_write(path, wrap, sizeof(wrap)) != 0)
 		goto out;
+	wrapped = 1;
 	rv = 0;
 out:
 	/*
@@ -730,6 +772,16 @@ out:
 	explicit_bzero(sealkey, sizeof(sealkey));
 	explicit_bzero(wrapkey, sizeof(wrapkey));
 	explicit_bzero(wrap, sizeof(wrap));
+
+	/*
+	 * The fresh canary mask killed this machine's index wrap of
+	 * the oracle. The write above replaced that wrap, and every
+	 * other path takes the file away, so a dead wrap stays
+	 * detectable (ORC-CANARY-8). A stale file that stays is a
+	 * failure of the call.
+	 */
+	if (enrolled && !wrapped && wrap_index_drop(ctx) != 0 && rv == 0)
+		rv = -1;
 	return rv;
 }
 
