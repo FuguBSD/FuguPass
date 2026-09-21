@@ -67,8 +67,6 @@ static int			 aes_cbc(const unsigned char *,
 				    unsigned char *, size_t, size_t *);
 static int			 tweak_input(const unsigned char *, uint32_t,
 				    unsigned char *);
-static int			 pubkey_of(const unsigned char *,
-				    unsigned char *);
 static int			 seal(const unsigned char *,
 				    const unsigned char *,
 				    const unsigned char *,
@@ -216,13 +214,8 @@ out:
 	return rv;
 }
 
-/*
- * The public key of the ENVELOPE_KEYLEN bytes at priv, to the
- * ENVELOPE_PUBKEYLEN bytes at out, in the compressed form. A scalar
- * that the curve rejects gives -1.
- */
-static int
-pubkey_of(const unsigned char *priv, unsigned char *out)
+int
+envelope_pubkey(const unsigned char *priv, unsigned char *out)
 {
 	secp256k1_context	*ctx;
 	secp256k1_pubkey	 pubkey;
@@ -536,7 +529,7 @@ envelope_request(const unsigned char *pub, const unsigned char *ckepriv,
 	 * cke and the counter lead the envelope, and the steps after
 	 * them read cke from out (FuguOracle PROTO-ENVELOPE).
 	 */
-	if (pubkey_of(ckepriv, out) != 0)
+	if (envelope_pubkey(ckepriv, out) != 0)
 		goto out;
 	counter_bytes(counter, out + ENVELOPE_PUBKEYLEN);
 	if (envelope_tweak(pub, out, counter, qprime) != 0)
@@ -594,7 +587,7 @@ envelope_response(const unsigned char *pub, const unsigned char *ckepriv,
 	 * The response keys come from the ECDH secret of the request,
 	 * under the response label (FuguOracle PROTO-ENCRYPT-5).
 	 */
-	if (pubkey_of(ckepriv, cke) != 0)
+	if (envelope_pubkey(ckepriv, cke) != 0)
 		goto out;
 	if (envelope_tweak(pub, cke, counter, qprime) != 0)
 		goto out;

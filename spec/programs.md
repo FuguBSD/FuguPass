@@ -198,6 +198,24 @@ actions.
   paths ([ORC-REVOKE](oracle.md#orc-revoke)) must each run as one too. The six
   REPL commands are the complete REPL command list, and the subcommand list
   extends it.
+- **PROG-ONESHOT-5** — `fugupass` must take the vault directory from the `-d`
+  option. Without that option, the vault directory must be `.fugupass` of the
+  home directory. The `create` subcommand must take the threshold from `-k`, and
+  the ordered oracle set from its arguments
+  ([VAULT-CONFIG](vault.md#vault-config)).
+- **PROG-ONESHOT-6** — Each argument of `create` must hold one position of the
+  oracle set: the static public key hex, one space, then the URL
+  ([ORC-PROVISION](oracle.md#orc-provision)). The first argument is position 1.
+  The subcommand must take the machine name from `-m`
+  ([KEY-DEVICE](keys.md#key-device)), and the `bcrypt_pbkdf(3)` round count from
+  `-r` ([KEY-PIN](keys.md#key-pin)). The two options and the argument list are
+  mandatory.
+- **PROG-ONESHOT-7** — The `create` subcommand must write the revocation kit
+  ([ORC-REVOKE](oracle.md#orc-revoke)) to the file `machine/revocation-kit` of
+  the vault directory. It must print the path of that file. The kit is
+  plaintext, and it names the records of one machine, so it belongs to the
+  machine-local set ([VAULT-LAYOUT](vault.md#vault-layout),
+  [VAULT-BACKUP](vault.md#vault-backup)).
 
 <a id="prog-output"></a>
 

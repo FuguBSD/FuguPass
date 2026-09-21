@@ -40,10 +40,14 @@
  *
  * The frame dispatches on the first argument after the options, and
  * the table below holds one row of each subcommand (PROG-ONESHOT-4).
- * An unknown subcommand gives the usage line and the status 2.
+ * An unknown subcommand gives the usage and the status 2.
  * PROG-IFACE-1 gives the interactive session to a run with no
  * subcommand, and that session is not in this program yet. Such a
- * run gives the usage line as well.
+ * run gives the usage as well.
+ *
+ * A subcommand reads the options and the arguments of its own
+ * command line, and ceremony.c holds the steps of a ceremony
+ * (PROG-ONESHOT-5, PROG-ONESHOT-6, CER-CREATE).
  *
  * The passphrase enters here, through readpassphrase(3) of the
  * terminal (SEC-MEMORY-4, PROG-IFACE-3). No argument and no
@@ -64,6 +68,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "ceremony.h"
+#include "derive.h"
 #include "fugupass.h"
 #include "helper.h"
 #include "http.h"
@@ -77,6 +83,7 @@
 /* One subcommand of the frame (PROG-ONESHOT-4). */
 struct subcommand {
 	const char	*name;
+	const char	*args;	/* the options and the arguments of it */
 	int		 (*run)(int, char *[], const char *);
 };
 
@@ -96,7 +103,8 @@ static int	 vault_dir(const char *, char *, size_t);
  * main() takes the first argument that matches a name here.
  */
 static const struct subcommand commands[] = {
-	{ "create",	cmd_create }
+	{ "create",	"-k threshold -m machine -r rounds oracle ...",
+	    cmd_create }
 };
 
 /*
@@ -126,18 +134,18 @@ static const struct unveil_path unveil_list[] = {
 
 /*
  * usage():
- *	The usage line, to the standard error, and the status 2. The
- *	line names each subcommand of the table above.
+ *	The usage lines, to the standard error, and the status 2.
+ *	The table above gives one line of each subcommand.
  */
 static void
 usage(void)
 {
 	size_t	 i;
 
-	fprintf(stderr, "usage: %s [-d directory] ", getprogname());
 	for (i = 0; i < nitems(commands); i++)
-		fprintf(stderr, "%s%s", i == 0 ? "" : " | ", commands[i].name);
-	fprintf(stderr, "\n");
+		fprintf(stderr, "%s %s [-d directory] %s %s\n",
+		    i == 0 ? "usage:" : "      ", getprogname(),
+		    commands[i].name, commands[i].args);
 	exit(2);
 }
 
@@ -217,19 +225,79 @@ sandbox(const char *vault)
 /*
  * cmd_create(argc, argv, vault):
  *	The vault creation ceremony of the vault directory vault
- *	(CER-CREATE). The ceremony is not in this program yet, and
- *	this function reports that. The next change gives the steps
- *	to ceremony.c, and this function calls that file.
+ *	(CER-CREATE). This function reads the command line of the
+ *	subcommand, and ceremony.c runs the nine steps
+ *	(PROG-ONESHOT-5, PROG-ONESHOT-6).
+ *
+ *	The threshold comes from -k, the machine name from -m, and
+ *	the round count of bcrypt_pbkdf(3) from -r. Each argument
+ *	after the options holds one position of the ordered oracle
+ *	set: the static public key hex, one space, then the URL. The
+ *	first argument is position 1 (ORC-PROVISION-1,
+ *	ORC-PROVISION-5).
+ *
+ *	The config reader holds the full bounds of the threshold and
+ *	of the oracle set (VAULT-CONFIG-6). This function holds the
+ *	form of each number, and the two gates below.
+ *
+ *	getopt(3) already ran over the options of the program, so
+ *	this second pass resets it.
  */
 static int
 cmd_create(int argc, char *argv[], const char *vault)
 {
-	(void)argc;
-	(void)argv;
-	(void)vault;
+	struct ceremony_create	 arg;
+	const char		*errstr;
+	int			 ch;
 
-	warnx("create: the ceremony is not in this program yet");
-	return 1;
+	memset(&arg, 0, sizeof(arg));
+	arg.vault = vault;
+
+	optreset = 1;
+	optind = 1;
+	while ((ch = getopt(argc, argv, "k:m:r:")) != -1) {
+		switch (ch) {
+		case 'k':
+			arg.threshold = (unsigned int)strtonum(optarg, 1,
+			    DERIVE_ORACLE_MAX, &errstr);
+			if (errstr != NULL)
+				errx(1, "the threshold is %s", errstr);
+			break;
+		case 'm':
+			arg.machine = optarg;
+			break;
+		case 'r':
+			arg.rounds = (unsigned int)strtonum(optarg, 1,
+			    INT_MAX, &errstr);
+			if (errstr != NULL)
+				errx(1, "the round count is %s", errstr);
+			break;
+		default:
+			usage();
+		}
+	}
+	argc -= optind;
+	argv += optind;
+	if (argc < 1 || arg.threshold == 0 || arg.machine == NULL ||
+	    arg.rounds == 0)
+		usage();
+
+	/*
+	 * These two gates run before the plate scan, so a wrong
+	 * command line costs no scan. The config reader holds the
+	 * full rule of each one, because a retired position counts
+	 * against the threshold there (VAULT-CONFIG-6).
+	 */
+	if (derive_machine_check(arg.machine, strlen(arg.machine)) != 0)
+		errx(1, "the machine name takes lowercase letters, digits "
+		    "and hyphens, 1 to %d bytes", DERIVE_MACHINE_MAX);
+	if (arg.threshold > (unsigned int)argc)
+		errx(1, "the threshold is above the count of the oracle set");
+
+	arg.oracle = (const char *const *)argv;
+	arg.count = (unsigned int)argc;
+
+	return ceremony_create(&arg) == 0 ? 0 : 1;
 }
 
 int

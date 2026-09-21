@@ -128,6 +128,20 @@
 void	envelope_draw(unsigned char *, unsigned char *);
 
 /*
+ * envelope_pubkey(priv, out):
+ *	The public key of the ENVELOPE_KEYLEN bytes at priv, to the
+ *	ENVELOPE_PUBKEYLEN bytes at out, in the compressed form. A
+ *	scalar that the curve rejects gives -1, and a failure clears
+ *	out.
+ *
+ *	Each request of this file takes the public key of its own
+ *	ephemeral key. The revocation kit takes the public key of a
+ *	record's client key, because the record file name of an
+ *	oracle is the hash of that key (ORC-REVOKE-6).
+ */
+int	envelope_pubkey(const unsigned char *, unsigned char *);
+
+/*
  * envelope_tweak(pub, cke, counter, out):
  *	The request public key Q' of one request, to the
  *	ENVELOPE_PUBKEYLEN bytes at out (FuguOracle PROTO-TWEAK-4).

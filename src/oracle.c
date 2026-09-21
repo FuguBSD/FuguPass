@@ -21,9 +21,13 @@
  * request() holds the one request of this file. It derives the
  * client key and the pin secret of the record, takes the counter,
  * draws the ephemeral values, and sends one POST. Each public
- * function calls it. oracle_canary_enroll() calls it twice, and
- * every other path sends one request for one record
- * (ORC-CANARY-7).
+ * function reaches it. canary() calls it twice, and every other
+ * path sends one request for one record (ORC-CANARY-7).
+ *
+ * canary() carries the two public canary functions. The index wrap
+ * of an oracle takes the canary mask of that oracle, so the wrap
+ * rides on the enrollment and sends no request of its own
+ * (ORC-CANARY-3, KEY-MASK-7).
  *
  * The steps come from the other files of the tree. derive.c holds
  * each label, pin.c holds the pin secret, share.c holds the split,
@@ -108,6 +112,8 @@ static int	counter_take(const char *, uint32_t, int, unsigned int,
 static int	wrap_path(const struct oracle_ctx *, uint32_t, char *, size_t);
 static int	request(const struct oracle_ctx *, uint32_t, int,
 		    const unsigned char *, unsigned char *);
+static int	canary(const struct oracle_ctx *, const char *, size_t,
+		    const unsigned char *, size_t);
 
 /*
  * ctx_ok(ctx):
@@ -634,18 +640,28 @@ out:
 	return rv;
 }
 
-int
-oracle_canary_enroll(const struct oracle_ctx *ctx, const char *again,
-    size_t againlen)
+/*
+ * canary(ctx, again, againlen, idxkey, idxkeylen):
+ *	One canary enrollment of the oracle of ctx, and the index
+ *	wrap of that oracle when idxkey holds K_idx. A NULL idxkey
+ *	writes no index wrap. The two public functions of this file
+ *	hold the gate of each argument.
+ */
+static int
+canary(const struct oracle_ctx *ctx, const char *again, size_t againlen,
+    const unsigned char *idxkey, size_t idxkeylen)
 {
 	struct vault_at	 at;
 	unsigned char	 entropy[ENVELOPE_ENTROPYLEN];
 	unsigned char	 mask[ENVELOPE_MASKLEN];
 	unsigned char	 round[ENVELOPE_MASKLEN];
 	unsigned char	 sealkey[DERIVE_KEYLEN];
+	unsigned char	 wrapkey[DERIVE_KEYLEN];
+	unsigned char	 wrap[DERIVE_KEYLEN];
 	unsigned char	 check[ORACLE_CHECKLEN];
 	unsigned char	 sealed[ORACLE_CHECKLEN + SEAL_OVERHEAD];
 	char		 path[PATH_MAX];
+	size_t		 i;
 	int		 rv;
 
 	if (ctx_ok(ctx) != 0 || again == NULL)
@@ -695,6 +711,34 @@ oracle_canary_enroll(const struct oracle_ctx *ctx, const char *again,
 	if (vault_seal_write(path, sealkey, sizeof(sealkey), check,
 	    sizeof(check), sealed, sizeof(sealed)) != 0)
 		goto out;
+	if (idxkey == NULL) {
+		rv = 0;
+		goto out;
+	}
+
+	/*
+	 * The index wrap of this oracle is
+	 * c_idx_i = share(K_idx, i) XOR
+	 * f(s_canary_i, "fugupass/v1/wrap-index" || i) (KEY-MASK-7).
+	 * The fresh canary mask of the enrollment above carries it,
+	 * so the wrap needs no second request (ORC-CANARY-3).
+	 */
+	if (derive_index_wrap_key(mask, sizeof(mask), ctx->oracle, wrapkey,
+	    sizeof(wrapkey)) != 0)
+		goto out;
+	if (share_split(idxkey, idxkeylen, ctx->config->threshold, ctx->oracle,
+	    wrap, sizeof(wrap)) != 0)
+		goto out;
+	for (i = 0; i < sizeof(wrap); i++)
+		wrap[i] ^= wrapkey[i];
+
+	memset(&at, 0, sizeof(at));
+	at.oracle = ctx->oracle;
+	if (vault_path(path, sizeof(path), ctx->vault, VAULT_FILE_WRAP_INDEX,
+	    &at) != 0)
+		goto out;
+	if (vault_write(path, wrap, sizeof(wrap)) != 0)
+		goto out;
 	rv = 0;
 out:
 	/*
@@ -706,5 +750,23 @@ out:
 	explicit_bzero(mask, sizeof(mask));
 	explicit_bzero(round, sizeof(round));
 	explicit_bzero(sealkey, sizeof(sealkey));
+	explicit_bzero(wrapkey, sizeof(wrapkey));
+	explicit_bzero(wrap, sizeof(wrap));
 	return rv;
+}
+
+int
+oracle_canary_enroll(const struct oracle_ctx *ctx, const char *again,
+    size_t againlen)
+{
+	return canary(ctx, again, againlen, NULL, 0);
+}
+
+int
+oracle_canary_index(const struct oracle_ctx *ctx, const char *again,
+    size_t againlen, const unsigned char *idxkey, size_t idxkeylen)
+{
+	if (idxkey == NULL || idxkeylen != DERIVE_KEYLEN)
+		return -1;
+	return canary(ctx, again, againlen, idxkey, idxkeylen);
 }
