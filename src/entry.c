@@ -32,7 +32,7 @@
  * No row repeats, because each field of an entry takes one line.
  *
  * vault_number() of vault.c reads one slot index of the slots
- * list, with SLOT_MAX as the bound (VAULT-FORMAT-7). This file
+ * list, with VAULT_SLOT_MAX as the bound (VAULT-FORMAT-7). This file
  * holds no parser of that value.
  *
  * HMAC comes from libcrypto, for the TOTP code alone
@@ -49,9 +49,6 @@
 
 #include "entry.h"
 #include "vault.h"
-
-/* The highest slot index: a slot index stays below 2^31 (KEY-ENTRY-1). */
-#define SLOT_MAX	INT32_MAX
 
 /* The bytes of the step count of the HMAC message (RFC 6238). */
 #define COUNTERLEN	8
@@ -260,7 +257,7 @@ entry_version(const char *slots, size_t slotslen, uint32_t slot,
 		comma = memchr(&slots[at], ',', slotslen - at);
 		part = (comma == NULL) ? slotslen - at :
 		    (size_t)(comma - slots) - at;
-		if (vault_number(&slots[at], part, SLOT_MAX, &value) != 0)
+		if (vault_number(&slots[at], part, VAULT_SLOT_MAX, &value) != 0)
 			return -1;
 		position++;
 		if (value == slot) {

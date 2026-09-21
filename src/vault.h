@@ -84,6 +84,9 @@
 /* The rows of one field table, without the last row. */
 #define VAULT_TABLE_MAX		64
 
+/* The highest slot index: a slot index stays below 2^31 (KEY-ENTRY-1). */
+#define VAULT_SLOT_MAX		INT32_MAX
+
 /* An entry file name: the hex of H(K_e), and the terminator. */
 #define VAULT_NAMELEN		(2 * DERIVE_KEYLEN + 1)
 

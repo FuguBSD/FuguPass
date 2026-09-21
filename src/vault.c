@@ -56,9 +56,6 @@
 #define LEAF_MAX	(VAULT_NAMELEN + 24)
 #define TMP_NAME	".tmp.XXXXXXXXXX"
 
-/* The highest slot index: a slot index stays below 2^31 (KEY-ENTRY-1). */
-#define SLOT_MAX	INT32_MAX
-
 /*
  * The slot file (VAULT-FORMAT). The two candidates are the secret
  * block, and they come first (VAULT-FORMAT-4, KEY-BIP85).
@@ -254,7 +251,7 @@ slots_ok(const char *text, size_t len)
 	for (;;) {
 		comma = memchr(text + at, ',', len - at);
 		part = (comma == NULL) ? len - at : (size_t)(comma - text) - at;
-		if (vault_number(text + at, part, SLOT_MAX, &slot) != 0)
+		if (vault_number(text + at, part, VAULT_SLOT_MAX, &slot) != 0)
 			return -1;
 		if (comma == NULL)
 			return 0;
@@ -304,7 +301,7 @@ record_ok(const char *text, size_t len)
 		return -1;
 	if (head == sizeof(canary) - 1 && memcmp(text, canary, head) == 0)
 		return 0;
-	return vault_number(text, head, SLOT_MAX, &value);
+	return vault_number(text, head, VAULT_SLOT_MAX, &value);
 }
 
 /*
@@ -373,7 +370,7 @@ value_ok(enum vault_value form, const char *text, size_t len)
 	case VAULT_VALUE_WORD:
 		return word_ok(text, len);
 	case VAULT_VALUE_NUMBER:
-		return vault_number(text, len, SLOT_MAX, &value);
+		return vault_number(text, len, VAULT_SLOT_MAX, &value);
 	case VAULT_VALUE_SLOTS:
 		return slots_ok(text, len);
 	case VAULT_VALUE_DATE:
@@ -424,7 +421,7 @@ match_name(const struct vault_field *field, const char *name, size_t namelen,
 		if ((hyphen = memchr(name, '-', namelen)) == NULL)
 			return -1;
 		head = (size_t)(hyphen - name);
-		if (vault_number(name, head, SLOT_MAX, &value) != 0)
+		if (vault_number(name, head, VAULT_SLOT_MAX, &value) != 0)
 			return -1;
 		line->slot = value;
 		if (vault_number(&hyphen[1], namelen - head - 1,
@@ -563,7 +560,7 @@ vault_path(char *out, size_t outlen, const char *vault, enum vault_file kind,
 	if ((want & WANT_ORACLE) != 0 &&
 	    (at->oracle == 0 || at->oracle > DERIVE_ORACLE_MAX))
 		return -1;
-	if ((want & WANT_SLOT) != 0 && at->slot > SLOT_MAX)
+	if ((want & WANT_SLOT) != 0 && at->slot > VAULT_SLOT_MAX)
 		return -1;
 
 	if ((want & WANT_NAME) != 0) {
@@ -765,7 +762,8 @@ config_line(const struct vault_line *line, void *arg)
 	}
 
 	/* The table holds every other field to a number. */
-	if (vault_number(line->value, line->valuelen, SLOT_MAX, &value) != 0)
+	if (vault_number(line->value, line->valuelen, VAULT_SLOT_MAX,
+	    &value) != 0)
 		return -1;
 	if (strcmp(name, "threshold") == 0) {
 		cfg->threshold = value;
