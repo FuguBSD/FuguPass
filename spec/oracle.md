@@ -30,11 +30,12 @@ prose tokens, for example FuguOracle OPS-GET-4.
   `libtls` of the base system. It must run in the core process
   ([PROG-SPLIT](programs.md#prog-split)). The client must send one POST per
   request, and must read the response with a strict reader. The reader must take
-  one JSON object that holds one `data` member with a string value. It must step
-  over each unknown member, and must accept insignificant JSON whitespace. It
-  must treat a duplicate `data` member, and every other shape, as malformed
-  (FuguOracle PROTO-HTTP-7). A response of more than 4096 bytes must be a
-  transport failure.
+  one JSON object that holds one `data` member. The value of that member must be
+  a base64 string, and must hold no escape sequence. The reader must step over
+  each unknown member, and must accept insignificant JSON whitespace. It must
+  treat a duplicate `data` member, and every other shape, as malformed
+  (FuguOracle PROTO-HTTP-7). A malformed body, and a response of more than 4096
+  bytes, must be a transport failure.
 
 The interop harness proves conformance against every available conforming oracle
 ([TEST-HARNESS](testing.md#test-harness)).

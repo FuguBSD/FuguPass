@@ -39,8 +39,8 @@ of 64 slots.
 **The sandbox comes first.** `main()` sets `RLIMIT_CORE` to zero, makes every
 unveil call, then pledges `stdio rpath wpath cpath flock proc exec inet dns tty`
 (PROG-SPLIT-3, SEC-MEMORY-3). The unveil list is the vault directory,
-`/dev/tty`, the three helpers, their runtime files, and the resolver files. The
-implementation adds `/etc/ssl/cert.pem` (`r`) to the unveil list of
+`/dev/tty`, the three child programs, their runtime files, and the resolver
+files. The implementation adds `/etc/ssl/cert.pem` (`r`) to the unveil list of
 PROG-SPLIT-3. `libtls` reads the trust anchors of that file for a `https`
 oracle.
 
