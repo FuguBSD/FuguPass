@@ -13,13 +13,14 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-# envelope, http, kat, share and vault, the five test programs.
-# bsd.regress.mk builds each program of PROGS, and a run of exit 0
-# is a pass. envelope holds the known-answer tests of the oracle
-# protocol, kat holds the tests of the derivation tree, share holds
-# the tests of the custody layer, and vault holds the tests of the
-# vault on disk. Each of those four is a whole test, and
-# REGRESS_TARGETS names the default target of it.
+# envelope, http, kat, oracle-client, share and vault, the six
+# programs of this directory. bsd.regress.mk builds each program of
+# PROGS, and a run of exit 0 is a pass. envelope holds the
+# known-answer tests of the oracle protocol, kat holds the tests of
+# the derivation tree, share holds the tests of the custody layer,
+# and vault holds the tests of the vault on disk. Each of those four
+# is a whole test, and REGRESS_TARGETS names the default target of
+# it.
 #
 # http is the driver of the transport tests, and it holds no test
 # of its own. A test of a transport needs a peer, so http.t starts
@@ -29,13 +30,24 @@
 # that program. The script reads no standard input, and the rule
 # below gives it none.
 #
+# oracle-client is the driver of the record tests, and it holds no
+# test of its own. A test of a record needs a live counterparty, so
+# the interop harness starts one and drives this program against it
+# (TEST-HARNESS-1). A run of make regress must not start that
+# counterparty, so this file names oracle-client in PROGS and in no
+# REGRESS_TARGETS line. The program therefore builds here, and the
+# harness runs it.
+#
 # REGRESS_TARGETS replaces the default list, so every program of
 # PROGS needs a line there. A program that no line names builds and
-# never runs.
+# never runs. oracle-client is the one deliberate case of that
+# above, for the reason that the paragraph before this one states.
+# Every other program of PROGS takes a line.
 #
 # bsd.prog.mk takes the source of each program from the name of it,
-# so envelope.c, http.c, kat.c, share.c and vault.c need no SRCS
-# line. Every test source sits in this one directory (PROG-BUILD-1).
+# so envelope.c, http.c, kat.c, oracle-client.c, share.c and vault.c
+# need no SRCS line. Every test source sits in this one directory
+# (PROG-BUILD-1).
 #
 # Two include directories reach the headers of a test. The first one
 # holds the interfaces of the flat sources, and the second one holds
@@ -63,7 +75,7 @@
 
 .include <bsd.own.mk>
 
-PROGS=		envelope http kat share vault
+PROGS=		envelope http kat oracle-client share vault
 
 # bsd.prog.mk takes a manual page name from each name of PROGS, and
 # this directory holds no manual page. That line sets a value for an
