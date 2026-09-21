@@ -211,11 +211,8 @@ actions.
   `-r` ([KEY-PIN](keys.md#key-pin)). The two options and the argument list are
   mandatory.
 - **PROG-ONESHOT-7** — The `create` subcommand must write the revocation kit
-  ([ORC-REVOKE](oracle.md#orc-revoke)) to the file `machine/revocation-kit` of
-  the vault directory. It must print the path of that file. The kit is
-  plaintext, and it names the records of one machine, so it belongs to the
-  machine-local set ([VAULT-LAYOUT](vault.md#vault-layout),
-  [VAULT-BACKUP](vault.md#vault-backup)).
+  ([ORC-REVOKE](oracle.md#orc-revoke)) at the path of
+  [VAULT-LAYOUT](vault.md#vault-layout). It must print the path of that file.
 
 <a id="prog-output"></a>
 

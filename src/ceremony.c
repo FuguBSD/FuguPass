@@ -642,10 +642,10 @@ out:
  *	because that rule names no erasure of the device factor. The
  *	factor persists on disk as well (KEY-DEVICE-2).
  *
- *	The kit is machine-local, because it names the records of
- *	one machine. It is plaintext, and every file of the shared
- *	set is ciphertext (VAULT-BACKUP-1, VAULT-BACKUP-2,
- *	PROG-ONESHOT-7).
+ *	The kit is plaintext, and it names the records of one
+ *	machine, so it sits at the machine-local path of
+ *	VAULT-LAYOUT-4 and VAULT-LAYOUT-6. This step prints that
+ *	path (PROG-ONESHOT-7).
  */
 static int
 step_kit(const struct state *st)
