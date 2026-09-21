@@ -310,9 +310,10 @@ record at one oracle.
   oracle.
 - **ORC-QUORUM-5** — A decrypt failure, an HTTP error, or a transport failure
   can happen at a quorum oracle. The tool can then substitute the next reachable
-  oracle, after the canary check of that oracle. The tool must stop the
-  substitutions when no untried quorum remains. Every failure report must name
-  the quorum oracles of the attempt.
+  oracle, after the canary check of that oracle. The tool must try each
+  reachable oracle at most once per session as a substitute. It must stop the
+  substitutions when no untried reachable oracle remains. Every failure report
+  must name the quorum oracles of the attempt.
 - **ORC-QUORUM-6** — With fewer than `k` reachable oracles, the tool must
   perform no reveal. It must report the state of each oracle, with the distinct
   states of [ORC-REVEAL](oracle.md#orc-reveal).
