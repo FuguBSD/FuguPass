@@ -26,6 +26,13 @@ prose tokens, for example FuguOracle OPS-GET-4.
 - **ORC-CONFORM-5** — Every request must use a fresh ephemeral keypair and a
   fresh IV from `arc4random(3)`. Every `set_pin` request must carry 32 bytes of
   fresh entropy from `arc4random(3)` (FuguOracle OPS-SET-1).
+- **ORC-CONFORM-6** — The transport must be HTTP/1.1 over a socket, or over
+  `libtls` of the base system. It runs in the core process, and no other program
+  of FuguPass reaches the network ([PROG-SPLIT](programs.md#prog-split)). The
+  client must send one POST per request, and must read the response with a
+  strict reader. The reader must take one JSON object with one `data` member,
+  and must refuse every other shape (FuguOracle PROTO-HTTP-7). A response of
+  more than 4096 bytes is a transport failure.
 
 The interop harness proves conformance against every available conforming oracle
 ([TEST-HARNESS](testing.md#test-harness)).

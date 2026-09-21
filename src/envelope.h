@@ -34,8 +34,10 @@
  * other library enters this file (D-15). Every function but
  * envelope_draw() is bytes in, bytes out: it reads its arguments
  * only, and it touches no file, no socket, and no clock.
- * envelope_draw() is the one entropy seam, and every vector of a
- * transcript therefore applies to every other function.
+ * envelope_draw() draws the keypair and the IV of a request, and the
+ * randomized library context draws a blinding seed that changes no
+ * answer. Every vector of a transcript therefore applies to every
+ * other function.
  *
  * envelope_draw() gives nothing, and every other function gives 0,
  * or -1 on a failure. envelope_open() and envelope_response() give
