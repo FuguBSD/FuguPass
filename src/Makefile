@@ -17,20 +17,22 @@
 # reads GNUmakefile for the document gates.
 #
 # The C sources sit flat in this directory, and the test sources sit
-# in regress. lib builds the archive of the flat sources, and regress
-# builds the tests of that archive. The layout follows usr.bin/ssh of
-# the OpenBSD tree.
+# in regress. lib builds the archive of the flat sources, fugupass
+# builds the core process from that archive, and regress builds the
+# tests of it. The layout follows usr.bin/ssh of the OpenBSD tree.
 #
-# The source holds no program yet, so SUBDIR names these two
-# directories only. Each program gets a directory of its own, and
-# that directory reads bsd.prog.mk.
-
+# Each program gets a directory of its own, and that directory reads
+# bsd.prog.mk (PROG-BUILD-2). fugupass is the first one.
+#
 # The regress loop links the archive of lib, so it must run after the
 # build loop. bsd.subdir.mk declares regress with the double-colon
 # operator, and this line must use the same operator.
+#
+# SUBDIR holds the build order of the loop: lib builds the archive
+# that fugupass links, and regress comes last.
 
 regress:: all
 
-SUBDIR=	lib regress
+SUBDIR=	lib fugupass regress
 
 .include <bsd.subdir.mk>

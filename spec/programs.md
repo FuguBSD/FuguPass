@@ -49,6 +49,12 @@ page in `mdoc(7)`: `fugupass(1)`, `fugupass-repl(1)`, `fugupass-scan(1)`, and
   directories of the perl that runs. The second method names `/dev/urandom`, the
   resolver files, the service tables and the time zone file. Neither method
   calls a syscall, so a test can prove the list off OpenBSD.
+- **PROG-SPLIT-11** — A regress build can take the helper paths from the
+  environment, so a test can put a double in place of a helper. The service
+  build must hold no such path.
+- **PROG-SPLIT-12** — The unveil list of the core process must hold
+  `/etc/ssl/cert.pem` with the `r` permission. `libtls` reads the trust anchors
+  of that file for an `https` oracle.
 
 `fugupass` runs the interface program and the helpers as child processes and
 exchanges text over pipes. Text crosses the process boundary, never image data
