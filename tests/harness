@@ -1,0 +1,701 @@
+#!/usr/bin/env perl
+# ex:ts=8 sw=4:
+# $OpenBSD$
+#
+# Copyright (c) 2026 Dick Olsson <hi@senzilla.io>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+# harness: run the record legs against every available counterparty.
+#
+# usage: make harness
+#
+# This program is the interop harness of TEST-HARNESS. It is no .t
+# file, and make check never runs it: it needs a live counterparty
+# and an OpenBSD guest. mk/local.mk holds the harness target, and
+# that target is the one caller.
+#
+# The harness holds three parts. The first part builds the source in
+# the guest, and it takes the driver src/regress/oracle-client of
+# that build (TEST-HARNESS-7). The second part is the counterparty
+# table below: one data record for each counterparty, with the
+# probe, the start, the stop and the release of it (TEST-HARNESS-4,
+# TEST-HARNESS-6). The third part is tests/harness.d, one file for
+# each leg. A leg reads the counterparty through the methods of the
+# Counterparty package alone, so no leg branches on the
+# counterparty (TEST-HARNESS-4).
+#
+# The harness runs no shell on the host: each host command is a
+# list, and Fugu::Process runs it (TEST-HARNESS-6). A guest command
+# goes through 'fuguvm ssh -- sh -c <script>', because a guest step
+# needs a redirect and a pipe. That argument vector is a list as
+# well, and App::FuguVM::Remote quotes each word of it. fuguvm gives
+# the guest no standard input, so the driver reads the passphrase
+# from a pipe of the guest shell.
+#
+# The harness fails when no counterparty is available. A pass over
+# zero legs is no pass.
+#
+# The harness builds the tree of HEAD in the guest, and it runs the
+# legs of the working tree. git status of src and tests must
+# therefore report no change, and no untracked file. A local build
+# leaves an obj directory that no ignore rule covers, so remove it
+# before a run.
+#
+# These are the environment variables:
+#
+#	FUGUPASS_BLIND_PIN_SERVER
+#		The directory of a checkout of the upstream
+#		blind_pin_server, with a Python environment at
+#		venv of that directory. The name of the directory
+#		must stay blind_pin_server, because the start
+#		recipe imports that module. Build the environment
+#		on Python 3.13: the pinned wallycore publishes no
+#		wheel for Python 3.14, and a source build of it
+#		needs autotools. The command is 'uv pip install
+#		--require-hashes -r requirements.txt'. The
+#		location of a checkout of a third-party server is
+#		no design fact of FuguPass, so no document of
+#		spec/ names this variable.
+#
+#	FUGUVM	The fuguvm command. The default is fuguvm of the
+#		PATH. fuguvm needs the modules of FuguVM and the
+#		agent socket of the guest, so the caller sets
+#		PERL5LIB and SSH_AUTH_SOCK for it.
+#
+# The harness runs the legs against every available conforming
+# counterparty (TEST-HARNESS-1). The upstream blind_pin_server is the
+# one counterparty today (TEST-HARNESS-2). The FuguOracle leg is
+# absent, and no FuguOracle service speaks HTTP. That leg needs a
+# FuguOracle deployment, and it then becomes one entry of the
+# counterparty table.
+
+use v5.36;
+
+use Cwd              qw(abs_path);
+use File::Basename   qw(basename dirname);
+use File::Path       qw(make_path remove_tree);
+use File::Temp       ();
+use FindBin          qw($RealBin);
+use HTTP::Tiny       ();
+use IO::Socket::INET ();
+use Test::More;
+
+use Fugu::Process;
+use Fugu::Timeout;
+
+# The legs read these values through the Counterparty package, so
+# each one is a package variable of main.
+
+# The work directory of the guest. It sits on /home, because the
+# root partition of the guest holds a few hundred megabytes only,
+# and a build of this tree fills it.
+our $WORK = '/home/fugupass/harness';
+
+# The tree of the guest build, and the driver that it builds.
+our $TREE   = "$WORK/tree";
+our $DRIVER = "$TREE/src/regress/obj/oracle-client";
+
+# The fixed values of a test vault: the first slot index, the
+# 1-based position of the oracle list, the machine name of the
+# config, and the round count of the pin secret. A small round count
+# keeps the cost of a leg in the request, and not in the KDF.
+#
+# The client key of a record takes the device factor, the oracle
+# index and the slot index (KEY-CLIENT-1). The device factor takes
+# the fixed test master and the machine name, so two vaults of one
+# slot address one record at the counterparty. Each vault of a run
+# therefore takes the next slot index, and one leg destroys no
+# record of another leg.
+our $SLOT    = 7;
+our $ORACLE  = 1;
+our $MACHINE = 'testmachine';
+our $ROUNDS  = 16;
+
+# The passphrases of the legs, by name. A leg names one of these
+# keys, and it holds no passphrase of its own. Each value holds no
+# single quote and no line feed, and _shq() guards that.
+our %PASSPHRASE = (
+	right => 'correct horse battery staple',
+	wrong => 'wrong horse battery staple',
+	other => 'other horse battery staple' );
+
+# The generator point of secp256k1, in compressed form. It is a
+# valid public key, and it is the static key of no oracle. A leg
+# gives it to the config to state a wrong static key
+# (ORC-PROVISION-1).
+our $FOREIGN_POINT =
+    '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+
+# A stored counter above the wall clock, for the legs of the counter
+# policy. The value stays below 0xFFFFFFFF, because the client sends
+# the stored value plus one, and it never sends 0xFFFFFFFF
+# (ORC-COUNTER-5).
+our $HIGH_COUNTER = 4_000_000_000;
+
+my $FUGUVM = $ENV{FUGUVM} // 'fuguvm';
+
+# The seconds of one guest command, and of one build of the tree.
+my $GUEST_TIMEOUT = 300;
+my $BUILD_TIMEOUT = 1800;
+
+# The start recipe of the upstream server. The Python of the
+# checkout runs this program, and the first argument is the record
+# store of the run. flask_server() reads the private key, the public
+# key and the pins directory of the working directory, so the
+# program enters the store before it imports the module.
+# Fugu::Process->spawn_command() sets no working directory, and a
+# shell is not allowed, so the chdir lives here.
+my $SERVER_PROGRAM = <<'PYTHON';
+import os, sys
+os.chdir(sys.argv[1])
+from blind_pin_server.flaskserver import flask_server
+flask_server().run(host=sys.argv[2], port=int(sys.argv[3]))
+PYTHON
+
+# The counterparties that this harness drives (TEST-HARNESS-2). Each
+# record holds the name and the four steps of the run. probe() gives
+# undef when the counterparty is available, and the reason when it
+# is not. start() sets url, pubkey and records_at_start. A leg reads
+# no member of this table.
+my @COUNTERPARTY = (
+	{
+		name    => 'blind_pin_server',
+		probe   => \&upstream_probe,
+		start   => \&upstream_start,
+		stop    => \&upstream_stop,
+		release => \&upstream_release
+	} );
+
+# The counterparties that run now. The end block stops each one, so
+# a die and a signal leave no server behind, and no record store.
+my @RUNNING;
+
+# _shq($word):
+#	One word for the shell of the guest, in single quotes. The
+#	word must hold no single quote and no line feed. A leg
+#	writes a literal path and a named passphrase, so a word of
+#	another shape is a programming error.
+sub _shq ($word)
+{
+	die "the harness cannot quote the word $word\n" if $word =~ /['\n]/;
+	return "'$word'";
+}
+
+# guest($script, $timeout):
+#	Run one shell script in the guest, and give the result hash
+#	of Fugu::Process->run(). The host command is a list, and the
+#	script is one word of it.
+sub guest ( $script, $timeout = $GUEST_TIMEOUT )
+{
+	return Fugu::Process->run(
+		cmd     => [ $FUGUVM, 'ssh', '--', 'sh', '-c', $script ],
+		timeout => $timeout );
+}
+
+# guest_ok($what, $script, $timeout):
+#	Run one shell script in the guest, and die when it fails.
+#	The call gives the standard output of the script, and $what
+#	names the step in the message.
+sub guest_ok ( $what, $script, $timeout = $GUEST_TIMEOUT )
+{
+	my $result = guest( $script, $timeout );
+	return $result->{stdout} if ( $result->{exit_code} // -1 ) == 0;
+
+	die "the guest failed at $what: "
+	    . ( $result->{error} // 'exit ' . ( $result->{exit_code} // -1 ) )
+	    . "\n$result->{stdout}$result->{stderr}";
+}
+
+# host_ok($what, $cmd, %args):
+#	Run one host command, and die when it fails. %args goes to
+#	Fugu::Process->run().
+sub host_ok ( $what, $cmd, %args )
+{
+	my $result = Fugu::Process->run( cmd => $cmd, %args );
+	return $result->{stdout} if $result->{success};
+
+	die "the host failed at $what: "
+	    . ( $result->{error} // 'exit ' . ( $result->{exit_code} // -1 ) )
+	    . "\n$result->{stdout}$result->{stderr}";
+}
+
+# free_port():
+#	A TCP port that no program holds now. The guest reaches the
+#	host at the QEMU gateway address, so a host counterparty
+#	binds every address of the host (TEST-HARNESS-7).
+sub free_port ()
+{
+	my $socket = IO::Socket::INET->new(
+		Listen    => 1,
+		LocalAddr => '127.0.0.1',
+		Proto     => 'tcp'
+	) or die "the host holds no free port: $!\n";
+	my $port = $socket->sockport;
+	$socket->close;
+	return $port;
+}
+
+# build_guest($root):
+#	Build the source of the checkout $root in the guest, and
+#	leave the driver at $DRIVER (TEST-HARNESS-7).
+#
+#	git archive writes the committed tree of src and tests, so
+#	the copy needs no file list. A hand-written list of files
+#	goes stale, and a stale list hides a defect behind a green
+#	gate.
+#
+#	The build therefore takes HEAD, and load_legs() takes the
+#	legs of the working tree. One tree must be under test, so a
+#	change of src or tests that no commit holds stops the run.
+sub build_guest ($root)
+{
+	my $dirty = host_ok(
+		'git status',
+		[ 'git', 'status', '--porcelain', '--', 'src', 'tests' ],
+		cwd     => $root,
+		timeout => $GUEST_TIMEOUT );
+	die "the harness builds HEAD, and src or tests holds a change "
+	    . "that no commit holds. Commit the change, or remove the "
+	    . "file. An untracked file counts, and no ignore rule "
+	    . "covers the obj directory of a build:\n$dirty"
+	    if $dirty =~ /\S/;
+
+	my $tar = File::Temp->new(
+		TEMPLATE => 'fugupass-tree-XXXXXX',
+		TMPDIR   => 1,
+		SUFFIX   => '.tar'
+	);
+	host_ok(
+		'git archive',
+		[
+			'git', 'archive', '--format=tar', '-o', "$tar",
+			'HEAD', 'src', 'tests'
+		],
+		cwd     => $root,
+		timeout => $GUEST_TIMEOUT );
+
+	guest_ok( 'the work directory', "rm -rf $WORK && mkdir -p $TREE" );
+	host_ok(
+		'fuguvm put',
+		[ $FUGUVM, 'put', "$tar", "$WORK/tree.tar" ],
+		timeout => $GUEST_TIMEOUT );
+	guest_ok( 'the unpack', "cd $TREE && tar xf $WORK/tree.tar" );
+	guest_ok( 'the build', "cd $TREE/src && make obj && make",
+		$BUILD_TIMEOUT );
+	guest_ok( 'the driver', "test -x $DRIVER" );
+	return;
+}
+
+# load_legs():
+#	The legs of tests/harness.d, in the order of the file name.
+#	Each file returns one code reference, and the harness calls
+#	it once for each counterparty. A directory without a leg is
+#	a failure: the harness must not pass over zero legs.
+sub load_legs ()
+{
+	my @legs;
+	for my $file ( sort glob "$RealBin/harness.d/*.pl" ) {
+		my $run = do $file;
+		die "$file returns no leg: $@$!\n" if ref $run ne 'CODE';
+		my $name = basename( $file, '.pl' );
+		$name =~ s/\A[0-9]+-//;
+		push @legs, { name => $name, run => $run };
+	}
+	die "tests/harness.d holds no leg\n" if !@legs;
+	return @legs;
+}
+
+#
+# The upstream Python counterparty. It runs on the host, and the
+# client of the guest reaches it at the QEMU gateway address
+# (TEST-HARNESS-7).
+#
+
+# upstream_python($checkout):
+#	The interpreter and the environment of the checkout. The
+#	module name is blind_pin_server, so PYTHONPATH names the
+#	directory above the checkout. The child writes no byte code,
+#	because the checkout belongs to the operator.
+sub upstream_python ($checkout)
+{
+	return (
+		"$checkout/venv/bin/python",
+		{
+			PATH                    => '/usr/bin:/bin',
+			HOME                    => $ENV{HOME} // '/',
+			PYTHONPATH              => dirname($checkout),
+			PYTHONDONTWRITEBYTECODE => '1'
+		} );
+}
+
+sub upstream_probe ($cp)
+{
+	my $checkout = $ENV{FUGUPASS_BLIND_PIN_SERVER};
+	return 'FUGUPASS_BLIND_PIN_SERVER names no directory'
+	    if !defined $checkout || !-d $checkout;
+	return "$checkout does not carry the name blind_pin_server"
+	    if basename($checkout) ne 'blind_pin_server';
+	return "$checkout holds no flaskserver.py"
+	    if !-f "$checkout/flaskserver.py";
+	return "$checkout/venv/bin/python is no program"
+	    if !-x "$checkout/venv/bin/python";
+
+	my ( $python, $env ) = upstream_python($checkout);
+	my $result = Fugu::Process->run(
+		cmd     => [ $python, '-c', 'import flask, wallycore' ],
+		env     => $env,
+		timeout => 120 );
+	return "$checkout/venv holds no flask and no wallycore"
+	    if !$result->{success};
+
+	$cp->{checkout} = $checkout;
+	return undef;
+}
+
+sub upstream_start ($cp)
+{
+	my ( $python, $env ) = upstream_python( $cp->{checkout} );
+
+	if ( !defined $cp->{store} ) {
+
+		# The record store of the run (TEST-HARNESS-6,
+		# TEST-MASK-6). pindb.py takes the store from the
+		# pins directory of the working directory, and the
+		# server reads its static key from that directory
+		# as well.
+		$cp->{store} = File::Temp::tempdir(
+			'fugupass-oracle-XXXXXX',
+			TMPDIR  => 1,
+			CLEANUP => 0
+		);
+		make_path("$cp->{store}/pins");
+		$cp->{port} = free_port();
+		$cp->{url}  = "http://10.0.2.2:$cp->{port}";
+
+		# generateserverkey writes the key pair at mode
+		# 0600 in the working directory, and the server
+		# refuses a key that another user can read.
+		host_ok(
+			'generateserverkey',
+			[
+				$python, '-m',
+				'blind_pin_server.generateserverkey'
+			],
+			cwd     => $cp->{store},
+			env     => $env,
+			timeout => 120 );
+
+		open my $fh, '<:raw', "$cp->{store}/server_public_key.pub"
+		    or die "the server wrote no public key: $!\n";
+		my $bytes = do { local $/ = undef; <$fh> };
+		close $fh;
+		$cp->{pubkey} = unpack 'H*', $bytes;
+	}
+
+	# Each stream of each run takes a path of its own. Two
+	# handles on one path overwrite each other, and 3-states.pl
+	# restarts the server.
+	my $log = "$cp->{store}/server-" . ++$cp->{runs};
+	my $result = Fugu::Process->spawn_command(
+		cmd => [
+			$python,      '-c', $SERVER_PROGRAM, $cp->{store},
+			'0.0.0.0', $cp->{port}
+		],
+		env    => $env,
+		stdout => "$log.out",
+		stderr => "$log.err" );
+	die "the upstream server did not start: $result->{error}\n"
+	    if !$result->{success};
+	$cp->{pid} = $result->{pid};
+
+	my $http = HTTP::Tiny->new( timeout => 5 );
+	Fugu::Timeout::wait_until(
+		60, 0.25,
+		sub {
+			return $http->get("http://127.0.0.1:$cp->{port}/")
+			    ->{status} == 200;
+		} )
+	    or die "the upstream server never answered on port "
+	    . "$cp->{port}\n";
+
+	$cp->{records_at_start} //=
+	    scalar( () = glob "$cp->{store}/pins/*.pin" );
+	return;
+}
+
+sub upstream_stop ($cp)
+{
+	return if !defined $cp->{pid};
+	Fugu::Process->terminate( delete $cp->{pid} );
+	return;
+}
+
+sub upstream_release ($cp)
+{
+	return if !defined $cp->{store};
+	remove_tree( delete $cp->{store} );
+	return;
+}
+
+package Counterparty;
+
+# The counterparty of one run. A leg reads it through these methods
+# alone, so no leg branches on the counterparty (TEST-HARNESS-4).
+# The record of the table holds the four steps, and the object holds
+# the state of the run: the URL, the static public key, and the
+# record count of the store at the start.
+
+use v5.36;
+
+sub new ( $class, $recipe )
+{
+	return bless { recipe => $recipe, name => $recipe->{name} }, $class;
+}
+
+sub name ($self) { return $self->{name} }
+
+sub probe ($self)   { return $self->{recipe}{probe}->($self) }
+sub start ($self)   { $self->{recipe}{start}->($self); return }
+sub stop ($self)    { $self->{recipe}{stop}->($self); return }
+sub release ($self) { $self->{recipe}{release}->($self); return }
+
+# $cp->records_at_start:
+#	The count of the records that the store of the counterparty
+#	held when this run started it (TEST-MASK-6).
+sub records_at_start ($self) { return $self->{records_at_start} }
+
+# $cp->foreign_key:
+#	A valid static public key that this counterparty does not
+#	hold (ORC-PROVISION-1).
+sub foreign_key ($) { return $main::FOREIGN_POINT }
+
+# $cp->high_counter:
+#	A stored counter above the wall clock (ORC-COUNTER-1).
+sub high_counter ($) { return $main::HIGH_COUNTER }
+
+# $cp->record($vault), $cp->canary_record($vault):
+#	The two record names of the counters file (ORC-COUNTER-2,
+#	VAULT-FORMAT).
+sub record ( $, $vault ) { return "$vault->{slot}-$main::ORACLE" }
+sub canary_record ( $, $ ) { return "canary-$main::ORACLE" }
+
+# $cp->counters($vault), $cp->wrap($vault), $cp->seal($vault):
+#	The three machine-local files of a record: the counters
+#	file, the wrap of the slot, and the canary check seal
+#	(VAULT-LAYOUT).
+sub counters ( $, $vault ) { return "$vault->{dir}/machine/counters" }
+
+sub wrap ( $, $vault )
+{
+	return "$vault->{dir}/machine/wrap.$vault->{slot}.$main::ORACLE";
+}
+
+sub seal ( $, $vault ) { return "$vault->{dir}/machine/canary.$main::ORACLE" }
+
+# $cp->vault($tag, %opt):
+#	A vault of the guest, with the config of one oracle
+#	(VAULT-CONFIG-1, ORC-PROVISION-1). The call gives a hash
+#	with 'dir', the directory, and 'slot', the slot index of the
+#	record. Each vault of a run takes the next slot index, so a
+#	vault addresses a record of its own at the counterparty.
+#
+#	%opt takes 'pubkey' and 'url', and each one replaces the
+#	provisioned value of the counterparty.
+sub vault ( $self, $tag, %opt )
+{
+	my $slot = $self->{next_slot} //= $main::SLOT;
+	$self->{next_slot}++;
+
+	my $dir    = "$main::WORK/vault/$self->{name}-$tag";
+	my $pubkey = $opt{pubkey} // $self->{pubkey};
+	my $url    = $opt{url}    // $self->{url};
+
+	main::guest_ok(
+		"the vault $tag",
+		'rm -rf '
+		    . main::_shq($dir)
+		    . ' && mkdir -p '
+		    . main::_shq("$dir/machine")
+		    . " && printf '%s\\n' "
+		    . join( ' ',
+			map { main::_shq($_) } (
+				"oracle-1: $pubkey $url",
+				'threshold: 1',
+				"machine-name: $main::MACHINE",
+				"kdf-rounds: $main::ROUNDS" ) )
+		    . ' > '
+		    . main::_shq("$dir/machine/config") );
+	return { dir => $dir, slot => $slot, tag => $tag };
+}
+
+# $cp->enroll($vault, %opt), $cp->reveal($vault, %opt),
+# $cp->canary($vault, %opt):
+#	One call of the driver. The hash of the call holds 'state',
+#	the first word of the answer line, and 'share' and 'mask',
+#	the two hex fields of a reveal. It also holds 'line', the
+#	whole answer line, 'exit', the exit code of the driver, and
+#	'error', the standard error of it.
+#
+#	%opt takes 'pass', an array reference of passphrase names.
+#	The default is the correct passphrase. A canary enrollment
+#	reads the passphrase twice (ORC-CANARY-6).
+sub enroll ( $self, $vault, %opt )
+{
+	return $self->_drive(
+		[ 'enroll', $vault->{dir}, $main::ORACLE, $vault->{slot} ],
+		$opt{pass} // ['right'] );
+}
+
+sub reveal ( $self, $vault, %opt )
+{
+	return $self->_drive(
+		[ 'reveal', $vault->{dir}, $main::ORACLE, $vault->{slot} ],
+		$opt{pass} // ['right'] );
+}
+
+sub canary ( $self, $vault, %opt )
+{
+	return $self->_drive( [ 'canary', $vault->{dir}, $main::ORACLE ],
+		$opt{pass} // [ 'right', 'right' ] );
+}
+
+sub _drive ( $self, $argv, $names )
+{
+	my @lines;
+	for my $name (@$names) {
+		die "the harness holds no passphrase $name\n"
+		    if !exists $main::PASSPHRASE{$name};
+		push @lines, $main::PASSPHRASE{$name};
+	}
+
+	# fuguvm gives the guest no standard input, so the shell of
+	# the guest writes the passphrase lines into the driver. The
+	# status of a pipeline is the status of the last command, so
+	# the exit code is the exit code of the driver.
+	my $script =
+	    "printf '%s\\n' "
+	    . join( ' ', map { main::_shq($_) } @lines ) . ' | '
+	    . join( ' ', map { main::_shq($_) } ( $main::DRIVER, @$argv ) );
+
+	my $result = main::guest($script);
+	my $line   = $result->{stdout} // '';
+	chomp $line;
+	my ( $state, $share, $mask ) = split ' ', $line;
+	return {
+		state => $state,
+		share => $share,
+		mask  => $mask,
+		line  => $line,
+		exit  => $result->{exit_code} // -1,
+		error => $result->{stderr} // ''
+	};
+}
+
+# $cp->read_file($path), $cp->write_file($path, @lines),
+# $cp->file_exists($path), $cp->remove_file($path):
+#	The files of a vault, in the guest. read_file() gives the
+#	text of a file, or undef. write_file() writes one line for
+#	each element. file_exists() reports the file, and
+#	remove_file() removes it.
+sub read_file ( $, $path )
+{
+	my $result = main::guest( 'cat ' . main::_shq($path) );
+	return ( $result->{exit_code} // -1 ) == 0
+	    ? $result->{stdout}
+	    : undef;
+}
+
+sub write_file ( $, $path, @lines )
+{
+	main::guest_ok(
+		"the file $path",
+		"printf '%s\\n' "
+		    . join( ' ', map { main::_shq($_) } @lines ) . ' > '
+		    . main::_shq($path) );
+	return;
+}
+
+sub file_exists ( $, $path )
+{
+	my $result = main::guest( 'test -e ' . main::_shq($path) );
+	return ( $result->{exit_code} // -1 ) == 0 ? 1 : 0;
+}
+
+sub remove_file ( $, $path )
+{
+	main::guest_ok( "the removal of $path",
+		'rm -f ' . main::_shq($path) );
+	return;
+}
+
+package main;
+
+END {
+	for my $cp (@RUNNING) {
+		eval { $cp->stop;    1 } or warn $@;
+		eval { $cp->release; 1 } or warn $@;
+	}
+	@RUNNING = ();
+}
+
+my $root = Cwd::abs_path("$RealBin/..");
+my @legs = load_legs();
+
+# The probe of every counterparty comes before the build, so a run
+# without a counterparty costs no build and states the reason at
+# once.
+my ( @available, @skipped );
+for my $recipe (@COUNTERPARTY) {
+	my $cp  = Counterparty->new($recipe);
+	my $why = $cp->probe;
+	if ( defined $why ) {
+		push @skipped, "the counterparty $recipe->{name} did not "
+		    . "run: $why";
+		next;
+	}
+	push @available, $cp;
+}
+
+diag($_) for @skipped;
+BAIL_OUT( 'no counterparty is available, and the harness tested nothing' )
+    if !@available;
+
+note("the guest build of $root");
+build_guest($root);
+
+for my $cp (@available) {
+	push @RUNNING, $cp;
+	$cp->start;
+	note( 'the counterparty '
+		. $cp->name
+		. ' answers at '
+		. $cp->{url}
+		. ', with the static key '
+		. $cp->{pubkey} );
+
+	for my $leg (@legs) {
+		subtest $cp->name . ": $leg->{name}" => sub {
+			$leg->{run}->($cp);
+		};
+	}
+
+	@RUNNING = grep { $_ ne $cp } @RUNNING;
+	$cp->stop;
+	$cp->release;
+}
+
+note( 'the counterparties of this run: '
+	. join( ', ', map { $_->name } @available ) );
+note($_) for @skipped;
+done_testing();

@@ -100,6 +100,9 @@
 /* The highest slot index: a slot index stays below 2^31 (KEY-ENTRY-1). */
 #define VAULT_SLOT_MAX		INT32_MAX
 
+/* The highest replay counter: a counter is a uint32 (ORC-COUNTER-1). */
+#define VAULT_COUNTER_MAX	UINT32_MAX
+
 /* An entry file name: the hex of H(K_e), and the terminator. */
 #define VAULT_NAMELEN		(2 * DERIVE_KEYLEN + 1)
 
@@ -128,6 +131,7 @@ enum vault_value {
 	VAULT_VALUE_TEXT,	/* UTF-8 text, with no line feed */
 	VAULT_VALUE_WORD,	/* lowercase letters, digits and hyphens */
 	VAULT_VALUE_NUMBER,	/* unpadded decimal ASCII, 0 to 2^31 - 1 */
+	VAULT_VALUE_COUNTER,	/* a replay counter: 0 to 2^32 - 1 */
 	VAULT_VALUE_SLOTS,	/* a slot list: indexes, one comma between */
 	VAULT_VALUE_DATE,	/* YYYY-MM-DD */
 	VAULT_VALUE_HEX,	/* lowercase hex, of an even count */

@@ -99,9 +99,9 @@ const struct vault_field vault_index_fields[] = {
  * of one record name (VAULT-FORMAT-8).
  */
 const struct vault_field vault_counters_fields[] = {
-	{ "canary-", VAULT_NAME_ORACLE, VAULT_VALUE_NUMBER,
+	{ "canary-", VAULT_NAME_ORACLE, VAULT_VALUE_COUNTER,
 	    VAULT_FIELD_REPEAT },
-	{ "", VAULT_NAME_RECORD, VAULT_VALUE_NUMBER, VAULT_FIELD_REPEAT },
+	{ "", VAULT_NAME_RECORD, VAULT_VALUE_COUNTER, VAULT_FIELD_REPEAT },
 	{ NULL, VAULT_NAME_FIXED, VAULT_VALUE_TEXT, 0 }
 };
 
@@ -378,6 +378,8 @@ value_ok(enum vault_value form, const char *text, size_t len)
 		return word_ok(text, len);
 	case VAULT_VALUE_NUMBER:
 		return vault_number(text, len, VAULT_SLOT_MAX, &value);
+	case VAULT_VALUE_COUNTER:
+		return vault_number(text, len, VAULT_COUNTER_MAX, &value);
 	case VAULT_VALUE_SLOTS:
 		return slots_ok(text, len);
 	case VAULT_VALUE_DATE:
