@@ -24,14 +24,15 @@
 .PATH:		${.CURDIR}/..
 
 LIB=		fugupass
-SRCS=		bip85.c derive.c entry.c pin.c seal.c share.c vault.c wordlist.c
+SRCS=		bip85.c derive.c entry.c envelope.c http.c pin.c seal.c \
+		share.c vault.c wordlist.c
 
 CFLAGS+=	-Wall -Wextra -Werror
 CFLAGS+=	-I${.CURDIR}/..
 
 # libsecp256k1 comes from the ports tree, under LOCALBASE.
-# bip85.c reads its header, and each directory that links this
-# archive adds -L${LOCALBASE}/lib -lsecp256k1 to LDADD.
+# bip85.c and envelope.c read its header, and each directory that
+# links this archive adds -L${LOCALBASE}/lib -lsecp256k1 to LDADD.
 LOCALBASE?=	/usr/local
 
 CFLAGS+=	-I${LOCALBASE}/include
@@ -39,6 +40,10 @@ CFLAGS+=	-I${LOCALBASE}/include
 # bcrypt_pbkdf(3) comes from libutil of the base system. pin.c reads
 # <util.h>, and each directory that links this archive adds -lutil
 # to LDADD.
+
+# libtls comes from the base system as well, and it needs libssl.
+# http.c reads <tls.h>, and each directory that links this archive
+# adds -ltls and -lssl to LDADD.
 
 NOPIC=		yes
 NOPROFILE=	yes

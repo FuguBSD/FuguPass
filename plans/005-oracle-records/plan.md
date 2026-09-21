@@ -2,8 +2,7 @@
 
 ## Status
 
-Proposed. It waits on plan 002 for the vault files and on plan 004 for the
-envelope. Plan 006 waits on it.
+Proposed. It can land now. Plan 006 waits on it.
 
 Implements: ORC-REVEAL, TEST-MASK, ORC-CONFORM. Implements: ORC-RECORDS without
 ORC-RECORDS-4. Implements: ORC-COUNTER without ORC-COUNTER-7. Implements:

@@ -13,34 +13,57 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-# kat, share and vault, the three known-answer test programs.
-# bsd.regress.mk builds each program of PROGS and runs it, and a run
-# of exit 0 is a pass. kat holds the tests of the derivation tree,
-# share holds the tests of the custody layer, and vault holds the
-# tests of the vault on disk. bsd.prog.mk takes the source of each
-# program from the name of it, so kat.c, share.c and vault.c need no
-# SRCS line. Every test source sits in this one directory
-# (PROG-BUILD-1).
+# envelope, http, kat, share and vault, the five test programs.
+# bsd.regress.mk builds each program of PROGS, and a run of exit 0
+# is a pass. envelope holds the known-answer tests of the oracle
+# protocol, kat holds the tests of the derivation tree, share holds
+# the tests of the custody layer, and vault holds the tests of the
+# vault on disk. Each of those four is a whole test, and
+# REGRESS_TARGETS names the default target of it.
+#
+# http is the driver of the transport tests, and it holds no test
+# of its own. A test of a transport needs a peer, so http.t starts
+# a fixture server of the base Perl, and it drives the program
+# against that server. A bare run of the driver tests nothing, so
+# REGRESS_TARGETS names run-http in place of the default target of
+# that program. The script reads no standard input, and the rule
+# below gives it none.
+#
+# REGRESS_TARGETS replaces the default list, so every program of
+# PROGS needs a line there. A program that no line names builds and
+# never runs.
+#
+# bsd.prog.mk takes the source of each program from the name of it,
+# so envelope.c, http.c, kat.c, share.c and vault.c need no SRCS
+# line. Every test source sits in this one directory (PROG-BUILD-1).
 #
 # Two include directories reach the headers of a test. The first one
 # holds the interfaces of the flat sources, and the second one holds
-# the vectors, as vectors/derive.h, vectors/share.h and
-# vectors/seal.h. Two files share the name derive.h, two files share
-# the name share.h, and two files share the name seal.h. Neither
-# directory holds the path of the other file of a name.
+# the vectors, as vectors/derive.h, vectors/oracle.h, vectors/seal.h
+# and vectors/share.h. Two files share the name derive.h, two files
+# share the name share.h, and two files share the name seal.h.
+# Neither directory holds the path of the other file of a name.
+# envelope.c holds a name of its own in each directory: the interface
+# is envelope.h, and the vectors are vectors/oracle.h.
+#
+# Two C files share the name envelope.c, and two share the name
+# http.c: this directory holds the test, and the directory above
+# holds the archive source. This file sets no .PATH, so each
+# program takes the source of this directory, and the archive
+# carries the other one.
 #
 # The archive one directory up links nothing, so this directory owns
-# the link line of the three libraries. libsecp256k1 comes from the
-# ports tree, under LOCALBASE, and bcrypt_pbkdf(3) comes from libutil
-# of the base system. The lookup of the archive tests the obj
-# directory of lib. make obj puts the archive there, and a tree
-# without make obj holds the archive in lib. This file writes the
-# literal name obj, because make reads the condition before
-# bsd.own.mk sets ${__objdir}.
+# the link line of the libraries. libsecp256k1 comes from the ports
+# tree, under LOCALBASE. bcrypt_pbkdf(3) comes from libutil of the
+# base system. http.c reads <tls.h> of libtls, and libtls needs
+# libssl. The lookup of the archive tests the obj directory of lib.
+# make obj puts the archive there, and a tree without make obj holds
+# the archive in lib. This file writes the literal name obj, because
+# make reads the condition before bsd.own.mk sets ${__objdir}.
 
 .include <bsd.own.mk>
 
-PROGS=		kat share vault
+PROGS=		envelope http kat share vault
 
 # bsd.prog.mk takes a manual page name from each name of PROGS, and
 # this directory holds no manual page. That line sets a value for an
@@ -54,7 +77,7 @@ CFLAGS+=	-I${.CURDIR}/../../tests
 LOCALBASE?=	/usr/local
 LIBFUGUPASS=	${.CURDIR}/../lib
 
-# share.c reads <secp256k1.h> of the ports tree.
+# envelope.c and share.c read <secp256k1.h> of the ports tree.
 CFLAGS+=	-I${LOCALBASE}/include
 
 .if exists(${LIBFUGUPASS}/obj)
@@ -65,7 +88,19 @@ LDADD+=		-L${LIBFUGUPASS} -lfugupass
 DPADD+=		${LIBFUGUPASS}/libfugupass.a
 .endif
 
-LDADD+=		-lcrypto -lutil -L${LOCALBASE}/lib -lsecp256k1
-DPADD+=		${LIBCRYPTO} ${LIBUTIL}
+LDADD+=		-ltls -lssl -lcrypto -lutil -L${LOCALBASE}/lib -lsecp256k1
+DPADD+=		${LIBTLS} ${LIBSSL} ${LIBCRYPTO} ${LIBUTIL}
+
+# http.t writes the request of one case, and the body of one case,
+# in the object directory.
+CLEANFILES+=	http.body http.request
+
+REGRESS_TARGETS=	run-regress-envelope run-regress-kat \
+			run-regress-share run-regress-vault run-http
+
+run-http: http
+	perl ${.CURDIR}/http.t ${.OBJDIR}/http </dev/null
+
+.PHONY: run-http
 
 .include <bsd.regress.mk>
