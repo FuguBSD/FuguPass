@@ -23,6 +23,10 @@
 # example topology of three oracles with a threshold of two
 # (TEST-HARNESS-5). The quorum part below runs against the second
 # one alone, because a two-oracle quorum needs three oracles.
+# strike_case() takes a topology of five positions on the same three
+# instances. A record takes a third request in the third attempt of
+# a reveal, and a third attempt needs a threshold of three and two
+# substitutions (ORC-QUORUM-5, ORC-QUORUM-8).
 #
 # Every command of the core process reads the passphrase from
 # /dev/tty, so each one runs on the console of the guest
@@ -256,7 +260,7 @@ sub entry_case ( $t, $topology )
 		'the rotation of add keeps the version (ENTRY-ROTATION-1)' );
 	like( $stored->{out}, qr/^username: u1$/m,
 		'the rotation of add carries the metadata of the old '
-		    . 'version into the new file (ENTRY-ROTATION-5)' );
+		    . 'version into the new file (ENTRY-ROTATION-6)' );
 	is_deeply( [ terminal($stored) ], [$second],
 		'the rotation of add seals the new secret in the slot of '
 		    . 'the entry (ENTRY-ROTATION-4)' );
@@ -647,6 +651,68 @@ sub quorum_case ($t)
 	return;
 }
 
+# strike_case($t):
+#	The requests of one session to one record (ORC-QUORUM-8).
+#	The third wrong attempt on a record destroys the key
+#	material of it at the oracle (ORC-REVEAL-5), so the session
+#	sends two requests at most.
+#
+#	The vault holds five positions of the three instances, and
+#	the threshold is three. The unlock takes the positions 1, 2
+#	and 3, and a decrypt failure replaces the first place and
+#	then the second one. The third place therefore holds
+#	position 3 in all three attempts, and the third attempt
+#	carries the third request of that record.
+#
+#	A second enrollment of the record of slot 0 at position 3,
+#	under an other passphrase, gives that record a pin of its
+#	own. The record then answers junk to the pin of the session,
+#	and each attempt fails the decrypt (ORC-REVEAL-4,
+#	ORC-QUORUM-4). The store of an instance holds one file of
+#	each record, so a destroyed record is one file less.
+sub strike_case ($t)
+{
+	my $vault = $t->ceremony_vault( 'strike', oracles => 5,
+		threshold => 3, pool => 1 );
+
+	my $made = $t->create($vault);
+	is( $made->{exit}, 0, 'the creation of the strike vault passes' )
+	    or diag( $made->{error} );
+
+	my ($gen) = $t->console( $vault,
+		{ argv => [ 'gen', '-T', 'password', 's1' ],
+			answers => ['right'] } );
+	is( $gen->{exit}, 0, 'gen writes the entry of slot 0' )
+	    or diag( $gen->{error} );
+
+	my $poison = $t->enroll( $vault, slot => 0, oracle => 3,
+		pass => ['wrong'] );
+	is( $poison->{state}, 'ok',
+		'the record of slot 0 at oracle 3 takes an other pin' )
+	    or diag( $poison->{error} );
+
+	my @before = sort $t->records(3);
+	my $url    = $t->url(3);
+	my ($show) = $t->console( $vault,
+		{ argv => [ 'show', 's1' ], answers => ['right'] } );
+
+	isnt( $show->{exit}, 0,
+		'the bound of the requests stops the reveal (ORC-QUORUM-8)' );
+	like( $show->{error},
+		qr/slot 0 at oracle 3 \(\Q$url\E\): the session sent two/,
+		'the report names the record of the bound (ORC-QUORUM-8)' );
+	my @attempt = $show->{error} =~ /slot 0: the entry of this quorum/g;
+	is( scalar @attempt, 2,
+		'the two attempts before the bound each fail the decrypt '
+		    . '(ORC-QUORUM-4, ORC-QUORUM-8)' );
+	is_deeply( [ sort $t->records(3) ], \@before,
+		'the session sent no third request, so the record of slot 0 '
+		    . 'at oracle 3 stays (ORC-REVEAL-5)' );
+	is( scalar( terminal($show) ),
+		0, 'the stopped reveal writes no secret to the terminal' );
+	return;
+}
+
 return sub ($t)
 {
 	for my $topology (@TOPOLOGY) {
@@ -658,5 +724,6 @@ return sub ($t)
 		};
 	}
 	subtest 'the quorum of three oracles' => sub { quorum_case($t) };
+	subtest 'the requests of one record' => sub { strike_case($t) };
 	return;
 };

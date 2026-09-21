@@ -46,9 +46,12 @@
  * so one reveal substitutes each reachable oracle at most once. An
  * attempt asks each quorum oracle again, so an oracle that stays
  * in the quorum can take one request in every attempt of that
- * reveal. The substitutions of one reveal end when the walk runs
- * out. The session quorum keeps each substitution, so a later
- * reveal of the session starts from the same oracles.
+ * reveal. record_send() counts the requests of this session to
+ * each record, and the reveal stops before the third request of
+ * one record (ORC-QUORUM-8, ORC-REVEAL-5). The substitutions of
+ * one reveal end when the walk runs out, and when that count stops
+ * the reveal. The session quorum keeps each substitution, so a
+ * later reveal of the session starts from the same oracles.
  *
  * The steps come from the other files of the tree. oracle.c holds
  * each record, each mask and each wrap, share.c holds the
@@ -109,6 +112,26 @@
 #define EDECRYPT	(-2)
 
 /*
+ * The get_pin requests that one session sends to one record, and
+ * the records of the first allocation of the ledger. The third
+ * wrong attempt on a record destroys it, so the session stops at
+ * two (ORC-QUORUM-8, ORC-REVEAL-5).
+ */
+#define RECORD_MAX	2
+#define RECORD_MIN	64
+
+/*
+ * One record of this session: one slot at one oracle
+ * (ORC-RECORDS-1). sent counts the get_pin requests that this
+ * session sent to it.
+ */
+struct record {
+	uint32_t	 slot;
+	unsigned int	 oracle;
+	unsigned int	 sent;
+};
+
+/*
  * The session of one vault. The passphrase, the device factor, the
  * index key and the entry key of a consumption are the secrets of
  * the struct. The three buffers hold a plaintext each, and
@@ -124,6 +147,11 @@
  * refusal (ORC-QUORUM-6). passed counts the canary checks that
  * passed, and first is the oracle of the first one, because a
  * canary failure after a pass excludes the typo (ORC-CANARY-4).
+ *
+ * rec holds one entry of each record that took a request of this
+ * session, and record_send() bounds the requests of each one
+ * (ORC-QUORUM-8). The ledger holds no secret: a slot index, an
+ * oracle index and a count.
  */
 struct session {
 	struct vault_config	 config;
@@ -154,6 +182,9 @@ struct session {
 	struct session_entry	*list;
 	size_t			 listlen;
 	size_t			 listmax;
+	struct record		*rec;		/* the records of a request */
+	size_t			 reclen;
+	size_t			 recmax;
 };
 
 static const char	*state_text(int);
@@ -180,6 +211,7 @@ static void		 index_dead(const struct session *);
 static void		 heal(struct session *);
 static int		 unlock(struct session *);
 static int		 substitute(struct session *, unsigned int);
+static int		 record_send(struct session *, uint32_t, unsigned int);
 static int		 entry_open(struct session *, const unsigned char *);
 static int		 reveal(struct session *, uint32_t, int);
 
@@ -848,6 +880,55 @@ out:
 }
 
 /*
+ * record_send(s, slot, oracle):
+ *	Count one get_pin request of this session to the record of
+ *	the slot index slot at the oracle index oracle, and give 0
+ *	when the session sends it (ORC-QUORUM-8).
+ *
+ *	The call gives -1 for the third request of this session to
+ *	one record, because the third wrong attempt destroys that
+ *	record (ORC-REVEAL-5). It gives -1 as well when the ledger
+ *	of the records does not grow. Each failure reports its
+ *	cause, and the report of the bound names the record and the
+ *	stop of the reveal.
+ */
+static int
+record_send(struct session *s, uint32_t slot, unsigned int oracle)
+{
+	struct record	*rec;
+	size_t		 i, max;
+
+	for (i = 0; i < s->reclen; i++) {
+		if (s->rec[i].slot != slot || s->rec[i].oracle != oracle)
+			continue;
+		if (s->rec[i].sent >= RECORD_MAX) {
+			warnx("slot %" PRIu32 " at oracle %u (%s): the "
+			    "session sent two requests to this record, and "
+			    "it stops the reveal before the third one", slot,
+			    oracle, s->config.oracle[oracle - 1].url);
+			return -1;
+		}
+		s->rec[i].sent++;
+		return 0;
+	}
+
+	if (s->reclen == s->recmax) {
+		max = s->recmax == 0 ? RECORD_MIN : 2 * s->recmax;
+		if ((rec = reallocarray(s->rec, max, sizeof(*rec))) == NULL) {
+			warn("the records of this session");
+			return -1;
+		}
+		s->rec = rec;
+		s->recmax = max;
+	}
+	s->rec[s->reclen].slot = slot;
+	s->rec[s->reclen].oracle = oracle;
+	s->rec[s->reclen].sent = 1;
+	s->reclen++;
+	return 0;
+}
+
+/*
  * entry_open(s, key):
  *	The entry file of the entry key key, to the plaintext buffer
  *	of the session. The file name is the lowercase hex of H(K_e)
@@ -907,6 +988,11 @@ entry_open(struct session *s, const unsigned char *key)
  *	first candidate, so each reveal substitutes each reachable
  *	oracle at most once.
  *
+ *	A record of the quorum that already took two requests of
+ *	this session stops the attempts, because the third request
+ *	destroys that record (ORC-QUORUM-8, ORC-REVEAL-5). The
+ *	report of that stop names the record.
+ *
  *	keep holds the entry key in the session for session_seal(),
  *	and the key of every other reveal leaves memory directly
  *	after the decrypt (SEC-MEMORY-6).
@@ -932,6 +1018,8 @@ reveal(struct session *s, uint32_t slot, int keep)
 	for (;;) {
 		fail = 0;
 		for (i = 0; i < s->quorumlen; i++) {
+			if (record_send(s, slot, s->quorum[i]) != 0)
+				goto out;
 			ctx_of(&ctx, s, s->quorum[i]);
 			n = oracle_reveal(&ctx, slot,
 			    &shares[i * DERIVE_KEYLEN], DERIVE_KEYLEN, NULL);
@@ -1051,6 +1139,7 @@ session_close(struct session *s)
 		free(s->arena);
 	}
 	free(s->list);
+	free(s->rec);
 	explicit_bzero(s, sizeof(*s));
 	free(s);
 }

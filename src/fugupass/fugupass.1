@@ -91,6 +91,10 @@ A failure at one oracle moves that oracle out of the quorum, and the
 next reachable oracle takes the place.
 Each reveal substitutes each reachable oracle at most once, and it
 stops when no untried reachable oracle remains.
+One record is one slot at one oracle, and one session sends two
+requests at most to one record.
+The third wrong request destroys the key material of that record at
+the oracle.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
@@ -410,6 +414,12 @@ The reconstructed key does not open the entry file.
 The failing oracle has no name, because the decrypt is the only junk
 detector.
 The session substitutes one place of the quorum and tries again.
+.It slot Ar e No at oracle Ar i : the session sent two requests to this record
+A decrypt failure names no oracle, so each record of the quorum can
+hold the wrong pin.
+The third wrong request destroys the key material of that record at
+the oracle.
+The session therefore stops the reveal of that slot.
 .It slot Ar e : the session reveals it no other way
 No untried reachable oracle remains, so the substitutions end.
 .It the pool holds Ar n No free slots, at the low watermark of Ar w

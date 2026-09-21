@@ -35,10 +35,11 @@
  * (PROG-ONESHOT-2).
  *
  * One reveal is k get_pin requests and one decrypt (ORC-QUORUM-3,
- * ORC-QUORUM-4). A decrypt failure, an HTTP error, and a transport
- * failure each substitute the next reachable oracle, after the
- * canary check of that oracle. The substitutions stop when no
- * untried oracle remains (ORC-QUORUM-5). Below k reachable oracles
+ * ORC-QUORUM-4). A decrypt failure and a failed request each
+ * substitute the next reachable oracle, after the canary check of
+ * that oracle. The substitutions stop when no untried oracle
+ * remains (ORC-QUORUM-5), and the reveal stops before the third
+ * request of one record (ORC-QUORUM-8). Below k reachable oracles
  * the session performs no reveal (ORC-QUORUM-6).
  *
  * session_consume() and session_seal() are the pair of one
@@ -200,6 +201,13 @@ int	session_slot_ready(const struct session *, uint32_t);
  *	no untried oracle remains (ORC-QUORUM-5). One call
  *	substitutes each reachable oracle at most once, and each
  *	failed attempt names its quorum.
+ *
+ *	The session sends two requests at most to one record, and a
+ *	record of the quorum that holds two stops the call
+ *	(ORC-QUORUM-8). A third wrong request destroys that record at
+ *	the oracle (ORC-REVEAL-5), and a decrypt failure names no
+ *	record of the quorum (ORC-QUORUM-4). The report of the stop
+ *	names the slot and the oracle of the record.
  *
  *	The entry key leaves memory directly after the decrypt
  *	(SEC-MEMORY-6). The plaintext belongs to the session, and the

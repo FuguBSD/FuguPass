@@ -95,6 +95,12 @@ renders as a SeedQR code for a signer to scan ([PROG-QR](programs.md#prog-qr)).
   that the index holds ([PROG-REPL](programs.md#prog-repl)). The `add` command
   must rotate a stored entry of such a name. FuguPass holds no other rotation
   command.
+- **ENTRY-ROTATION-6** — A rotation must carry each metadata field of the
+  current version into the entry file of the new version. A field of the command
+  line replaces the carried value of that field. The tool writes the type, the
+  slot list and the version itself, so the rotation carries none of the three
+  (ENTRY-TYPES-5, ENTRY-ROTATION-1, ENTRY-ROTATION-2). The secret of the new
+  version replaces the secret of the current one.
 
 Rotation of a derived entry is entry creation on a new slot. It consumes the
 lowest free slot, and it performs one reveal of that slot

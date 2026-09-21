@@ -149,13 +149,14 @@ through Fugu.
   ([VAULT-INDEX](vault.md#vault-index)).
 - **PROG-REPL-5** — With fewer than `k` reachable oracles, the tool must perform
   no reveal and must report the state of each oracle
-  ([ORC-QUORUM](oracle.md#orc-quorum)). An HTTP error or a transport failure can
-  happen at a quorum oracle. The tool can then substitute the next reachable
-  oracle, after that oracle's canary check. It must refuse the reveal only when
-  no untried reachable oracle remains (ORC-QUORUM-5). The report uses the
-  distinct HTTP-error and transport-failure states of
-  [ORC-REVEAL](oracle.md#orc-reveal), and both are distinct from the junk
-  report.
+  ([ORC-QUORUM](oracle.md#orc-quorum)). A decrypt failure or a failed request
+  can happen at a quorum oracle, and a request also fails at this machine
+  (ORC-QUORUM-5, ORC-COUNTER-5). The tool can then substitute the next reachable
+  oracle, after that oracle's canary check. It must refuse the reveal when no
+  untried reachable oracle remains, and when a record of the quorum holds the
+  request count of ORC-QUORUM-8. The report uses the distinct HTTP-error and
+  transport-failure states of [ORC-REVEAL](oracle.md#orc-reveal), and both are
+  distinct from the junk report.
 - **PROG-REPL-6** — Plate verification and every data-restore path must work
   without the oracle ([CER-VERIFY](ceremonies.md#cer-verify),
   [REC-PRINCIPLE](recovery.md#rec-principle), D-04).

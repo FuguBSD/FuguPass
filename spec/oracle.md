@@ -321,6 +321,12 @@ record at one oracle.
   states of [ORC-REVEAL](oracle.md#orc-reveal).
 - **ORC-QUORUM-7** — With `k = 1`, the quorum is one oracle, and the reveal is
   one `get_pin`. This is the general rule, not a special case.
+- **ORC-QUORUM-8** — A record of this machine is one slot at one oracle
+  ([ORC-RECORDS](oracle.md#orc-records)). The tool must count one request of
+  each quorum record, before it sends that request. One session must send no
+  third request to one record, because the third wrong attempt destroys that
+  record (ORC-REVEAL-5). The tool must stop the reveal before the third request,
+  and the report must name the slot and the oracle of that record.
 
 A junk answer from one quorum oracle yields a wrong share, and the
 reconstruction then fails the entry decrypt. The response bytes attribute
@@ -330,7 +336,7 @@ or desynchronized record, or a stale wrap on this machine. Strikes move only on
 a pin that the record was not enrolled under (FuguOracle OPS-GET-2, FuguOracle
 OPS-GET-5). A retry with the session's verified pin therefore burns no strike at
 a healthy record. A record enrolled under a different pin burns one strike per
-attempt, so the tool bounds the retries per record per session.
+attempt, and ORC-QUORUM-8 bounds the requests per record per session.
 
 <a id="orc-canary"></a>
 

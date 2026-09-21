@@ -662,11 +662,17 @@ sub stop_oracle ( $self, $oracle )
 	return;
 }
 
+# $cp->_instance($oracle):
+#	The instance of one position of the oracle list. A topology
+#	can hold more positions than the run holds instances, and the
+#	positions then take the instances in turn: position 4 of
+#	three instances sits at the first one. Each position holds a
+#	record of its own there, because the client key of a record
+#	takes the oracle index (KEY-CLIENT-1).
 sub _instance ( $self, $oracle )
 {
-	die "the harness holds no oracle $oracle\n"
-	    if $oracle < 1 || $oracle > @{ $self->{instance} };
-	return $self->{instance}[ $oracle - 1 ];
+	die "the harness holds no oracle $oracle\n" if $oracle < 1;
+	return $self->{instance}[ ( $oracle - 1 ) % @{ $self->{instance} } ];
 }
 
 # $cp->records_at_start:
@@ -860,11 +866,18 @@ sub ceremony_vault ( $self, $tag, %opt )
 #
 #	%opt takes 'pass', an array reference of passphrase names.
 #	The default is the correct passphrase. A canary enrollment
-#	reads the passphrase twice (ORC-CANARY-6).
+#	reads the passphrase twice (ORC-CANARY-6). enroll() also
+#	takes 'slot' and 'oracle', and each one replaces the slot of
+#	the vault and the first position. A second enrollment of one
+#	record enrolls it under the pin of that call (ORC-ENROLL-9).
 sub enroll ( $self, $vault, %opt )
 {
 	return $self->_drive(
-		[ 'enroll', $vault->{dir}, $main::ORACLE, $vault->{slot} ],
+		[
+			'enroll', $vault->{dir},
+			$opt{oracle} // $main::ORACLE,
+			$opt{slot}   // $vault->{slot}
+		],
 		$opt{pass} // ['right'] );
 }
 
