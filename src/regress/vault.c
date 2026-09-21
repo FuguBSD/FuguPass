@@ -17,10 +17,12 @@
 /*
  * The tests of the vault on disk. The parts here are the seal and
  * the open of it (TEST-KAT-2), the strict scanner with the field
- * table of each file kind, the config file, the atomic write, and
- * the directory layout. tests/vectors/seal.h holds the seal
- * vectors, and every seal test reads them from there. A test needs
- * no network and no oracle (TEST-KAT-5).
+ * table of each file kind, the config file, the atomic write, the
+ * directory layout, the entry model, and the TOTP code.
+ * tests/vectors/seal.h holds the seal vectors, and every seal test
+ * reads them from there. The TOTP vectors of RFC 6238 sit with the
+ * test of them. A test needs no network and no oracle
+ * (TEST-KAT-5).
  *
  * A test of the write makes a directory with mkdtemp(3) in the
  * working directory, and it removes that directory at the end of
@@ -49,6 +51,7 @@
 #include <unistd.h>
 
 #include "derive.h"
+#include "entry.h"
 #include "seal.h"
 #include "vault.h"
 
@@ -837,8 +840,8 @@ test_scan(void)
  * test_kinds():
  *	Each file kind of this unit passes through the field table
  *	of it, and the scan writes the file back byte for byte
- *	(VAULT-FORMAT-3, VAULT-FORMAT-8). entry.c holds the six
- *	entry types (ENTRY-TYPES-5).
+ *	(VAULT-FORMAT-3, VAULT-FORMAT-8). test_entries() holds the
+ *	six entry types of entry.c (ENTRY-TYPES-5).
  */
 static int
 test_kinds(void)
@@ -1217,6 +1220,555 @@ out:
 	return rv;
 }
 
+/*
+ * The keys of the test vectors of RFC 6238, as lowercase hex. The
+ * document gives them as ASCII digits, of 20, 32 and 64 bytes.
+ */
+#define TOTP_KEY_SHA1	"3132333435363738393031323334353637383930"
+#define TOTP_KEY_SHA256	TOTP_KEY_SHA1 "313233343536373839303132"
+#define TOTP_KEY_SHA512	TOTP_KEY_SHA1 TOTP_KEY_SHA1 TOTP_KEY_SHA1 "31323334"
+
+/* The seconds of one step of the vectors (RFC 6238). */
+#define TOTP_PERIOD	30
+
+/*
+ * The entry file of each of the six types (ENTRY-TYPES-5). The
+ * secret field comes first (VAULT-FORMAT-4), and each value is a
+ * public test constant.
+ */
+static const char	 text_password[] =
+    "password: the-test-value-of-a-password-entry\n"
+    "type: password\n"
+    "slots: 17,40\n"
+    "username: the-test-user\n"
+    "url: https://one.example.test/login\n"
+    "transform: the test transform of a site\n"
+    "version: 2\n";
+
+static const char	 text_mnemonic[] =
+    "mnemonic: the-twelve-words-of-the-test\n"
+    "type: mnemonic\n"
+    "slots: 18\n";
+
+static const char	 text_passphrase[] =
+    "passphrase: the-test-value-of-a-passphrase-entry\n"
+    "type: passphrase\n"
+    "slots: 19\n"
+    "seed-fingerprint: aa00aa00\n";
+
+static const char	 text_totp[] =
+    "totp-key: " TOTP_KEY_SHA1 "\n"
+    "type: totp\n"
+    "slots: 20\n"
+    "totp-algorithm: sha1\n"
+    "totp-digits: 6\n"
+    "totp-period: 30\n";
+
+static const char	 text_note[] =
+    "note: the test descriptor of a note entry\n"
+    "type: note\n"
+    "slots: 21\n";
+
+static const char	 text_shadow[] =
+    "type: shadow\n"
+    "slots: 22\n"
+    "location: the test location of a plate\n"
+    "custodian: the test custodian\n"
+    "verified: 2026-09-21\n";
+
+/*
+ * The six entry types, with the file, the secret field and the
+ * candidate of each one (ENTRY-TYPES-1, ENTRY-TYPES-4,
+ * ENTRY-TYPES-5). This table is the list of the specification, and
+ * the test reads none of it from entry.c. A type with no secret
+ * field holds NULL, and the value of a secret field takes the form
+ * of the row of it.
+ */
+static const struct {
+	const char		*name;
+	enum entry_type		 type;
+	const char		*text;
+	const char		*secret;
+	const char		*value;
+	enum entry_candidate	 candidate;
+} types[] = {
+	{ "password", ENTRY_TYPE_PASSWORD, text_password, "password", "x",
+	    ENTRY_CANDIDATE_PWD },
+	{ "mnemonic", ENTRY_TYPE_MNEMONIC, text_mnemonic, "mnemonic", "x",
+	    ENTRY_CANDIDATE_BIP39 },
+	{ "passphrase", ENTRY_TYPE_PASSPHRASE, text_passphrase, "passphrase",
+	    "x", ENTRY_CANDIDATE_PWD },
+	{ "totp", ENTRY_TYPE_TOTP, text_totp, "totp-key", "3132",
+	    ENTRY_CANDIDATE_NONE },
+	{ "note", ENTRY_TYPE_NOTE, text_note, "note", "x",
+	    ENTRY_CANDIDATE_NONE },
+	{ "shadow", ENTRY_TYPE_SHADOW, text_shadow, NULL, NULL,
+	    ENTRY_CANDIDATE_NONE }
+};
+
+/*
+ * table_rows(name, table, secret):
+ *	Prove the rows of the field table at table. Every row takes
+ *	a fixed name and one line, the type and the slots rows take
+ *	the form of the specification, and the row of the secret
+ *	field at secret is the one row of the secret block
+ *	(ENTRY-TYPES-5, VAULT-FORMAT-4). A wrong row prints the
+ *	failure and gives -1.
+ */
+static int
+table_rows(const char *name, const struct vault_field *table,
+    const char *secret)
+{
+	size_t	 row;
+	int	 rv = 0, secrets = 0, slots = 0, type = 0;
+
+	for (row = 0; table[row].name != NULL; row++) {
+		if (table[row].form != VAULT_NAME_FIXED ||
+		    (table[row].flags & VAULT_FIELD_REPEAT) != 0) {
+			warnx("%s: the row %s takes an index or a repeat",
+			    name, table[row].name);
+			rv = -1;
+		}
+		if ((table[row].flags & VAULT_FIELD_SECRET) != 0) {
+			secrets++;
+			if (secret == NULL ||
+			    strcmp(table[row].name, secret) != 0) {
+				warnx("%s: %s is a secret field", name,
+				    table[row].name);
+				rv = -1;
+			}
+		}
+		if (strcmp(table[row].name, "type") == 0) {
+			type = 1;
+			if (table[row].value != VAULT_VALUE_WORD) {
+				warnx("%s: the type field takes another "
+				    "value form", name);
+				rv = -1;
+			}
+		}
+		if (strcmp(table[row].name, "slots") == 0) {
+			slots = 1;
+			if (table[row].value != VAULT_VALUE_SLOTS) {
+				warnx("%s: the slots field takes another "
+				    "value form", name);
+				rv = -1;
+			}
+		}
+	}
+	if (secrets != (secret == NULL ? 0 : 1)) {
+		warnx("%s: the table holds %d secret fields", name, secrets);
+		rv = -1;
+	}
+	if (!type || !slots) {
+		warnx("%s: the table holds no type field or no slots field",
+		    name);
+		rv = -1;
+	}
+	return rv;
+}
+
+/*
+ * test_entries():
+ *	Each of the six entry types passes through the field table
+ *	of it, and the scan writes the file back byte for byte
+ *	(ENTRY-TYPES-5). The table of a type holds the fields of the
+ *	specification, and the scanner rejects every other file.
+ */
+static int
+test_entries(void)
+{
+	static const struct {
+		const char	*name;
+		enum entry_type	 type;
+		const char	*text;
+	} bad[] = {
+		{ "a password entry with an unknown field",
+		    ENTRY_TYPE_PASSWORD,
+		    "password: x\ntype: password\nslots: 17\nnote: x\n" },
+		{ "a password entry with a padded version",
+		    ENTRY_TYPE_PASSWORD,
+		    "password: x\ntype: password\nslots: 17\nversion: 02\n" },
+		{ "a mnemonic entry with a space in the slot list",
+		    ENTRY_TYPE_MNEMONIC, "mnemonic: x\ntype: mnemonic\n"
+		    "slots: 17, 18\n" },
+		{ "a passphrase entry with a fingerprint that is not hex",
+		    ENTRY_TYPE_PASSPHRASE, "passphrase: x\n"
+		    "type: passphrase\nslots: 17\nseed-fingerprint: zz\n" },
+		{ "a totp entry with a key of an odd hex count",
+		    ENTRY_TYPE_TOTP, "totp-key: 313\ntype: totp\n"
+		    "slots: 17\n" },
+		{ "a totp entry with a period that is not a number",
+		    ENTRY_TYPE_TOTP, "totp-key: 3132\ntype: totp\n"
+		    "slots: 17\ntotp-period: half\n" },
+		{ "a note entry with a type field twice", ENTRY_TYPE_NOTE,
+		    "note: x\ntype: note\ntype: note\nslots: 17\n" },
+		{ "a shadow entry with a wrong month", ENTRY_TYPE_SHADOW,
+		    "type: shadow\nslots: 17\nverified: 2026-13-01\n" },
+		{ "a shadow entry with a secret field", ENTRY_TYPE_SHADOW,
+		    "note: x\ntype: shadow\nslots: 17\n" }
+	};
+	struct build	 built;
+	char		 text[128];
+	enum entry_type	 type;
+	size_t		 count, i;
+	int		 n, rv = 0;
+
+	for (i = 0; i < nitems(types); i++) {
+		/* The name of the row is the value of the type field. */
+		if (entry_type_find(types[i].name, strlen(types[i].name),
+		    &type) != 0 || type != types[i].type ||
+		    strcmp(entry_types[types[i].type].name,
+		    types[i].name) != 0) {
+			warnx("%s: the type of that name is another one",
+			    types[i].name);
+			rv = -1;
+		}
+		if (table_rows(types[i].name,
+		    entry_types[types[i].type].fields, types[i].secret) != 0)
+			rv = -1;
+
+		memset(&built, 0, sizeof(built));
+		if (vault_scan(types[i].text, strlen(types[i].text),
+		    entry_types[types[i].type].fields, rebuild, &built) != 0) {
+			warnx("%s: the scan of the entry file fails",
+			    types[i].name);
+			rv = -1;
+		} else if (strcmp(built.text, types[i].text) != 0) {
+			warnx("%s: the round trip gives %s", types[i].name,
+			    built.text);
+			rv = -1;
+		}
+
+		/*
+		 * The secret block comes first, so a file with the
+		 * secret field after the type field fails
+		 * (VAULT-FORMAT-4).
+		 */
+		if (types[i].secret == NULL)
+			continue;
+		n = snprintf(text, sizeof(text), "type: %s\n%s: %s\n",
+		    types[i].name, types[i].secret, types[i].value);
+		count = 0;
+		if (n < 0 || (size_t)n >= sizeof(text)) {
+			warnx("%s: the test file does not fit",
+			    types[i].name);
+			rv = -1;
+		} else if (vault_scan(text, strlen(text),
+		    entry_types[types[i].type].fields, count_lines,
+		    &count) == 0) {
+			warnx("%s: the scanner takes the secret field after "
+			    "the metadata", types[i].name);
+			rv = -1;
+		}
+	}
+
+	for (i = 0; i < nitems(bad); i++) {
+		count = 0;
+		if (vault_scan(bad[i].text, strlen(bad[i].text),
+		    entry_types[bad[i].type].fields, count_lines,
+		    &count) == 0) {
+			warnx("%s: the scanner takes it", bad[i].name);
+			rv = -1;
+		}
+	}
+
+	/* A name that no row holds is no type (ENTRY-TYPES-1). */
+	if (entry_type_find("passwords", strlen("passwords"), &type) == 0 ||
+	    entry_type_find("", 0, &type) == 0) {
+		warnx("the type lookup takes a name that no row holds");
+		rv = -1;
+	}
+	return rv;
+}
+
+/*
+ * test_model():
+ *	The origin class table, the classes of each type, the
+ *	candidate of each type, and the version of a slot
+ *	(ENTRY-MODEL-1, ENTRY-MODEL-2, ENTRY-TYPES-4,
+ *	ENTRY-ROTATION-2).
+ */
+static int
+test_model(void)
+{
+	/*
+	 * The origin classes of the specification. in_place states
+	 * the rotation of the class: a derived entry takes a new
+	 * slot, and every other class holds the slot of the entry
+	 * (ENTRY-ROTATION-4).
+	 */
+	static const struct {
+		enum entry_class	 class;
+		const char		*name;
+		int			 in_place;
+	} classes[] = {
+		{ ENTRY_CLASS_DERIVED, "derived", 0 },
+		{ ENTRY_CLASS_STORED, "stored", 1 },
+		{ ENTRY_CLASS_SOVEREIGN, "sovereign", 1 },
+		{ ENTRY_CLASS_SHADOW, "shadow", 1 }
+	};
+
+	/*
+	 * The classes of each type (ENTRY-TYPES-5). One character
+	 * per class, in the order of the class table: y for a class
+	 * that the type takes, and n for every other one.
+	 */
+	static const struct {
+		enum entry_type	 type;
+		const char	*allow;
+	} allow[] = {
+		{ ENTRY_TYPE_PASSWORD, "yynn" },
+		{ ENTRY_TYPE_MNEMONIC, "yyyn" },
+		{ ENTRY_TYPE_PASSPHRASE, "yyyn" },
+		{ ENTRY_TYPE_TOTP, "nynn" },
+		{ ENTRY_TYPE_NOTE, "nynn" },
+		{ ENTRY_TYPE_SHADOW, "nnny" }
+	};
+
+	/* The version of one slot of a slot list (ENTRY-ROTATION-2). */
+	static const struct {
+		const char	*name;
+		const char	*slots;
+		uint32_t	 slot;
+		unsigned int	 version;	/* 0 for a failure */
+	} versions[] = {
+		{ "the first slot of two", "17,40", 17, 1 },
+		{ "the second slot of two", "17,40", 40, 2 },
+		{ "the one slot of a new entry", "17", 17, 1 },
+		{ "the third slot of three", "17,40,41", 41, 3 },
+		{ "a slot that the list does not hold", "17,40", 41, 0 },
+		{ "a slot that the list holds twice", "17,17", 17, 0 },
+		{ "a list with a space", "17, 40", 40, 0 },
+		{ "a padded index", "017,40", 17, 0 },
+		{ "a list of no byte", "", 17, 0 }
+	};
+	size_t		 i, j;
+	unsigned int	 version;
+	int		 rv = 0, take;
+
+	for (i = 0; i < nitems(classes); i++) {
+		if (strcmp(entry_classes[classes[i].class].name,
+		    classes[i].name) != 0 ||
+		    entry_classes[classes[i].class].in_place !=
+		    classes[i].in_place) {
+			warnx("%s: the class row differs from the "
+			    "specification", classes[i].name);
+			rv = -1;
+		}
+		if (entry_classes[classes[i].class].origin[0] == '\0' ||
+		    entry_classes[classes[i].class].backup[0] == '\0' ||
+		    entry_classes[classes[i].class].restore[0] == '\0') {
+			warnx("%s: the class row holds an empty column",
+			    classes[i].name);
+			rv = -1;
+		}
+	}
+
+	/* The default class of a new entry is derived (ENTRY-MODEL-1). */
+	if (strcmp(entry_classes[ENTRY_CLASS_DEFAULT].name, "derived") != 0) {
+		warnx("the default class of a new entry is %s",
+		    entry_classes[ENTRY_CLASS_DEFAULT].name);
+		rv = -1;
+	}
+
+	for (i = 0; i < nitems(allow); i++) {
+		if (strlen(allow[i].allow) != nitems(classes)) {
+			warnx("the class list of a type holds %zu classes",
+			    strlen(allow[i].allow));
+			rv = -1;
+			continue;
+		}
+		for (j = 0; j < nitems(classes); j++) {
+			take = allow[i].allow[j] == 'y';
+			if ((entry_class_check(allow[i].type,
+			    classes[j].class) == 0) != take) {
+				warnx("%s: the class %s differs from the "
+				    "specification",
+				    entry_types[allow[i].type].name,
+				    classes[j].name);
+				rv = -1;
+			}
+		}
+	}
+
+	/* The candidate of each type (ENTRY-TYPES-4). */
+	for (i = 0; i < nitems(types); i++) {
+		if (entry_types[types[i].type].candidate !=
+		    types[i].candidate) {
+			warnx("%s: the candidate differs from the "
+			    "specification", types[i].name);
+			rv = -1;
+		}
+	}
+	if (entry_class_check(ENTRY_TYPE_MAX, ENTRY_CLASS_DERIVED) == 0 ||
+	    entry_class_check(ENTRY_TYPE_PASSWORD, ENTRY_CLASS_MAX) == 0) {
+		warnx("the class check takes a type or a class of the "
+		    "count");
+		rv = -1;
+	}
+
+	for (i = 0; i < nitems(versions); i++) {
+		version = 0;
+		if (entry_version(versions[i].slots,
+		    strlen(versions[i].slots), versions[i].slot,
+		    &version) != 0) {
+			if (versions[i].version != 0) {
+				warnx("%s: the version call fails",
+				    versions[i].name);
+				rv = -1;
+			}
+			continue;
+		}
+		if (version != versions[i].version) {
+			warnx("%s: the version is %u, and the list gives "
+			    "%u", versions[i].name, version,
+			    versions[i].version);
+			rv = -1;
+		}
+	}
+	return rv;
+}
+
+/*
+ * test_totp():
+ *	The TOTP code of the test vectors of RFC 6238 is correct for
+ *	SHA-1, SHA-256 and SHA-512 (ENTRY-TYPES-3). The last three
+ *	rows take 6 digits, and the code of them is the low part of
+ *	the 8-digit code of the same second.
+ */
+static int
+test_totp(void)
+{
+	static const struct {
+		enum entry_totp_alg	 alg;
+		const char		*key;
+		uint64_t		 at;
+		unsigned int		 digits;
+		const char		*code;
+	} codes[] = {
+		{ ENTRY_TOTP_SHA1, TOTP_KEY_SHA1, 59, 8, "94287082" },
+		{ ENTRY_TOTP_SHA256, TOTP_KEY_SHA256, 59, 8, "46119246" },
+		{ ENTRY_TOTP_SHA512, TOTP_KEY_SHA512, 59, 8, "90693936" },
+		{ ENTRY_TOTP_SHA1, TOTP_KEY_SHA1, 1111111109, 8, "07081804" },
+		{ ENTRY_TOTP_SHA256, TOTP_KEY_SHA256, 1111111109, 8,
+		    "68084774" },
+		{ ENTRY_TOTP_SHA512, TOTP_KEY_SHA512, 1111111109, 8,
+		    "25091201" },
+		{ ENTRY_TOTP_SHA1, TOTP_KEY_SHA1, 1111111111, 8, "14050471" },
+		{ ENTRY_TOTP_SHA256, TOTP_KEY_SHA256, 1111111111, 8,
+		    "67062674" },
+		{ ENTRY_TOTP_SHA512, TOTP_KEY_SHA512, 1111111111, 8,
+		    "99943326" },
+		{ ENTRY_TOTP_SHA1, TOTP_KEY_SHA1, 1234567890, 8, "89005924" },
+		{ ENTRY_TOTP_SHA256, TOTP_KEY_SHA256, 1234567890, 8,
+		    "91819424" },
+		{ ENTRY_TOTP_SHA512, TOTP_KEY_SHA512, 1234567890, 8,
+		    "93441116" },
+		{ ENTRY_TOTP_SHA1, TOTP_KEY_SHA1, 2000000000, 8, "69279037" },
+		{ ENTRY_TOTP_SHA256, TOTP_KEY_SHA256, 2000000000, 8,
+		    "90698825" },
+		{ ENTRY_TOTP_SHA512, TOTP_KEY_SHA512, 2000000000, 8,
+		    "38618901" },
+		{ ENTRY_TOTP_SHA1, TOTP_KEY_SHA1, 20000000000, 8,
+		    "65353130" },
+		{ ENTRY_TOTP_SHA256, TOTP_KEY_SHA256, 20000000000, 8,
+		    "77737706" },
+		{ ENTRY_TOTP_SHA512, TOTP_KEY_SHA512, 20000000000, 8,
+		    "47863826" },
+		{ ENTRY_TOTP_SHA1, TOTP_KEY_SHA1, 59, 6, "287082" },
+		{ ENTRY_TOTP_SHA256, TOTP_KEY_SHA256, 1111111109, 6,
+		    "084774" },
+		{ ENTRY_TOTP_SHA512, TOTP_KEY_SHA512, 20000000000, 6,
+		    "863826" }
+	};
+
+	/* The values that the call rejects. */
+	static const struct {
+		const char	*name;
+		unsigned int	 digits;
+		unsigned int	 period;
+		size_t		 keylen;
+		size_t		 outlen;
+	} bad[] = {
+		{ "a code of 5 digits", 5, TOTP_PERIOD, 20, ENTRY_TOTP_MAX },
+		{ "a code of 9 digits", 9, TOTP_PERIOD, 20, ENTRY_TOTP_MAX },
+		{ "a period of 0 seconds", 6, 0, 20, ENTRY_TOTP_MAX },
+		{ "a key of no byte", 6, TOTP_PERIOD, 0, ENTRY_TOTP_MAX },
+		{ "an output buffer of one byte less", 6, TOTP_PERIOD, 20,
+		    ENTRY_TOTP_MAX - 1 }
+	};
+
+	/* The algorithm names of the totp-algorithm field. */
+	static const struct {
+		const char		*name;
+		enum entry_totp_alg	 alg;
+		int			 take;
+	} algs[] = {
+		{ "sha1", ENTRY_TOTP_SHA1, 1 },
+		{ "sha256", ENTRY_TOTP_SHA256, 1 },
+		{ "sha512", ENTRY_TOTP_SHA512, 1 },
+		{ "sha", ENTRY_TOTP_SHA1, 0 },
+		{ "sha3", ENTRY_TOTP_SHA1, 0 },
+		{ "SHA1", ENTRY_TOTP_SHA1, 0 }
+	};
+	char			 code[ENTRY_TOTP_MAX], name[NAMELEN];
+	unsigned char		 key[64];
+	enum entry_totp_alg	 alg;
+	size_t			 i, keylen;
+	int			 rv = 0;
+
+	for (i = 0; i < nitems(codes); i++) {
+		snprintf(name, sizeof(name), "the TOTP vector %zu", i);
+		if (hexsize(name, codes[i].key, &keylen) != 0 ||
+		    keylen > sizeof(key)) {
+			warnx("%s: the key does not fit", name);
+			rv = -1;
+			continue;
+		}
+		if (hexbytes(name, codes[i].key, key, keylen) != 0) {
+			rv = -1;
+			continue;
+		}
+		if (entry_totp(key, keylen, codes[i].alg, codes[i].digits,
+		    TOTP_PERIOD, codes[i].at, code, sizeof(code)) != 0) {
+			warnx("%s: the call fails", name);
+			rv = -1;
+			continue;
+		}
+		if (strcmp(code, codes[i].code) != 0) {
+			warnx("%s: the code is %s, and the vector gives %s",
+			    name, code, codes[i].code);
+			rv = -1;
+		}
+	}
+
+	if (hexbytes("the TOTP key", TOTP_KEY_SHA1, key, 20) != 0)
+		return -1;
+	for (i = 0; i < nitems(bad); i++) {
+		if (entry_totp(key, bad[i].keylen, ENTRY_TOTP_SHA1,
+		    bad[i].digits, bad[i].period, 59, code,
+		    bad[i].outlen) == 0) {
+			warnx("%s: the call takes it", bad[i].name);
+			rv = -1;
+		}
+	}
+
+	for (i = 0; i < nitems(algs); i++) {
+		alg = ENTRY_TOTP_SHA512;
+		if ((entry_totp_alg_find(algs[i].name, strlen(algs[i].name),
+		    &alg) == 0) != algs[i].take) {
+			warnx("%s: the algorithm lookup differs from the "
+			    "specification", algs[i].name);
+			rv = -1;
+		} else if (algs[i].take && alg != algs[i].alg) {
+			warnx("%s: the algorithm lookup gives another hash",
+			    algs[i].name);
+			rv = -1;
+		}
+	}
+	return rv;
+}
+
 int
 main(void)
 {
@@ -1231,5 +1783,8 @@ main(void)
 	rv |= test_config();
 	rv |= test_atomic();
 	rv |= test_layout();
+	rv |= test_entries();
+	rv |= test_model();
+	rv |= test_totp();
 	return rv != 0;
 }
