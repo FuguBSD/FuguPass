@@ -29,11 +29,11 @@
 # the guest, and it takes the driver src/regress/oracle-client of
 # that build (TEST-HARNESS-7). The second part is the counterparty
 # table below: one data record for each counterparty, with the
-# probe, the start, the stop and the release of it (TEST-HARNESS-4,
-# TEST-HARNESS-6). The third part is tests/harness.d, one file for
-# each leg. A leg reads the counterparty through the methods of the
-# Counterparty package alone, so no leg branches on the
-# counterparty (TEST-HARNESS-4).
+# probe, the start, the stop, the release and the record list of it
+# (TEST-HARNESS-4, TEST-HARNESS-6). The third part is
+# tests/harness.d, one file for each leg. A leg reads the
+# counterparty through the methods of the Counterparty package
+# alone, so no leg branches on the counterparty (TEST-HARNESS-4).
 #
 # The harness runs no shell on the host: each host command is a
 # list, and Fugu::Process runs it (TEST-HARNESS-6). A guest command
@@ -42,6 +42,23 @@
 # well, and App::FuguVM::Remote quotes each word of it. fuguvm gives
 # the guest no standard input, so the driver reads the passphrase
 # from a pipe of the guest shell.
+#
+# A ceremony reads the passphrase from /dev/tty, and the ssh channel
+# of fuguvm carries no terminal. A ceremony therefore runs on the
+# serial console, under 'fuguvm expect' and the script
+# tests/expect/create.exp (TEST-HARNESS-8). An expect script reports
+# its own run alone, so the script of the guest writes the exit
+# status of the ceremony to a file, and the harness reads that file
+# over 'fuguvm ssh'.
+#
+# The plate scan of a ceremony takes the double
+# tests/stubs/fugupass-scan.c, and that double prints the fixed test
+# master. The unveil list of the core process holds each helper path
+# with the x permission and no interpreter, so the double is a
+# program, and the guest build compiles it (PROG-SPLIT-3). The core
+# process reads the helper directory from FUGUPASS_HELPERS in a
+# regress build alone, so the guest build runs
+# 'make FUGUPASS_REGRESS=1' (PROG-SPLIT-11).
 #
 # The harness fails when no counterparty is available. A pass over
 # zero legs is no pass.
@@ -73,6 +90,18 @@
 #		agent socket of the guest, so the caller sets
 #		PERL5LIB and SSH_AUTH_SOCK for it.
 #
+#	FUGUPASS_CONSOLE_PASSWORD
+#		The root password of the console login of the
+#		guest. The default is openbsd, the password of the
+#		installer of fuguvm. An installation of the mode
+#		expect generates a password of 32 characters and
+#		keeps it in the state of the guest, so the operator
+#		reads that value and gives it here. fuguvm gives no
+#		command for it, and no status key holds it. The
+#		password of a disposable test guest is no design
+#		fact of FuguPass, so no document of spec/ names this
+#		variable.
+#
 # The harness runs the legs against every available conforming
 # counterparty (TEST-HARNESS-1). The upstream blind_pin_server is the
 # one counterparty today (TEST-HARNESS-2). The FuguOracle leg is
@@ -102,9 +131,18 @@ use Fugu::Timeout;
 # and a build of this tree fills it.
 our $WORK = '/home/fugupass/harness';
 
-# The tree of the guest build, and the driver that it builds.
-our $TREE   = "$WORK/tree";
-our $DRIVER = "$TREE/src/regress/obj/oracle-client";
+# The tree of the guest build, the driver that it builds, and the
+# core process that it builds.
+our $TREE    = "$WORK/tree";
+our $DRIVER  = "$TREE/src/regress/obj/oracle-client";
+our $PROGRAM = "$TREE/src/fugupass/obj/fugupass";
+
+# The directory of the helper doubles, and the run directory of one
+# ceremony. FUGUPASS_HELPERS names the first one, and the three
+# helper paths are that directory and the three file names
+# (PROG-SPLIT-11).
+our $HELPERS = "$WORK/helpers";
+our $RUN     = "$WORK/run";
 
 # The fixed values of a test vault: the first slot index, the
 # 1-based position of the oracle list, the machine name of the
@@ -121,6 +159,12 @@ our $SLOT    = 7;
 our $ORACLE  = 1;
 our $MACHINE = 'testmachine';
 our $ROUNDS  = 16;
+
+# The string constants of tests/vectors/derive.h, by name. The scan
+# double prints KAT_TEST_MASTER, so a ceremony of a leg runs under
+# the fixed test master (TEST-KAT-4). The header is the one place
+# that holds the value of each constant.
+our %VECTOR = vectors("$RealBin/vectors/derive.h");
 
 # The passphrases of the legs, by name. A leg names one of these
 # keys, and it holds no passphrase of its own. Each value holds no
@@ -143,11 +187,25 @@ our $FOREIGN_POINT =
 # (ORC-COUNTER-5).
 our $HIGH_COUNTER = 4_000_000_000;
 
-my $FUGUVM = $ENV{FUGUVM} // 'fuguvm';
+our $FUGUVM = $ENV{FUGUVM} // 'fuguvm';
+
+# The expect script of a ceremony. fuguvm expect gives it the host
+# and the port of the console first, and the script needs the
+# execute bit (TEST-HARNESS-8).
+our $EXPECT = "$RealBin/expect/create.exp";
+
+# The root password of the console login of the guest.
+our $CONSOLE_PASSWORD = $ENV{FUGUPASS_CONSOLE_PASSWORD} // 'openbsd';
 
 # The seconds of one guest command, and of one build of the tree.
 my $GUEST_TIMEOUT = 300;
 my $BUILD_TIMEOUT = 1800;
+
+# The seconds of one ceremony on the console. A ceremony enrolls one
+# record for each slot of the pool. The expect script reads the same
+# value from FUGUVM_TIMEOUT, and it gives up before this timeout.
+our $CONSOLE_TIMEOUT = 1500;
+$ENV{FUGUVM_TIMEOUT} = $CONSOLE_TIMEOUT - 60;
 
 # The start recipe of the upstream server. The Python of the
 # checkout runs this program, and the first argument is the record
@@ -164,22 +222,46 @@ flask_server().run(host=sys.argv[2], port=int(sys.argv[3]))
 PYTHON
 
 # The counterparties that this harness drives (TEST-HARNESS-2). Each
-# record holds the name and the four steps of the run. probe() gives
-# undef when the counterparty is available, and the reason when it
-# is not. start() sets url, pubkey and records_at_start. A leg reads
-# no member of this table.
+# record holds the name, the four steps of the run, and the record
+# list of the store. probe() gives undef when the counterparty is
+# available, and the reason when it is not. start() sets url, pubkey
+# and records_at_start. records() gives the record file names of the
+# store of the moment. A leg reads no member of this table.
 my @COUNTERPARTY = (
 	{
 		name    => 'blind_pin_server',
 		probe   => \&upstream_probe,
 		start   => \&upstream_start,
 		stop    => \&upstream_stop,
-		release => \&upstream_release
+		release => \&upstream_release,
+		records => \&upstream_records
 	} );
 
 # The counterparties that run now. The end block stops each one, so
 # a die and a signal leave no server behind, and no record store.
 my @RUNNING;
+
+# vectors($path):
+#	The string constants of the vector header $path, by name.
+#	The header holds one #define of each constant, and a
+#	constant of more than one line joins with a backslash. A
+#	#define of another form takes no entry.
+sub vectors ($path)
+{
+	open my $fh, '<', $path or die "the harness reads no $path: $!\n";
+	my $text = do { local $/ = undef; <$fh> };
+	close $fh;
+
+	$text =~ s/\\\n//g;
+	my %value;
+	while ( $text =~ /^\#define\s+(\w+)\s+(.*)$/mg ) {
+		my ( $name, $rest ) = ( $1, $2 );
+		my @part = $rest =~ /"([^"]*)"/g;
+		$value{$name} = join '', @part if @part;
+	}
+	die "$path holds no string constant\n" if !%value;
+	return %value;
+}
 
 # _shq($word):
 #	One word for the shell of the guest, in single quotes. The
@@ -201,6 +283,27 @@ sub guest ( $script, $timeout = $GUEST_TIMEOUT )
 	return Fugu::Process->run(
 		cmd     => [ $FUGUVM, 'ssh', '--', 'sh', '-c', $script ],
 		timeout => $timeout );
+}
+
+# guest_script($name, @lines):
+#	Write the shell script @lines to the run directory of the
+#	guest, and give the path of it. The copy takes 'fuguvm put',
+#	so a line needs no quoting for the shell of the guest.
+sub guest_script ( $name, @lines )
+{
+	my $file = File::Temp->new(
+		TEMPLATE => 'fugupass-script-XXXXXX',
+		TMPDIR   => 1,
+		SUFFIX   => '.sh' );
+	print {$file} map { "$_\n" } @lines
+	    or die "the harness wrote no script: $!\n";
+	close $file or die "the harness closed no script: $!\n";
+
+	my $path = "$RUN/$name";
+	guest_ok( 'the run directory', "mkdir -p $RUN" );
+	host_ok( 'fuguvm put', [ $FUGUVM, 'put', "$file", $path ],
+		timeout => $GUEST_TIMEOUT );
+	return $path;
 }
 
 # guest_ok($what, $script, $timeout):
@@ -291,9 +394,20 @@ sub build_guest ($root)
 		[ $FUGUVM, 'put', "$tar", "$WORK/tree.tar" ],
 		timeout => $GUEST_TIMEOUT );
 	guest_ok( 'the unpack', "cd $TREE && tar xf $WORK/tree.tar" );
-	guest_ok( 'the build', "cd $TREE/src && make obj && make",
+	guest_ok( 'the build',
+		"cd $TREE/src && make obj && make FUGUPASS_REGRESS=1",
 		$BUILD_TIMEOUT );
-	guest_ok( 'the driver', "test -x $DRIVER" );
+	guest_ok( 'the driver',  "test -x $DRIVER" );
+	guest_ok( 'the program', "test -x $PROGRAM" );
+
+	# The scan double of the ceremony legs. The core process
+	# runs it from the directory that FUGUPASS_HELPERS names,
+	# and it reads the vectors of the tree above.
+	guest_ok(
+		'the scan double',
+		"mkdir -p $HELPERS $RUN && cc -Wall -Wextra -Werror "
+		    . "-I$TREE/tests -o $HELPERS/fugupass-scan "
+		    . "$TREE/tests/stubs/fugupass-scan.c" );
 	return;
 }
 
@@ -429,9 +543,17 @@ sub upstream_start ($cp)
 	    or die "the upstream server never answered on port "
 	    . "$cp->{port}\n";
 
-	$cp->{records_at_start} //=
-	    scalar( () = glob "$cp->{store}/pins/*.pin" );
+	$cp->{records_at_start} //= scalar( () = upstream_records($cp) );
 	return;
+}
+
+# upstream_records($cp):
+#	The record file names of the store of this counterparty.
+#	pindb.py of the upstream server holds one file of each
+#	record in the pins directory of the store.
+sub upstream_records ($cp)
+{
+	return map { basename($_) } glob "$cp->{store}/pins/*.pin";
 }
 
 sub upstream_stop ($cp)
@@ -452,9 +574,9 @@ package Counterparty;
 
 # The counterparty of one run. A leg reads it through these methods
 # alone, so no leg branches on the counterparty (TEST-HARNESS-4).
-# The record of the table holds the four steps, and the object holds
-# the state of the run: the URL, the static public key, and the
-# record count of the store at the start.
+# The record of the table holds the four steps and the record list,
+# and the object holds the state of the run: the URL, the static
+# public key, and the record count of the store at the start.
 
 use v5.36;
 
@@ -475,10 +597,29 @@ sub release ($self) { $self->{recipe}{release}->($self); return }
 #	held when this run started it (TEST-MASK-6).
 sub records_at_start ($self) { return $self->{records_at_start} }
 
+# $cp->records:
+#	The record file names that the store of the counterparty
+#	holds now. A leg reads the set before a step and after it,
+#	and the difference is the records of that step
+#	(ORC-REVOKE-6).
+sub records ($self) { return $self->{recipe}{records}->($self) }
+
+# $cp->url:
+#	The URL of this counterparty. A ceremony report names the
+#	oracle of a failed enrollment with it (CER-CREATE-6).
+sub url ($self) { return $self->{url} }
+
 # $cp->foreign_key:
 #	A valid static public key that this counterparty does not
 #	hold (ORC-PROVISION-1).
 sub foreign_key ($) { return $main::FOREIGN_POINT }
+
+# $cp->master, $cp->plate_check:
+#	The fixed test master, and the plate check value of it
+#	(TEST-KAT-4, KEY-MASTER-5). The scan double prints the
+#	master, so a ceremony of a leg runs under it.
+sub master ($) { return $main::VECTOR{KAT_TEST_MASTER} }
+sub plate_check ($) { return $main::VECTOR{KAT_TEST_PLATE_CHECK} }
 
 # $cp->high_counter:
 #	A stored counter above the wall clock (ORC-COUNTER-1).
@@ -514,29 +655,70 @@ sub seal ( $, $vault ) { return "$vault->{dir}/machine/canary.$main::ORACLE" }
 #	provisioned value of the counterparty.
 sub vault ( $self, $tag, %opt )
 {
+	my $vault = $self->_empty( $tag, machine => $main::MACHINE );
+	$self->config( $vault, %opt );
+	return $vault;
+}
+
+# $cp->_empty($tag, %opt):
+#	An empty vault directory of the guest, with no file in it.
+#	%opt takes 'machine', the machine name of the vault, and
+#	'slot', the slot index of the record. The machine name and
+#	the test master give the device factor, so two vaults of one
+#	machine name address one record of a slot (KEY-DEVICE-1).
+sub _empty ( $self, $tag, %opt )
+{
 	my $slot = $self->{next_slot} //= $main::SLOT;
 	$self->{next_slot}++;
 
-	my $dir    = "$main::WORK/vault/$self->{name}-$tag";
+	my $dir = "$main::WORK/vault/$self->{name}-$tag";
+	main::guest_ok( "the vault $tag",
+		'rm -rf ' . main::_shq($dir) . ' && mkdir -p '
+		    . main::_shq("$main::WORK/vault") );
+	return {
+		dir     => $dir,
+		slot    => $opt{slot} // $slot,
+		tag     => $tag,
+		machine => $opt{machine} // $main::MACHINE };
+}
+
+# $cp->config($vault, %opt):
+#	The config file of the vault $vault, with the one oracle of
+#	this counterparty at position 1 (VAULT-CONFIG-1,
+#	ORC-PROVISION-1). %opt takes 'pubkey' and 'url', and each one
+#	replaces the provisioned value of the counterparty.
+sub config ( $self, $vault, %opt )
+{
 	my $pubkey = $opt{pubkey} // $self->{pubkey};
 	my $url    = $opt{url}    // $self->{url};
 
 	main::guest_ok(
-		"the vault $tag",
-		'rm -rf '
-		    . main::_shq($dir)
-		    . ' && mkdir -p '
-		    . main::_shq("$dir/machine")
+		"the config of $vault->{tag}",
+		'mkdir -p '
+		    . main::_shq("$vault->{dir}/machine")
 		    . " && printf '%s\\n' "
 		    . join( ' ',
 			map { main::_shq($_) } (
 				"oracle-1: $pubkey $url",
 				'threshold: 1',
-				"machine-name: $main::MACHINE",
+				"machine-name: $vault->{machine}",
 				"kdf-rounds: $main::ROUNDS" ) )
 		    . ' > '
-		    . main::_shq("$dir/machine/config") );
-	return { dir => $dir, slot => $slot, tag => $tag };
+		    . main::_shq("$vault->{dir}/machine/config") );
+	return;
+}
+
+# $cp->ceremony_vault($tag, %opt):
+#	An empty vault directory for a ceremony. The ceremony writes
+#	the config file itself, so this call writes no file
+#	(CER-CREATE-3). The machine name of the vault is the tag, so
+#	two ceremony vaults of one run address no common record.
+#
+#	%opt takes 'slot', the slot index that the counters methods
+#	then name.
+sub ceremony_vault ( $self, $tag, %opt )
+{
+	return $self->_empty( $tag, %opt, machine => "create-$tag" );
 }
 
 # $cp->enroll($vault, %opt), $cp->reveal($vault, %opt),
@@ -637,6 +819,94 @@ sub remove_file ( $, $path )
 	main::guest_ok( "the removal of $path",
 		'rm -f ' . main::_shq($path) );
 	return;
+}
+
+# $cp->names($dir):
+#	The file names of the directory $dir of the guest, without
+#	the path. An absent directory gives the empty list.
+sub names ( $, $dir )
+{
+	my $result = main::guest( 'ls -1 ' . main::_shq($dir) );
+	return () if ( $result->{exit_code} // -1 ) != 0;
+	return grep { length } split /\n/, $result->{stdout} // '';
+}
+
+# $cp->search($dir, $text):
+#	The paths under $dir of the guest that hold the bytes $text.
+#	The search reads every file, and it takes $text as a fixed
+#	string.
+sub search ( $, $dir, $text )
+{
+	my $result = main::guest( 'grep -r -l -F -e '
+		. main::_shq($text) . ' '
+		. main::_shq($dir) );
+	return grep { length } split /\n/, $result->{stdout} // '';
+}
+
+# $cp->program(@argv):
+#	One run of the core process in the guest, with no terminal.
+#	The hash of the call holds 'exit', 'out' and 'error'. A
+#	subcommand that reads the passphrase needs a terminal, so
+#	that one takes $cp->create().
+sub program ( $, @argv )
+{
+	my $result = main::guest(
+		join ' ',
+		map { main::_shq($_) } ( $main::PROGRAM, @argv ) );
+	return {
+		exit  => $result->{exit_code} // -1,
+		out   => $result->{stdout}    // '',
+		error => $result->{stderr}    // '' };
+}
+
+# $cp->create($vault, %opt):
+#	The vault creation ceremony in the vault $vault (CER-CREATE).
+#	The hash of the call holds 'exit', the exit status of the
+#	ceremony, and 'out' and 'error', the two streams of it.
+#
+#	%opt takes 'pass', an array reference of two passphrase
+#	names. The default is the correct passphrase twice. It also
+#	takes 'threshold', and the default is 1.
+#
+#	The ceremony reads the passphrase from /dev/tty, so it runs
+#	on the serial console of the guest, under 'fuguvm expect'
+#	(TEST-HARNESS-8). The script of the guest holds every other
+#	byte of the run, and it writes the exit status to a file.
+sub create ( $self, $vault, %opt )
+{
+	my @pass = map { $main::PASSPHRASE{$_}
+		    // die "the harness holds no passphrase $_\n" }
+	    @{ $opt{pass} // [ 'right', 'right' ] };
+	die "a ceremony reads two passphrases\n" if @pass != 2;
+
+	my $base = "$main::RUN/$vault->{tag}";
+	my $path = main::guest_script(
+		"$vault->{tag}.sh",
+		"FUGUPASS_HELPERS=$main::HELPERS",
+		'export FUGUPASS_HELPERS',
+		"$main::PROGRAM -d $vault->{dir} create "
+		    . '-k ' . ( $opt{threshold} // 1 )
+		    . " -m $vault->{machine} -r $main::ROUNDS "
+		    . "'$self->{pubkey} $self->{url}' "
+		    . "> $base.out 2> $base.err",
+		"echo \$? > $base.status" );
+
+	my $console = main::host_ok(
+		"the ceremony $vault->{tag}",
+		[
+			$main::FUGUVM, 'expect', $main::EXPECT,
+			"sh $path", @pass, $main::CONSOLE_PASSWORD
+		],
+		timeout => $main::CONSOLE_TIMEOUT );
+
+	my $status = $self->read_file("$base.status");
+	die "the ceremony $vault->{tag} wrote no exit status. The console "
+	    . "of it:\n$console"
+	    if !defined $status || $status !~ /\A([0-9]+)\s*\z/;
+	return {
+		exit  => $1 + 0,
+		out   => $self->read_file("$base.out")   // '',
+		error => $self->read_file("$base.err")   // '' };
 }
 
 package main;

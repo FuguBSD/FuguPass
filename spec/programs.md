@@ -49,6 +49,12 @@ page in `mdoc(7)`: `fugupass(1)`, `fugupass-repl(1)`, `fugupass-scan(1)`, and
   directories of the perl that runs. The second method names `/dev/urandom`, the
   resolver files, the service tables and the time zone file. Neither method
   calls a syscall, so a test can prove the list off OpenBSD.
+- **PROG-SPLIT-11** — A regress build can take the helper paths from the
+  environment, so a test can put a double in place of a helper. The service
+  build must hold no such path.
+- **PROG-SPLIT-12** — The unveil list of the core process must hold
+  `/etc/ssl/cert.pem` with the `r` permission. `libtls` reads the trust anchors
+  of that file for an `https` oracle.
 
 `fugupass` runs the interface program and the helpers as child processes and
 exchanges text over pipes. Text crosses the process boundary, never image data
@@ -192,6 +198,21 @@ actions.
   paths ([ORC-REVOKE](oracle.md#orc-revoke)) must each run as one too. The six
   REPL commands are the complete REPL command list, and the subcommand list
   extends it.
+- **PROG-ONESHOT-5** — `fugupass` must take the vault directory from the `-d`
+  option. Without that option, the vault directory must be `.fugupass` of the
+  home directory. The `create` subcommand must take the threshold from `-k`, and
+  the ordered oracle set from its arguments
+  ([VAULT-CONFIG](vault.md#vault-config)).
+- **PROG-ONESHOT-6** — Each argument of `create` must hold one position of the
+  oracle set: the static public key hex, one space, then the URL
+  ([ORC-PROVISION](oracle.md#orc-provision)). The first argument is position 1.
+  The subcommand must take the machine name from `-m`
+  ([KEY-DEVICE](keys.md#key-device)), and the `bcrypt_pbkdf(3)` round count from
+  `-r` ([KEY-PIN](keys.md#key-pin)). The `-k`, `-m` and `-r` options and the
+  argument list are mandatory.
+- **PROG-ONESHOT-7** — The `create` subcommand must write the revocation kit
+  ([ORC-REVOKE](oracle.md#orc-revoke)) at the path of
+  [VAULT-LAYOUT](vault.md#vault-layout). It must print the path of that file.
 
 <a id="prog-output"></a>
 

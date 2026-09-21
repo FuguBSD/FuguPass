@@ -1,0 +1,56 @@
+/*
+ * Copyright (c) 2026 Dick Olsson <hi@senzilla.io>
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+/*
+ * The sandbox of the core process: the unveil(2) list, and the
+ * pledge(2) call after it (PROG-SPLIT-3).
+ *
+ * main() of fugupass.c makes one call of sandbox_enter(), and
+ * src/regress/sandbox.c makes the same call. The list therefore has
+ * one implementation, and the test reads the list that the program
+ * runs under.
+ */
+
+#ifndef SANDBOX_H
+#define SANDBOX_H
+
+/* The promises of the core process (PROG-SPLIT-3). */
+#define SANDBOX_PROMISES \
+	"stdio rpath wpath cpath flock proc exec inet dns tty"
+
+/*
+ * sandbox_enter(vault):
+ *	The unveil list of the vault directory vault, and the pledge
+ *	of the core process (PROG-SPLIT-3). The call makes the vault
+ *	directory, because unveil(2) refuses a path that no file
+ *	holds.
+ *
+ *	The list holds the vault directory with the rwc permission,
+ *	/dev/tty with rw, the three helper programs with x, and the
+ *	runtime files, the resolver files and the trust anchors of
+ *	libtls with r (PROG-SPLIT-12).
+ *
+ *	A path of the list that no file holds leaves ENOENT, and the
+ *	list then holds one path less. The process stays inside the
+ *	list, so an absent helper program and an absent resolver file
+ *	each restrict this process more.
+ *
+ *	The call gives 0, and -1 on every other failure. errno then
+ *	names the failed call, and the caller stops the program.
+ */
+int	sandbox_enter(const char *);
+
+#endif /* SANDBOX_H */

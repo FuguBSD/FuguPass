@@ -1,0 +1,153 @@
+.\"	$OpenBSD$
+.\"
+.\" Copyright (c) 2026 Dick Olsson <hi@senzilla.io>
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate: September 21 2026 $
+.Dt FUGUPASS 1
+.Os
+.Sh NAME
+.Nm fugupass
+.Nd FuguPass vault core
+.Sh SYNOPSIS
+.Nm
+.Op Fl d Ar directory
+.Cm create
+.Fl k Ar threshold
+.Fl m Ar machine
+.Fl r Ar rounds
+.Ar oracle ...
+.Sh DESCRIPTION
+.Nm
+is the core process of FuguPass.
+It holds the vault, the one-shot subcommands, and the ceremonies.
+One vault is one directory of files.
+.Pp
+.Nm
+reads each passphrase from the terminal.
+It runs each helper program as a child process, and text alone
+crosses that boundary.
+.Pp
+The options are as follows:
+.Bl -tag -width Ds
+.It Fl d Ar directory
+Take
+.Ar directory
+as the vault directory.
+The default is
+.Pa .fugupass
+of the home directory.
+.Nm
+makes the directory when no directory of that path exists.
+.El
+.Pp
+The subcommands are as follows:
+.Bl -tag -width Ds
+.It Xo
+.Cm create
+.Fl k Ar threshold
+.Fl m Ar machine
+.Fl r Ar rounds
+.Ar oracle ...
+.Xc
+Make a new vault on this machine.
+The ceremony takes the master from a plate scan of
+.Xr fugupass-scan 1 .
+It writes the device factor and the config file, and it reads the
+passphrase.
+It then enrolls a canary record at each oracle, and it fills a pool
+of 64 slots.
+Each slot takes one record at each oracle.
+The ceremony ends with the index and the revocation kit.
+.Pp
+Each
+.Ar oracle
+argument holds one position of the ordered oracle set: the static
+public key hex, one space, then the URL.
+The first argument is position 1.
+The three options below are mandatory:
+.Bl -tag -width Ds
+.It Fl k Ar threshold
+The count of oracles that one reveal needs.
+The value must not exceed the count of the
+.Ar oracle
+arguments.
+.It Fl m Ar machine
+The name of this machine.
+The name holds lowercase ASCII letters, digits, and hyphens, 1 to 64
+bytes.
+The config file and the revocation kit record it.
+.It Fl r Ar rounds
+The round count of
+.Xr bcrypt_pbkdf 3 .
+.El
+.Pp
+The ceremony reads the passphrase twice, at the prompt
+.Dq Passphrase:
+and at the prompt
+.Dq Passphrase again: .
+The two reads must match.
+No file of the vault verifies this passphrase, so the ceremony warns
+before the first prompt.
+.Pp
+The ceremony writes these files of the vault directory: the device
+factor, the config file, the counters file, one canary seal of each
+oracle, and one index wrap of each oracle.
+It writes one sealed file of each slot of the pool, one wrap of each
+slot at each oracle, the index, and the revocation kit.
+.Pp
+The revocation kit is a plaintext file.
+It names this machine, each oracle of the set, and the record file
+name of each record of this machine at that oracle.
+The kit holds no secret.
+An operator of a self-hosted oracle needs a record file name to
+delete that record.
+The subcommand prints the path of the kit on the standard output.
+.El
+.Sh ENVIRONMENT
+.Bl -tag -width HOME
+.It Ev HOME
+The home directory of the default vault directory.
+.El
+.Sh FILES
+The first path below is the default vault directory, and each other
+path sits inside the vault directory.
+.Bl -tag -width "machine/revocation-kit" -compact
+.It Pa ~/.fugupass
+the vault directory of a run without the
+.Fl d
+option
+.It Pa index
+the sealed index of the vault
+.It Pa machine/config
+the config file of this machine, plaintext
+.It Pa machine/counters
+the last counter of each record of this machine
+.It Pa machine/factor
+the device factor of this machine
+.It Pa machine/revocation-kit
+the revocation kit of this machine, plaintext
+.El
+.Sh EXIT STATUS
+The
+.Nm
+utility exits 0 on success, and 1 when a subcommand fails.
+An absent subcommand, an unknown subcommand, and a wrong command line
+give the usage on the standard error and the exit status 2.
+.Sh SEE ALSO
+.Xr fugupass-qr 1 ,
+.Xr fugupass-repl 1 ,
+.Xr fugupass-scan 1
+.Sh AUTHORS
+.An Dick Olsson Aq Mt hi@senzilla.io

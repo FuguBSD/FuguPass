@@ -24,8 +24,9 @@
 .PATH:		${.CURDIR}/..
 
 LIB=		fugupass
-SRCS=		bip85.c derive.c entry.c envelope.c http.c oracle.c pin.c \
-		seal.c share.c vault.c wordlist.c
+SRCS=		bip85.c ceremony.c derive.c entry.c envelope.c helper.c \
+		http.c oracle.c pin.c sandbox.c seal.c share.c vault.c \
+		wordlist.c
 
 CFLAGS+=	-Wall -Wextra -Werror
 CFLAGS+=	-I${.CURDIR}/..
@@ -36,6 +37,23 @@ CFLAGS+=	-I${.CURDIR}/..
 LOCALBASE?=	/usr/local
 
 CFLAGS+=	-I${LOCALBASE}/include
+
+# helper.c runs a helper program as a child, and it holds the path
+# of each one. HELPER_DIR names the directory of the three
+# programs, and the port installs them under LOCALBASE
+# (PROG-PORT-2).
+CFLAGS+=	-DHELPER_DIR=\"${LOCALBASE}/bin\"
+
+# A regress build takes the helper paths from the environment
+# variable FUGUPASS_HELPERS, so a test can put a double in place of
+# a helper (PROG-SPLIT-11). make FUGUPASS_REGRESS=1 makes that
+# build, and a build without that variable holds no such path.
+# helper.c belongs to the archive, so this file holds the switch,
+# and a command line of the operator reaches this file through
+# MAKEFLAGS.
+.if defined(FUGUPASS_REGRESS)
+CFLAGS+=	-DFUGUPASS_REGRESS
+.endif
 
 # bcrypt_pbkdf(3) comes from libutil of the base system. pin.c reads
 # <util.h>, and each directory that links this archive adds -lutil

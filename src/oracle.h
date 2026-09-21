@@ -224,4 +224,26 @@ int	oracle_reveal(const struct oracle_ctx *, uint32_t, unsigned char *,
  */
 int	oracle_canary_enroll(const struct oracle_ctx *, const char *, size_t);
 
+/*
+ * oracle_canary_index(ctx, again, againlen, idxkey, idxkeylen):
+ *	The canary enrollment of oracle_canary_enroll(), and this
+ *	machine's index wrap of the oracle of ctx. idxkey holds the
+ *	index key K_idx, of DERIVE_KEYLEN bytes.
+ *
+ *	The canary mask of the enrollment wraps the index share, so
+ *	the call sends no request beyond the two of the canary
+ *	(ORC-CANARY-3). The wrap is
+ *	c_idx_i = share(K_idx, i) XOR
+ *	f(s_canary_i, "fugupass/v1/wrap-index" || i), and the call
+ *	writes it to machine/wrap.index.<i> (KEY-MASK-7,
+ *	VAULT-ATOMIC-1).
+ *
+ *	A ceremony that holds K_idx takes this call, and every other
+ *	caller takes oracle_canary_enroll() (CER-CREATE-5,
+ *	ORC-ENROLL-6). The caller erases K_idx after its last use
+ *	(SEC-MEMORY-5).
+ */
+int	oracle_canary_index(const struct oracle_ctx *, const char *, size_t,
+	    const unsigned char *, size_t);
+
 #endif /* ORACLE_H */

@@ -179,6 +179,7 @@ enum vault_file {
 	VAULT_FILE_COUNTERS,	/* machine/counters */
 	VAULT_FILE_CONFIG,	/* machine/config */
 	VAULT_FILE_CHANGE,	/* machine/change */
+	VAULT_FILE_KIT,		/* machine/revocation-kit */
 	VAULT_FILE_MAX
 };
 
