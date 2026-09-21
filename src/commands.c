@@ -189,9 +189,9 @@ static int	 cmd_audit(struct session *, int, char *[]);
 const struct commands_cmd commands_table[] = {
 	{ "ls",		"", cmd_ls },
 	{ "show",	"[-w] name", cmd_show },
-	{ "add",	"-T type [-c class] [-f name=value ...] name",
+	{ "add",	"[-T type] [-c class] [-f name=value ...] name",
 	    cmd_add },
-	{ "gen",	"-T type [-f name=value ...] name", cmd_gen },
+	{ "gen",	"[-T type] [-f name=value ...] name", cmd_gen },
 	{ "totp",	"name", cmd_totp },
 	{ "audit",	"", cmd_audit },
 	{ NULL,		NULL, NULL }
@@ -800,11 +800,7 @@ create(struct session *s, struct newentry *ne)
 	/*
 	 * A rotation takes the type of the entry from the index, so
 	 * a command line of the wrong type refuses before the quorum
-	 * event (VAULT-INDEX-2). It then reads the current entry:
-	 * the metadata that the new file carries, and the proof that
-	 * the file holds that type (ENTRY-ROTATION-5). The read of
-	 * add holds the entry key of the slot, because the seal of
-	 * add takes that same key (ENTRY-ROTATION-4).
+	 * event (VAULT-INDEX-2).
 	 */
 	if (old != NULL) {
 		if (index_type(old, &type) != 0)
@@ -814,29 +810,6 @@ create(struct session *s, struct newentry *ne)
 			    entry_types[type].name);
 			goto out;
 		}
-		if (ne->derived) {
-			if (session_reveal(s, old->slot, &plain,
-			    &plainlen) != 0)
-				goto out;
-		} else if (session_consume(s, old->slot, &plain,
-		    &plainlen) != 0)
-			goto out;
-		if (file_type(old, type, plain, plainlen) != 0)
-			goto out;
-		m.text = &meta;
-		m.entry = ne;
-		if (vault_scan(plain, plainlen, entry_types[type].fields,
-		    meta_line, &m) != 0) {
-			warnx("the entry %s: the metadata of it does not fit",
-			    ne->name);
-			goto out;
-		}
-		n = snprintf(slots, sizeof(slots), "%s", old->slots);
-		if (n < 0 || (size_t)n >= sizeof(slots))
-			goto out;
-		n = snprintf(drop, sizeof(drop), "%s", old->file);
-		if (n < 0 || (size_t)n >= sizeof(drop))
-			goto out;
 	} else {
 		if (!ne->typeset) {
 			warnx("the -T option names the entry type of the new "
@@ -862,9 +835,10 @@ create(struct session *s, struct newentry *ne)
 
 	/*
 	 * The secret of add enters from the terminal, before the
-	 * quorum event, so a read that fails consumes no slot
-	 * (SEC-MEMORY-4). A shadow entry holds no secret, and it
-	 * takes no read (ENTRY-SHADOW-1).
+	 * quorum event of each path, so a read that fails consumes
+	 * no slot, and no entry key waits in memory for the read
+	 * (SEC-MEMORY-4, SEC-MEMORY-6). A shadow entry holds no
+	 * secret, and it takes no read (ENTRY-SHADOW-1).
 	 */
 	secret = NULL;
 	if (entry_types[type].secret != NULL && !ne->derived) {
@@ -873,6 +847,39 @@ create(struct session *s, struct newentry *ne)
 			goto out;
 		}
 		secret = pass;
+	}
+
+	/*
+	 * A rotation reads the current entry: the metadata that the
+	 * new file carries, and the proof that the file holds the
+	 * type of the index (ENTRY-ROTATION-5). The read of add
+	 * holds the entry key of the slot, because the seal of add
+	 * takes that same key (ENTRY-ROTATION-4).
+	 */
+	if (old != NULL) {
+		if (ne->derived) {
+			if (session_reveal(s, old->slot, &plain,
+			    &plainlen) != 0)
+				goto out;
+		} else if (session_consume(s, old->slot, &plain,
+		    &plainlen) != 0)
+			goto out;
+		if (file_type(old, type, plain, plainlen) != 0)
+			goto out;
+		m.text = &meta;
+		m.entry = ne;
+		if (vault_scan(plain, plainlen, entry_types[type].fields,
+		    meta_line, &m) != 0) {
+			warnx("the entry %s: the metadata of it does not fit",
+			    ne->name);
+			goto out;
+		}
+		n = snprintf(slots, sizeof(slots), "%s", old->slots);
+		if (n < 0 || (size_t)n >= sizeof(slots))
+			goto out;
+		n = snprintf(drop, sizeof(drop), "%s", old->file);
+		if (n < 0 || (size_t)n >= sizeof(drop))
+			goto out;
 	}
 
 	consumes = old == NULL || ne->derived;

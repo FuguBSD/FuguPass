@@ -214,8 +214,10 @@ int	oracle_reveal(const struct oracle_ctx *, uint32_t, unsigned char *,
  *	A canary enrollment takes two reads of the passphrase, and it
  *	stops at a mismatch (ORC-CANARY-6). pass of ctx is the first
  *	read, and the againlen bytes at again are the second one. The
- *	caller reads both with readpassphrase(3), and it warns that
- *	no verifier exists at this step.
+ *	caller reads both with readpassphrase(3). The caller warns
+ *	that no verifier exists when no canary record holds that
+ *	passphrase, and a session that unlocked holds the verifier of
+ *	the unlock (ORC-CANARY-1).
  *
  *	The call sends one set_pin, and then one immediate get_pin
  *	(ORC-CANARY-7). An answer other than the enrolled mask gives

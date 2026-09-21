@@ -60,6 +60,11 @@ my $WATER_POOL = 12;
 # a creation holds (ENTRY-SHADOW-6).
 my $STALE_DATE = '2020-01-01';
 
+# The greatest counter of a record (ORC-COUNTER-5). The client sends
+# the stored value plus one at least, so a record of this value in
+# the counters file takes no later request.
+my $MAX_COUNTER = 4_294_967_295;
+
 # terminal($run):
 #	The lines that one step wrote to the terminal, without the
 #	prompts of it (PROG-OUTPUT-1). A secret takes one line, and a
@@ -223,6 +228,37 @@ sub entry_case ( $t, $topology )
 		    . '(KEY-BIP85-6)' );
 
 	#
+	# The rotation of a stored entry (ENTRY-ROTATION-4,
+	# ENTRY-ROTATION-5). The index line of the entry holds the
+	# slot list, the type and the entry file name, and each
+	# write of the index seals it again (VAULT-INDEX-2). The
+	# index file of this rotation therefore stays byte for byte.
+	#
+	my $second = $t->answer('secret2');
+	my $index  = $t->digest("$vault->{dir}/index");
+	my ( $reseal, $stored ) = $t->console(
+		$vault,
+		{ argv => [ 'add', 'a1' ], answers => [ 'right', 'secret2' ] },
+		{ argv => [ 'show', 'a1' ], answers => ['right'] } );
+
+	is( $reseal->{exit}, 0,
+		'add rotates the stored entry of that name '
+		    . '(ENTRY-ROTATION-5)' )
+	    or diag( $reseal->{error} );
+	is( $t->digest("$vault->{dir}/index"),
+		$index, 'the rotation of add writes no index, so the file '
+		    . 'name and the slot list of the entry stay '
+		    . '(ENTRY-ROTATION-4)' );
+	like( $stored->{out}, qr/^slots: 1$/m,
+		'the rotation of add keeps the slot of the entry '
+		    . '(ENTRY-ROTATION-4)' );
+	like( $stored->{out}, qr/^version: 1$/m,
+		'the rotation of add keeps the version (ENTRY-ROTATION-1)' );
+	is_deeply( [ terminal($stored) ], [$second],
+		'the rotation of add seals the new secret in the slot of '
+		    . 'the entry (ENTRY-ROTATION-4)' );
+
+	#
 	# The totp code and the shadow audit (ENTRY-TYPES-3,
 	# ENTRY-SHADOW-4, ENTRY-SHADOW-5).
 	#
@@ -339,8 +375,9 @@ sub entry_case ( $t, $topology )
 	is( $dead->{exit}, 0, 'the canary subcommand passes without the '
 		    . 'index key' )
 	    or diag( $dead->{error} );
-	like( $dead->{error}, qr/the index wrap of oracle 1 is gone/,
-		'the report names the dead index wrap (ORC-CANARY-8)' );
+	unlike( $dead->{error}, qr/the index wrap of oracle 1 is gone/,
+		'the enrollment of an absent index wrap reports no removal '
+		    . '(ORC-CANARY-8)' );
 	is( $t->file_exists( $t->index_wrap($vault) ),
 		0, 'the dead index wrap of that oracle stays absent '
 		    . '(ORC-CANARY-8)' );
@@ -348,6 +385,27 @@ sub entry_case ( $t, $topology )
 		'the session resolves no entry name without the index' );
 	like( $closed->{error}, qr/stays closed/,
 		'the report names the closed index (ORC-CANARY-8)' );
+
+	#
+	# An oracle outside that set keeps a live index wrap. The
+	# enrollment of it kills that wrap, and the session holds no
+	# index key, so the wrap file goes (ORC-CANARY-8).
+	#
+	if ( $topology->{oracles} > $down ) {
+		my $last = $topology->{oracles};
+		my $wrap = $t->index_wrap( $vault, oracle => $last );
+		my ($kill) = $t->console( $vault,
+			{ argv => [ 'canary', $last ],
+				answers => [ 'right', 'right' ] } );
+
+		like( $kill->{error},
+			qr/the index wrap of oracle $last is gone/,
+			'the report names the index wrap that the '
+			    . 'enrollment killed (ORC-CANARY-8)' );
+		is( $t->file_exists($wrap),
+			0, 'the enrollment removed the live index wrap '
+			    . '(ORC-CANARY-8)' );
+	}
 
 	return;
 }
@@ -407,7 +465,8 @@ sub pool_case ( $t, $topology )
 # quorum_case($t):
 #	The reveal on every two-oracle quorum of the example
 #	topology, the decrypt failure with one mask, and the
-#	substitution (TEST-HARNESS-5, ORC-QUORUM-4, ORC-QUORUM-5).
+#	substitution after a decrypt failure and after a failed
+#	request (TEST-HARNESS-5, ORC-QUORUM-4, ORC-QUORUM-5).
 sub quorum_case ($t)
 {
 	my $secret = $t->answer('secret2');
@@ -483,6 +542,34 @@ sub quorum_case ($t)
 		    . '(ORC-QUORUM-5)' );
 
 	$t->copy_file( $backup, $stale );
+
+	# The counters file gives the record of slot 0 at oracle 1
+	# the greatest counter, so the client holds no greater value
+	# of that record, and the request of it fails (ORC-COUNTER-5).
+	# The canary record of that oracle keeps its counter, so the
+	# failure comes at the reveal, and the session substitutes
+	# the third oracle after it (ORC-QUORUM-5).
+	my $record  = $t->record( $vault, slot => 0, oracle => 1 );
+	my $file    = $t->counters($vault);
+	my @counter = grep { !/\A\Q$record\E: / }
+	    split /\n/, $t->read_file($file) // '';
+	$t->write_file( $file, @counter, "$record: $MAX_COUNTER" );
+
+	my $url = $t->url(1);
+	my ($moved) = $t->console( $vault,
+		{ argv => [ 'show', 'q1' ], answers => ['right'] } );
+
+	like( $moved->{error},
+		qr/slot 0 at oracle 1 \(\Q$url\E\): the request fails/,
+		'the report names the failed request of the quorum oracle '
+		    . '(ORC-QUORUM-5)' );
+	is( $moved->{exit}, 0,
+		'the session substitutes an oracle after a failed request '
+		    . '(ORC-QUORUM-5)' )
+	    or diag( $moved->{error} );
+	is_deeply( [ terminal($moved) ], [$secret],
+		'the quorum of the substitution reveals the entry '
+		    . '(ORC-QUORUM-5)' );
 	return;
 }
 

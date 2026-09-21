@@ -42,9 +42,11 @@
  * failure of this quorum, and it names no oracle.
  *
  * substitute() takes the next untried candidate, after the canary
- * check of it (ORC-QUORUM-5). The substitutions end when that list
- * runs out. The session quorum keeps each substitution, so a later
- * reveal of the session takes the same oracles.
+ * check of it (ORC-QUORUM-5). Each reveal starts that walk again,
+ * so one reveal holds one attempt of each reachable oracle. The
+ * substitutions of one reveal end when the walk runs out. The
+ * session quorum keeps each substitution, so a later reveal of the
+ * session starts from the same oracles.
  *
  * The steps come from the other files of the tree. oracle.c holds
  * each record, each mask and each wrap, share.c holds the
@@ -112,8 +114,9 @@
  *
  * quorum holds the k oracle indexes of the session quorum, and
  * cand holds the candidates of ORC-QUORUM-2, in preference order.
- * next is the first untried candidate, so one walk serves the open
- * and every substitution of the session (ORC-QUORUM-5).
+ * next is the first untried candidate of the walk. The open takes
+ * one walk, and each reveal takes one of its own, so one reveal
+ * tries each reachable oracle at most once (ORC-QUORUM-5).
  *
  * state[i] is the last state of oracle i, for the report of a
  * refusal (ORC-QUORUM-6). passed counts the canary checks that
@@ -785,16 +788,35 @@ out:
 }
 
 /*
+ * in_quorum(s, oracle):
+ *	1 when the oracle index oracle holds a place of the session
+ *	quorum, and 0 when it holds none. The walk of one reveal
+ *	starts at the first candidate, so it meets the oracles of the
+ *	quorum again, and one oracle takes one place (ORC-QUORUM-5).
+ */
+static int
+in_quorum(const struct session *s, unsigned int oracle)
+{
+	unsigned int	 i;
+
+	for (i = 0; i < s->quorumlen; i++)
+		if (s->quorum[i] == oracle)
+			return 1;
+	return 0;
+}
+
+/*
  * substitute(s, victim):
  *	The next untried candidate, in the place victim of the
  *	session quorum (ORC-QUORUM-5). The canary check of the
  *	candidate comes before the substitution, so no entry record
  *	of it takes a request first (ORC-CANARY-1).
  *
- *	A candidate that fails a request steps to the next one, and a
- *	junk answer of a canary stops the session (ORC-CANARY-4). A
- *	walk that runs out of candidates gives -1: no untried quorum
- *	remains.
+ *	A candidate of the quorum and a candidate that fails a
+ *	request each step to the next one, and a junk answer of a
+ *	canary stops the session (ORC-CANARY-4). A walk that runs out
+ *	of candidates gives -1: no untried oracle remains for this
+ *	reveal.
  */
 static int
 substitute(struct session *s, unsigned int victim)
@@ -805,6 +827,8 @@ substitute(struct session *s, unsigned int victim)
 
 	while (s->next < s->candlen) {
 		i = s->cand[s->next++];
+		if (in_quorum(s, i))
+			continue;
 		rv = canary_take(s, i, s->opened ? s->idxkey : NULL, share,
 		    &live);
 		if (rv == ORACLE_EJUNK)
@@ -877,7 +901,9 @@ entry_open(struct session *s, const unsigned char *key)
  *	(ORC-QUORUM-4), so the attempts replace the places of the
  *	quorum in turn. Each attempt names its quorum oracles, and
  *	the substitutions end when no untried oracle remains
- *	(ORC-QUORUM-5).
+ *	(ORC-QUORUM-5). The walk of the substitutions starts at the
+ *	first candidate, so each reveal holds one attempt of each
+ *	reachable oracle.
  *
  *	keep holds the entry key in the session for session_seal(),
  *	and the key of every other reveal leaves memory directly
@@ -899,6 +925,7 @@ reveal(struct session *s, uint32_t slot, int keep)
 		explicit_bzero(s->plain, s->plainlen);
 		s->plainlen = 0;
 	}
+	s->next = 0;
 
 	for (;;) {
 		fail = 0;
@@ -1194,9 +1221,18 @@ session_canary(struct session *s, unsigned int oracle)
 	size_t			 len;
 	int			 live, n, rv = -1;
 
-	if (s == NULL || oracle == 0 || oracle > s->config.count ||
-	    s->config.oracle[oracle - 1].retired)
+	if (s == NULL || oracle == 0)
 		return -1;
+	if (oracle > s->config.count) {
+		warnx("this vault holds %u oracles, and no oracle %u",
+		    s->config.count, oracle);
+		return -1;
+	}
+	if (s->config.oracle[oracle - 1].retired) {
+		warnx("the position %u of this vault is retired, and it "
+		    "holds no oracle", oracle);
+		return -1;
+	}
 
 	/*
 	 * A canary enrollment takes two reads of the passphrase
@@ -1220,8 +1256,9 @@ session_canary(struct session *s, unsigned int oracle)
 	 * index share of the oracle, so a session that holds K_idx
 	 * re-wraps with the enrollment (ORC-CANARY-3, ORC-CANARY-8).
 	 * Every other path of the enrollment leaves no wrap file, so
-	 * this step reads the file before it, and it reports a
-	 * removal.
+	 * this step reads the file before it. A file that was there
+	 * and is gone takes the report of a removal, and an absent
+	 * file takes none.
 	 */
 	live = wrap_live(s, oracle);
 	ctx_of(&ctx, s, oracle);
@@ -1237,7 +1274,7 @@ session_canary(struct session *s, unsigned int oracle)
 			wrap_report(oracle);
 		goto out;
 	}
-	if (!s->opened)
+	if (!s->opened && live)
 		wrap_report(oracle);
 	rv = 0;
 out:

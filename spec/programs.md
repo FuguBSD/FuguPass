@@ -218,10 +218,12 @@ actions.
 - **PROG-ONESHOT-7** — The `create` subcommand must write the revocation kit
   ([ORC-REVOKE](oracle.md#orc-revoke)) at the path of
   [VAULT-LAYOUT](vault.md#vault-layout). It must print the path of that file.
-- **PROG-ONESHOT-8** — `add` and `gen` must take the entry type from the `-T`
-  option ([ENTRY-TYPES](entries.md#entry-types)). Each `-f name=value` option
-  gives one metadata field of the entry. `add` must take the origin class from
-  the `-c` option, and the class `stored` without that option
+- **PROG-ONESHOT-8** — `add` and `gen` must take the entry type of a new entry
+  from the `-T` option ([ENTRY-TYPES](entries.md#entry-types)). A rotation must
+  take the type from the index, and it must refuse a `-T` option of another type
+  ([VAULT-INDEX](vault.md#vault-index)). Each `-f name=value` option gives one
+  metadata field of the entry. `add` must take the origin class from the `-c`
+  option, and the class `stored` without that option
   ([ENTRY-MODEL](entries.md#entry-model)). The secret of `add` must enter from
   the terminal, and an argument must not carry it.
 - **PROG-ONESHOT-9** — `ls` must print one entry name on each line. `show` must

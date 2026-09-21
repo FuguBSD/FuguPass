@@ -38,8 +38,9 @@ at most one wrap at one oracle, and the plate recovers it.
 twice, and verifies the old one at each live canary. It re-enrolls a canary that
 fails for record-side causes first (ORC-ENROLL-8). Before the first `set_pin` of
 a slot it reconstructs `K_e` through the quorum and decrypts the slot's file
-(ORC-ENROLL-9). A decrypt failure with no untried quorum stops the change before
-any `set_pin` of that slot. The report holds the slot and each quorum.
+(ORC-ENROLL-9). A decrypt failure with no untried reachable oracle stops the
+change before any `set_pin` of that slot. The report holds the slot and each
+quorum.
 
 **The resume splits the records by the marker.** A restarted change uses the new
 pin for every record in the marker list and the old pin for every other record.

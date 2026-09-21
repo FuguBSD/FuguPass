@@ -44,14 +44,14 @@
 .Nm
 .Op Fl d Ar directory
 .Cm add
-.Fl T Ar type
+.Op Fl T Ar type
 .Op Fl c Ar class
 .Op Fl f Ar name Ns = Ns Ar value ...
 .Ar name
 .Nm
 .Op Fl d Ar directory
 .Cm gen
-.Fl T Ar type
+.Op Fl T Ar type
 .Op Fl f Ar name Ns = Ns Ar value ...
 .Ar name
 .Nm
@@ -89,7 +89,7 @@ The session unmasks one share of each answer, it reconstructs the
 key of the entry, and it opens the entry file of that key.
 A failure at one oracle moves that oracle out of the quorum, and the
 next reachable oracle takes the place.
-The session tries each reachable oracle at most once, and it stops
+Each reveal tries each reachable oracle at most once, and it stops
 when no untried reachable oracle remains.
 .Pp
 The options are as follows:
@@ -185,8 +185,10 @@ Enroll the canary record of one oracle again.
 is the position of that oracle in the ordered set.
 The unlock of the session verifies the current passphrase first, so
 a wiped canary of another oracle stops this subcommand.
-The subcommand then reads the new passphrase twice, and it enrolls
-the record under the new canary mask.
+The enrollment takes two reads of the passphrase, and the unlock
+took the first one.
+The subcommand therefore reads the same passphrase once more, and it
+enrolls the record under a fresh canary mask.
 It proves the fresh record with one immediate request, and it writes
 the canary seal of that oracle.
 .Pp
@@ -217,7 +219,7 @@ Print the words of a mnemonic entry.
 .El
 .It Xo
 .Cm add
-.Fl T Ar type
+.Op Fl T Ar type
 .Op Fl c Ar class
 .Op Fl f Ar name Ns = Ns Ar value ...
 .Ar name
@@ -236,12 +238,15 @@ no slot of the pool.
 .It Fl T Ar type
 The type of the entry: password, mnemonic, passphrase, totp, note,
 or shadow.
-This option is mandatory.
+A new entry needs this option, and a rotation takes the type of the
+entry from the index.
 .It Fl c Ar class
 The origin class of the entry: derived, stored, sovereign, or shadow.
 The default is stored.
 The type of the entry sets the classes that it takes, so a shadow
 entry needs this option.
+No file of the vault records the class, so the option reaches this
+command alone.
 .It Fl f Ar name Ns = Ns Ar value
 One metadata field of the entry.
 The option can come more than one time, and each field name comes
@@ -250,7 +255,7 @@ The type of the entry sets the field names that it takes.
 .El
 .It Xo
 .Cm gen
-.Fl T Ar type
+.Op Fl T Ar type
 .Op Fl f Ar name Ns = Ns Ar value ...
 .Ar name
 .Xc
@@ -268,7 +273,8 @@ Each old version stays recoverable from the master plate.
 .Bl -tag -width Ds
 .It Fl T Ar type
 The type of the entry: password, mnemonic, or passphrase.
-This option is mandatory.
+A new entry needs this option, and a rotation takes the type of the
+entry from the index.
 .It Fl f Ar name Ns = Ns Ar value
 One metadata field of the entry, as
 .Cm add

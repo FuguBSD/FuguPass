@@ -84,7 +84,7 @@ renders as a SeedQR code for a signer to scan ([PROG-QR](programs.md#prog-qr)).
   rotation consumes a new slot ([ENTRY-POOL](entries.md#entry-pool)). The
   version of an entry is the position of its slot in `slots`
   ([ENTRY-TYPES](entries.md#entry-types)). This rule owns that value, and the
-  `version` metadata field of an entry file records it.
+  `version` metadata field of a password entry records it (ENTRY-TYPES-5).
 - **ENTRY-ROTATION-2** — The entry metadata records the slot list of all
   versions.
 - **ENTRY-ROTATION-3** — Every old version of a derived entry stays recoverable,
