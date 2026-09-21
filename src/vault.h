@@ -49,9 +49,13 @@
  * rejects a secret field after a metadata field (VAULT-FORMAT-4).
  * The scanner walks the rows in order, and it takes the first row
  * that the field name matches. A row of a name form that holds an
- * index matches many names, so that row takes
- * VAULT_FIELD_REPEAT. The scanner holds the form of such a name,
- * and the caller holds the rule that one index takes one line.
+ * index matches many names, so that row takes VAULT_FIELD_REPEAT.
+ * A row with VAULT_FIELD_REPEAT takes one line of each object, and
+ * the scanner rejects a second line of one object
+ * (VAULT-FORMAT-8). The object of an indexed name is the name of
+ * the line, and the object of a fixed name is the value before the
+ * first space: the entry file name, the machine name, or the
+ * record name.
  *
  * vault_seal_write() and vault_seal_read() are the pair that
  * takes a sealed file of the tree. The first one seals a

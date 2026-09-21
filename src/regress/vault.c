@@ -744,7 +744,9 @@ readconfig(const char *name, const char *text, struct vault_config *cfg)
  * test_scan():
  *	The strict scanner takes the line format, and it rejects
  *	every other text (VAULT-FORMAT-5 to VAULT-FORMAT-8). Each
- *	case below names the rule that it holds.
+ *	case below names the rule that it holds. A row that repeats
+ *	takes one line of each object, so a second line of one
+ *	object fails (VAULT-FORMAT-8).
  */
 static int
 test_scan(void)
@@ -790,6 +792,17 @@ test_scan(void)
 		    vault_index_fields, "machine: LAPTOP\n", 0 },
 		{ "a row with an upper-case letter", table_bad,
 		    "Slot: 17\n", 0 },
+		{ "a canary record twice", vault_counters_fields,
+		    "canary-1: 7\ncanary-1: 8\n", 0 },
+		{ "a slot record twice", vault_counters_fields,
+		    "17-1: 3\n17-1: 4\n", 0 },
+		{ "an entry file name twice", vault_index_fields,
+		    "entry: " TEST_HEX64 " 17 the first entry\n"
+		    "entry: " TEST_HEX64 " 40 the second entry\n", 0 },
+		{ "a machine name twice", vault_index_fields,
+		    "machine: laptop\nmachine: laptop retired\n", 0 },
+		{ "a re-enrolled record twice", vault_change_fields,
+		    "done: 17-1\ndone: 17-1\n", 0 },
 		{ "the secret block first", vault_slot_fields, text_slot, 1 },
 		{ "a field that the table repeats", vault_change_fields,
 		    "done: 17-1\ndone: canary-2\n", 1 },

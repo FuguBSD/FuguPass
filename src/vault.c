@@ -78,8 +78,9 @@ const struct vault_field vault_slot_fields[] = {
 /*
  * The index (VAULT-FORMAT, VAULT-INDEX-2). One entry line holds one
  * entry, and one machine line holds one machine of the registry.
- * The value of a machine line carries the retired mark, and no
- * function of this file clears that mark (VAULT-INDEX-7).
+ * The value of a machine line carries the retired mark, and this
+ * file holds the form of that mark alone. No function here marks a
+ * machine, and no function here clears a mark.
  */
 const struct vault_field vault_index_fields[] = {
 	{ "entry", VAULT_NAME_FIXED, VAULT_VALUE_ENTRY, VAULT_FIELD_REPEAT },
@@ -94,8 +95,8 @@ const struct vault_field vault_index_fields[] = {
 /*
  * The counters file (VAULT-FORMAT, ORC-COUNTER). The field name is
  * the record name, so the file holds one line per record. The
- * scanner holds the form of a name, and the caller holds the rule
- * that one record takes one line.
+ * scanner holds the form of a name, and it rejects a second line
+ * of one record name (VAULT-FORMAT-8).
  */
 const struct vault_field vault_counters_fields[] = {
 	{ "canary-", VAULT_NAME_ORACLE, VAULT_VALUE_NUMBER,
@@ -313,8 +314,8 @@ record_ok(const char *text, size_t len)
 /*
  * machine_ok(text, len):
  *	0 when the len bytes at text hold one machine name, or one
- *	machine name, one space and the word retired (VAULT-INDEX-2,
- *	VAULT-INDEX-7). A machine name holds no space, so the
+ *	machine name, one space and the word retired
+ *	(VAULT-INDEX-2). A machine name holds no space, so the
  *	suffix is plain. derive_machine_check() holds the name rule
  *	(KEY-DEVICE-3).
  */
@@ -439,15 +440,80 @@ match_name(const struct vault_field *field, const char *name, size_t namelen,
 	return -1;
 }
 
+/*
+ * line_key(field, name, namelen, value, valuelen, key):
+ *	The object of one line of a row that repeats, to key. An
+ *	indexed name is the object of the line, and a fixed name
+ *	holds the object in the value before the first space: the
+ *	entry file name, the machine name, or the record name
+ *	(VAULT-FORMAT-8). The bytes of the object go to the return
+ *	value.
+ */
+static size_t
+line_key(const struct vault_field *field, const char *name, size_t namelen,
+    const char *value, size_t valuelen, const char **key)
+{
+	const char	*space;
+
+	if (field->form != VAULT_NAME_FIXED) {
+		*key = name;
+		return namelen;
+	}
+	*key = value;
+	if ((space = memchr(value, ' ', valuelen)) == NULL)
+		return valuelen;
+	return (size_t)(space - value);
+}
+
+/*
+ * dup_key(table, rows, row, text, at, key, keylen):
+ *	0 when no line of text before at holds the row row of table
+ *	with the object of keylen bytes at key. A second line of
+ *	one object gives -1 (VAULT-FORMAT-8). The scanner takes no
+ *	memory, so this function reads those lines again.
+ *
+ *	Every line before at passed the scanner, so each one holds
+ *	one colon and one line feed. A text that breaks that rule
+ *	gives -1 too.
+ */
+static int
+dup_key(const struct vault_field *table, size_t rows, size_t row,
+    const char *text, const char *at, const char *key, size_t keylen)
+{
+	struct vault_line	 line;
+	const char		*colon, *feed, *other, *seen;
+	size_t			 namelen, otherlen, r;
+
+	for (seen = text; seen < at; seen = &feed[1]) {
+		if ((feed = memchr(seen, '\n', (size_t)(at - seen))) == NULL)
+			return -1;
+		if ((colon = memchr(seen, ':', (size_t)(feed - seen))) == NULL)
+			return -1;
+		namelen = (size_t)(colon - seen);
+
+		/* The scanner takes the first row of a name. */
+		for (r = 0; r < rows; r++)
+			if (match_name(&table[r], seen, namelen, &line) == 0)
+				break;
+		if (r != row)
+			continue;
+		otherlen = line_key(&table[row], seen, namelen, &colon[2],
+		    (size_t)(feed - colon) - 2, &other);
+		if (otherlen == keylen && memcmp(other, key, keylen) == 0)
+			return -1;
+	}
+	return 0;
+}
+
 int
 vault_scan(const char *text, size_t textlen, const struct vault_field *table,
     vault_scan_cb cb, void *arg)
 {
 	struct vault_line	 line;
 	char			 value[VAULT_VALUE_MAX + 1];
-	const char		*at, *colon, *end, *feed;
+	const char		*at, *colon, *end, *feed, *key;
 	uint64_t		 seen = 0;
-	size_t			 namelen, rows, row, valuelen;
+	size_t			 keylen, namelen, rows, row, valuelen;
 	int			 metadata = 0, rv = -1;
 
 	memset(&line, 0, sizeof(line));
@@ -513,6 +579,15 @@ vault_scan(const char *text, size_t textlen, const struct vault_field *table,
 
 		if (value_ok(table[row].value, &colon[2], valuelen) != 0)
 			goto out;
+
+		/* A row that repeats takes one line of each object. */
+		if ((table[row].flags & VAULT_FIELD_REPEAT) != 0) {
+			keylen = line_key(&table[row], at, namelen, &colon[2],
+			    valuelen, &key);
+			if (dup_key(table, rows, row, text, at, key,
+			    keylen) != 0)
+				goto out;
+		}
 
 		memcpy(value, &colon[2], valuelen);
 		value[valuelen] = '\0';
