@@ -13,14 +13,19 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-# envelope, http, kat, oracle-client, share and vault, the six
-# programs of this directory. bsd.regress.mk builds each program of
-# PROGS, and a run of exit 0 is a pass. envelope holds the
-# known-answer tests of the oracle protocol, kat holds the tests of
-# the derivation tree, share holds the tests of the custody layer,
-# and vault holds the tests of the vault on disk. Each of those four
+# envelope, http, kat, oracle-client, sandbox, share and vault, the
+# seven programs of this directory. bsd.regress.mk builds each
+# program of PROGS, and a run of exit 0 is a pass. envelope holds
+# the known-answer tests of the oracle protocol, kat holds the tests
+# of the derivation tree, sandbox holds the test of the unveil list
+# and the pledge call, share holds the tests of the custody layer,
+# and vault holds the tests of the vault on disk. Each of those five
 # is a whole test, and REGRESS_TARGETS names the default target of
 # it.
+#
+# sandbox runs on OpenBSD alone, because unveil(2) and pledge(2)
+# restrict this process. Every program of this directory builds on
+# OpenBSD alone (PROG-BUILD-1).
 #
 # http is the driver of the transport tests, and it holds no test
 # of its own. A test of a transport needs a peer, so http.t starts
@@ -45,9 +50,9 @@
 # Every other program of PROGS takes a line.
 #
 # bsd.prog.mk takes the source of each program from the name of it,
-# so envelope.c, http.c, kat.c, oracle-client.c, share.c and vault.c
-# need no SRCS line. Every test source sits in this one directory
-# (PROG-BUILD-1).
+# so envelope.c, http.c, kat.c, oracle-client.c, sandbox.c, share.c
+# and vault.c need no SRCS line. Every test source sits in this one
+# directory (PROG-BUILD-1).
 #
 # Two include directories reach the headers of a test. The first one
 # holds the interfaces of the flat sources, and the second one holds
@@ -58,11 +63,11 @@
 # envelope.c holds a name of its own in each directory: the interface
 # is envelope.h, and the vectors are vectors/oracle.h.
 #
-# Two C files share the name envelope.c, and two share the name
-# http.c: this directory holds the test, and the directory above
-# holds the archive source. This file sets no .PATH, so each
-# program takes the source of this directory, and the archive
-# carries the other one.
+# Three C files of this directory carry the name of an archive
+# source: envelope.c, http.c and sandbox.c. This directory holds the
+# test, and the directory above holds the archive source. This file
+# sets no .PATH, so each program takes the source of this directory,
+# and the archive carries the other one.
 #
 # The archive one directory up links nothing, so this directory owns
 # the link line of the libraries. libsecp256k1 comes from the ports
@@ -75,7 +80,7 @@
 
 .include <bsd.own.mk>
 
-PROGS=		envelope http kat oracle-client share vault
+PROGS=		envelope http kat oracle-client sandbox share vault
 
 # bsd.prog.mk takes a manual page name from each name of PROGS, and
 # this directory holds no manual page. That line sets a value for an
@@ -108,7 +113,8 @@ DPADD+=		${LIBTLS} ${LIBSSL} ${LIBCRYPTO} ${LIBUTIL}
 CLEANFILES+=	http.body http.request
 
 REGRESS_TARGETS=	run-regress-envelope run-regress-kat \
-			run-regress-share run-regress-vault run-http
+			run-regress-sandbox run-regress-share \
+			run-regress-vault run-http
 
 run-http: http
 	perl ${.CURDIR}/http.t ${.OBJDIR}/http </dev/null

@@ -19,24 +19,15 @@
  * and the passphrase read (PROG-SPLIT-1). fugupass.h states the two
  * functions that a subcommand takes from this file.
  *
- * main() holds the order of the sandbox. It sets RLIMIT_CORE to
- * zero first, so no crash of this program writes a secret to a core
- * file (SEC-MEMORY-3). It makes every unveil call next, and it
- * pledges last (PROG-SPLIT-3).
+ * main() sets RLIMIT_CORE to zero first, so no crash of this
+ * program writes a secret to a core file (SEC-MEMORY-3). It enters
+ * the sandbox next, before the subcommand runs (PROG-SPLIT-3).
  *
- * The unveil list holds the vault directory, the terminal, the
- * three helper programs, the runtime files of a child, the resolver
- * files, and the trust anchors of libtls (PROG-SPLIT-3,
- * PROG-SPLIT-12). helper.h gives the path of each program, so the
- * list of the sandbox and the list of the child runs agree.
- * PROG-SPLIT-10 derives the paths of the Perl runtime of the
- * interface process, and this file carries no derived path yet.
- *
- * unveil(2) refuses a path that no file holds. main() therefore
- * makes the vault directory before the list, and a machine without
- * one of the other paths gets a list that is one path shorter. The
- * ceremony makes the machine subdirectory inside the vault
- * directory (VAULT-LAYOUT-4).
+ * sandbox.c holds the unveil list and the pledge call, and
+ * src/regress/sandbox.c makes the same call as main(). The call
+ * makes the vault directory, because unveil(2) refuses a path that
+ * no file holds. The ceremony makes the machine subdirectory inside
+ * the vault directory (VAULT-LAYOUT-4).
  *
  * The frame dispatches on the first argument after the options, and
  * the table below holds one row of each subcommand (PROG-ONESHOT-4).
@@ -56,10 +47,8 @@
 
 #include <sys/param.h>
 #include <sys/resource.h>
-#include <sys/stat.h>
 
 #include <err.h>
-#include <errno.h>
 #include <limits.h>
 #include <readpassphrase.h>
 #include <signal.h>
@@ -71,14 +60,10 @@
 #include "ceremony.h"
 #include "derive.h"
 #include "fugupass.h"
-#include "helper.h"
-#include "http.h"
+#include "sandbox.h"
 
 /* The vault directory of a run without the -d option, under HOME. */
 #define VAULT_DIR	".fugupass"
-
-/* The promises of the core process (PROG-SPLIT-3). */
-#define PROMISES	"stdio rpath wpath cpath flock proc exec inet dns tty"
 
 /* One subcommand of the frame (PROG-ONESHOT-4). */
 struct subcommand {
@@ -87,14 +72,7 @@ struct subcommand {
 	int		 (*run)(int, char *[], const char *);
 };
 
-/* One path of the unveil list, with the permissions of that path. */
-struct unveil_path {
-	const char	*path;
-	const char	*perm;
-};
-
 static int	 cmd_create(int, char *[], const char *);
-static int	 sandbox(const char *);
 static void	 usage(void);
 static int	 vault_dir(const char *, char *, size_t);
 
@@ -105,31 +83,6 @@ static int	 vault_dir(const char *, char *, size_t);
 static const struct subcommand commands[] = {
 	{ "create",	"-k threshold -m machine -r rounds oracle ...",
 	    cmd_create }
-};
-
-/*
- * The unveil list, without the vault directory and without the
- * three helper programs (PROG-SPLIT-3). sandbox() adds those paths,
- * because a path of the vault comes from the command line, and a
- * path of a helper comes from helper.h.
- */
-static const struct unveil_path unveil_list[] = {
-	/* The terminal of the passphrase read (SEC-MEMORY-4). */
-	{ "/dev/tty",			"rw" },
-
-	/* The runtime files of a child program. */
-	{ "/usr/libexec/ld.so",		"r" },
-	{ "/var/run/ld.so.hints",	"r" },
-	{ "/usr/lib",			"r" },
-	{ "/usr/local/lib",		"r" },
-
-	/* The resolver files of a name lookup. */
-	{ "/etc/resolv.conf",		"r" },
-	{ "/etc/hosts",			"r" },
-	{ "/etc/services",		"r" },
-
-	/* The trust anchors of a https oracle (PROG-SPLIT-12). */
-	{ HTTP_CA_FILE,			"r" }
 };
 
 /*
@@ -174,50 +127,6 @@ vault_dir(const char *opt, char *buf, size_t bufsize)
 		len = snprintf(buf, bufsize, "%s/%s", home, VAULT_DIR);
 	}
 	if (len < 0 || (size_t)len >= bufsize)
-		return -1;
-	return 0;
-}
-
-/*
- * sandbox(vault):
- *	The unveil list of the vault directory vault, and the pledge
- *	of the core process (PROG-SPLIT-3). The call makes the vault
- *	directory, because unveil(2) refuses a path that no file
- *	holds.
- *
- *	A path of the list that no file holds leaves ENOENT, and the
- *	list then holds one path less. The process stays inside the
- *	list, so an absent helper program and an absent resolver file
- *	each restrict this process more.
- *
- *	The call gives -1 on every other failure, and the caller
- *	stops the program then.
- */
-static int
-sandbox(const char *vault)
-{
-	const char	*path;
-	size_t		 i;
-	int		 which;
-
-	if (mkdir(vault, S_IRWXU) == -1 && errno != EEXIST)
-		return -1;
-	if (unveil(vault, "rwc") == -1)
-		return -1;
-	for (i = 0; i < nitems(unveil_list); i++) {
-		if (unveil(unveil_list[i].path, unveil_list[i].perm) == -1 &&
-		    errno != ENOENT)
-			return -1;
-	}
-	for (which = 0; which < HELPER_MAX; which++) {
-		if ((path = helper_path((enum helper)which)) == NULL)
-			return -1;
-		if (unveil(path, "x") == -1 && errno != ENOENT)
-			return -1;
-	}
-	if (unveil(NULL, NULL) == -1)
-		return -1;
-	if (pledge(PROMISES, NULL) == -1)
 		return -1;
 	return 0;
 }
@@ -407,7 +316,7 @@ main(int argc, char *argv[])
 
 	if (vault_dir(dir, vault, sizeof(vault)) != 0)
 		errx(1, "no vault directory");
-	if (sandbox(vault) != 0)
+	if (sandbox_enter(vault) != 0)
 		err(1, "sandbox");
 
 	return commands[i].run(argc, argv, vault);

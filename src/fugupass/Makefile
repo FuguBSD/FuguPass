@@ -21,8 +21,10 @@
 # than one directory shares belongs to the archive of lib, and
 # src/lib/Makefile names it there.
 #
-# bsd.prog.mk takes the manual page name from PROG, so the page
-# fugupass.1 of this directory needs no MAN line.
+# bsd.prog.mk takes the manual page name from PROG, and the target
+# all needs that page. This directory holds no page yet, so the
+# empty MAN line below stops that default. The manual page of the
+# program lands with the page of each helper.
 #
 # The archive of lib holds every other source of the program, and
 # this file links it with the library list of that archive.
@@ -38,6 +40,7 @@
 
 PROG=		fugupass
 SRCS=		fugupass.c
+MAN=
 
 .PATH:		${.CURDIR}/..
 
