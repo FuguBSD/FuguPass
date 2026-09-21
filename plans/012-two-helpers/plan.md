@@ -44,14 +44,28 @@ first (SEC-MEMORY-3).
 **The render helper knows two shapes.** A mnemonic renders in the Standard
 SeedQR form, version 2, numeric mode, so a signer scans it from the screen
 (PROG-QR-2). A vault file renders as one QR code up to the one-code capacity. A
-larger file is a report, not a code (PROG-QR-3, VAULT-BACKUP-4). The output is
-UTF-8 half blocks (PROG-QR-1).
+larger file is a report, not a code (PROG-QR-3, VAULT-BACKUP-4). Each code
+carries a quiet zone of 4 light modules on every side. The output is UTF-8 half
+blocks (PROG-QR-1).
+
+**The mnemonic code is mask 0.** FuguSeed pins mask pattern 0 (its D-08 and its
+QR-MATRIX-4), and its one picture fixture holds that mask. `libqrencode` picks a
+mask by penalty score, so it can emit another one. The helper therefore re-masks
+a mnemonic code. It reads the mask number from the format bits of the library
+output. It undoes that pattern over the data modules, and applies pattern 0. It
+then writes the format bits `111011111000100` for level L and mask 0. The
+implementation adds one rule to PROG-QR. "A mnemonic code must be version 2,
+level L, numeric mode, and mask pattern 0." The vault-file shape of PROG-QR-3
+pins no mask.
 
 **The fixture is the FuguSeed fixture.** Test vector 4 of the SeedQR
-specification is the one reference image, and FuguSeed holds its 25 x 25 picture
-as text. This plan holds the same picture, rasterizes it into a PGM image with a
-quiet zone, and feeds the decoder. The two projects then prove the handoff on
-one public vector: FuguSeed draws it, and FuguPass reads it.
+specification is the one reference image. FuguSeed holds its 25 x 25 picture as
+text at `t/fuguseed/fixtures/qr/vector4.picture`, at commit `18b2bfc`, with the
+SHA-256 `6753c34ec4e0029578a9e1d5afe652d3af97f1a32559b4208f904ff513f48d1a`. This
+plan copies that file byte for byte, and it records the commit and the digest
+beside the copy. It rasterizes the picture into a PGM image with a quiet zone of
+4 light modules on each side, and feeds the decoder. The two projects then prove
+the handoff on one public vector: FuguSeed draws it, and FuguPass reads it.
 
 **The default of a mnemonic is the code.** `show` on a mnemonic entry pipes the
 words to `fugupass-qr`, and an explicit flag prints them as text
@@ -86,7 +100,9 @@ boundary of plan 006.
 `src/regress/qr` holds:
 
 - The render of the 12 words of test vector 4, mapped from half blocks back to
-  modules, equals the picture.
+  modules, equals the picture module for module. The picture is mask 0, so the
+  test fails when the re-mask step is absent.
+- The render carries a quiet zone of 4 light modules on each side.
 - A vault file of one sealed entry renders as one code, and a file above the
   capacity gives a report and no code (PROG-QR-3).
 
