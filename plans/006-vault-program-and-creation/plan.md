@@ -2,8 +2,7 @@
 
 ## Status
 
-Proposed. It waits on plan 005 for the record client. Plan 007 to plan 010 wait
-on it.
+Proposed. It can land now. Plan 007 to plan 010 wait on it.
 
 Implements: CER-CREATE, KEY-DEVICE, KEY-ENTRY. Implements: KEY-MASK without
 KEY-MASK-10. Implements: KEY-BIP85 without KEY-BIP85-6. Implements: TEST-HARNESS

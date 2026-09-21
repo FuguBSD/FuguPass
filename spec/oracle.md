@@ -136,8 +136,9 @@ check in [TEST-CALIBRATE](testing.md#test-calibrate) records the result.
 - **ORC-COUNTER-5** — The client must not send the counter value `0xFFFFFFFF`,
   except in a revocation request ([ORC-REVOKE](oracle.md#orc-revoke)). A
   persisted counter of `0xFFFFFFFF` leaves no strictly greater value, so the
-  record becomes unaddressable by any later request (FuguOracle OPS-GET-2). The
-  Unix-seconds scheme stays below this value until the year 2106.
+  record becomes unaddressable by any later request (FuguOracle OPS-GET-2,
+  FuguOracle OPS-SET-2). The Unix-seconds scheme stays below this value until
+  the year 2106.
 - **ORC-COUNTER-6** — A too-low counter takes the junk path and burns no strike.
   The attempt count moves only on a wrong PIN (FuguOracle OPS-GET-2, FuguOracle
   OPS-GET-5). The client recovers when it sends a higher counter.
