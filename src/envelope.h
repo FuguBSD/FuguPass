@@ -111,11 +111,17 @@
  *	arc4random(3) (ORC-CONFORM-5, SEC-ENTROPY-4). Every request
  *	draws both again.
  *
- *	This function is the one entropy seam of the file. Every
- *	other function takes the bytes of the draw as an argument, so
- *	the known-answer vectors of FuguOracle apply to them. The
- *	draw repeats until the curve takes the key, and the curve
- *	rejects one scalar in about 2^128.
+ *	This function draws the keypair and the IV, and no other
+ *	value. ORC-CONFORM-5 asks for 32 fresh bytes of arc4random(3)
+ *	in each set_pin request as well. The caller draws those
+ *	bytes, and it gives them to envelope_request() as the entropy
+ *	argument. The service mixes them into the key share that it
+ *	stores (FuguOracle OPS-SET-3).
+ *
+ *	Every other function takes the bytes of a draw as an
+ *	argument, so the known-answer vectors of FuguOracle apply to
+ *	them. The draw repeats until the curve takes the key, and the
+ *	curve rejects one scalar in about 2^128.
  */
 void	envelope_draw(unsigned char *, unsigned char *);
 
@@ -220,9 +226,12 @@ int	envelope_open(const unsigned char *, const unsigned char *,
  *	ENVELOPE_PINLEN bytes at pin, and the entropy of
  *	ENVELOPE_ENTROPYLEN bytes at entropy.
  *
- *	A NULL entropy makes the 97-byte payload form of a get_pin
- *	request, and an entropy makes the 129-byte form of a set_pin
- *	request. outsize therefore counts at least ENVELOPE_GET_LEN
+ *	A NULL entropy makes the 97-byte payload form, and an
+ *	entropy makes the 129-byte form. A set_pin request needs the
+ *	129-byte form (FuguOracle OPS-SET-1), and a get_pin request
+ *	takes either form. The oracle ignores the entropy of a
+ *	get_pin payload (FuguOracle PROTO-PAYLOAD, FuguOracle
+ *	OPS-GET-1). outsize therefore counts at least ENVELOPE_GET_LEN
  *	bytes, or ENVELOPE_SET_LEN bytes for the longer form.
  *	ENVELOPE_REQUEST_MAX counts for both, and outlen takes the
  *	length of the envelope.

@@ -74,6 +74,12 @@
 /*
  * The bytes that one body carries, after the base64 step. The
  * wrapper takes the other bytes of the body.
+ *
+ * FuguOracle http.h gives the same name a larger number. The
+ * derivation there counts the whole body as base64, and it drops
+ * the wrapper of the data member. The decoded bytes of a body of
+ * HTTP_BODY_MAX bytes reach this value and no more, so this file
+ * keeps the tighter bound.
  */
 #define HTTP_DATA_MAX	((HTTP_BODY_MAX - HTTP_WRAP_LEN) / 4 * 3)
 

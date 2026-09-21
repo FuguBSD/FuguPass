@@ -58,8 +58,13 @@
 /* The bytes of a number, of true, of false, and of null. */
 #define TOKEN_BYTES	"+-.0123456789Eaeflnrstu"
 
-/* The base64 of HTTP_DATA_MAX bytes, with the NUL byte. */
-#define B64_MAX		(HTTP_BODY_MAX - HTTP_WRAP_LEN + 1)
+/*
+ * The base64 of one body, with the NUL byte. The writer needs the
+ * base64 of HTTP_DATA_MAX bytes only. The reader takes a value as
+ * long as one whole body, the bound of the reader of FuguOracle
+ * (FuguOracle http.c).
+ */
+#define B64_MAX		(HTTP_BODY_MAX + 1)
 
 /* The seconds of one read and of one write on the socket. */
 #define CONN_TIMEOUT	30
