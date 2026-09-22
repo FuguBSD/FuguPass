@@ -34,6 +34,13 @@
  * The frames of a plate scan are blank while kern.video.record is 0.
  * The driver blanks the image data of every reader at that value, and
  * it is the default (PROG-SCAN-11).
+ *
+ * read(2) on that driver blocks with no bound, so a device that opens
+ * and gives no frame would hold the ceremony of the caller. The frame
+ * loop therefore waits for each frame with poll(2), until the bound
+ * of PROG-SCAN-9 (SCAN_SECONDS). poll(2) needs the stdio promise
+ * alone, and video(4) reports a frame to it through the read filter
+ * of the driver.
  */
 
 #include <sys/types.h>
@@ -43,6 +50,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -238,19 +246,140 @@ scan_decode(const unsigned char *gray, int w, int h, char *line)
 }
 
 int
-scan_run(const char *device, FILE *out, FILE *err)
+scan_wait(int fd, time_t deadline)
 {
-	struct v4l2_capability	 cap;
-	struct v4l2_format	 fmt;
+	struct pollfd	 pfd;
+	time_t		 now;
+	int		 ms, n;
+
+	/*
+	 * read(2) on video(4) blocks until the device gives a frame,
+	 * and it takes no timeout. The wait below holds the bound of
+	 * PROG-SCAN-9, so a device that gives no frame ends the scan
+	 * at the deadline. poll(2) needs the stdio promise alone.
+	 */
+	now = time(NULL);
+	if (now >= deadline)
+		return 0;
+	if (deadline - now > SCAN_SECONDS)
+		ms = SCAN_SECONDS * 1000;
+	else
+		ms = (int)(deadline - now) * 1000;
+	pfd.fd = fd;
+	pfd.events = POLLIN;
+	pfd.revents = 0;
+	if ((n = poll(&pfd, 1, ms)) == -1)
+		return -1;
+	if (n == 0)
+		return 0;
+	return 1;
+}
+
+int
+scan_frames(const struct scan_stream *st, int seconds, FILE *out, FILE *err)
+{
 	unsigned char		*frame = NULL, *gray = NULL;
 	char			 line[SCAN_LINE_MAX];
 	enum scan_result	 last = SCAN_NO_CODE, result;
 	time_t			 deadline;
 	ssize_t			 n;
-	size_t			 framelen = 0, graylen = 0;
-	int			 fd = -1, w, h, stride, x, y, rv = 1;
+	size_t			 graylen;
+	int			 x, y, frames = 0, ready, rv = 1;
 
 	memset(line, 0, sizeof(line));
+	graylen = (size_t)st->w * st->h;
+	if ((frame = malloc(st->framelen)) == NULL ||
+	    (gray = malloc(graylen)) == NULL) {
+		fprintf(err, "fugupass-scan: the frame buffer: %s\n",
+		    strerror(errno));
+		goto out;
+	}
+
+	/*
+	 * One scan reads frames for seconds seconds (PROG-SCAN-9).
+	 * The core process reads the standard output of this child to
+	 * its end, so an endless read would hold that ceremony. The
+	 * loop therefore waits for each frame, and the wait ends at
+	 * the deadline.
+	 */
+	deadline = time(NULL) + seconds;
+	for (;;) {
+		if (time(NULL) >= deadline) {
+			if (frames == 0)
+				fprintf(err, "fugupass-scan: %s: the device "
+				    "gives no frame in %d seconds\n",
+				    st->device, seconds);
+			else
+				fprintf(err, "fugupass-scan: no Standard "
+				    "SeedQR in %d seconds: %s\n", seconds,
+				    scan_strerror(last));
+			goto out;
+		}
+		ready = scan_wait(st->fd, deadline);
+		if (ready == -1) {
+			if (errno == EINTR)
+				continue;
+			fprintf(err, "fugupass-scan: %s: the wait for a "
+			    "frame: %s\n", st->device, strerror(errno));
+			goto out;
+		}
+		if (ready == 0)
+			continue;
+		n = read(st->fd, frame, st->framelen);
+		if (n == -1) {
+			if (errno == EINTR)
+				continue;
+			fprintf(err, "fugupass-scan: %s: the read of a frame: "
+			    "%s\n", st->device, strerror(errno));
+			goto out;
+		}
+		if ((size_t)n < (size_t)st->stride * st->h) {
+			fprintf(err, "fugupass-scan: %s: the device gives %zd "
+			    "bytes of a frame of %zu\n", st->device, n,
+			    (size_t)st->stride * st->h);
+			goto out;
+		}
+		frames++;
+		for (y = 0; y < st->h; y++)
+			for (x = 0; x < st->w; x++)
+				gray[(size_t)y * st->w + x] =
+				    frame[(size_t)y * st->stride + 2 * x];
+		result = scan_decode(gray, st->w, st->h, line);
+		if (result != SCAN_OK) {
+			last = result;
+			continue;
+		}
+		if (fputs(line, out) == EOF || fflush(out) == EOF) {
+			fprintf(err, "fugupass-scan: the write of the words "
+			    "fails\n");
+			goto out;
+		}
+		rv = 0;
+		goto out;
+	}
+out:
+	if (frame != NULL) {
+		explicit_bzero(frame, st->framelen);
+		free(frame);
+	}
+	if (gray != NULL) {
+		explicit_bzero(gray, graylen);
+		free(gray);
+	}
+	explicit_bzero(line, sizeof(line));
+	return rv;
+}
+
+int
+scan_run(const char *device, FILE *out, FILE *err)
+{
+	struct v4l2_capability	 cap;
+	struct v4l2_format	 fmt;
+	struct scan_stream	 st;
+	int			 fd = -1, rv = 1;
+
+	memset(&st, 0, sizeof(st));
+	st.device = device;
 
 	/*
 	 * The open comes before the pledge call, because the promise
@@ -298,80 +427,22 @@ scan_run(const char *device, FILE *out, FILE *err)
 		    "frame, and the helper reads that one format\n", device);
 		goto out;
 	}
-	w = (int)fmt.fmt.pix.width;
-	h = (int)fmt.fmt.pix.height;
-	stride = (int)fmt.fmt.pix.bytesperline;
-	framelen = fmt.fmt.pix.sizeimage;
-	if (w <= 0 || h <= 0 || w > SCAN_SIDE_MAX || h > SCAN_SIDE_MAX ||
-	    stride < 2 * w || framelen < (size_t)stride * h) {
+	st.w = (int)fmt.fmt.pix.width;
+	st.h = (int)fmt.fmt.pix.height;
+	st.stride = (int)fmt.fmt.pix.bytesperline;
+	st.framelen = fmt.fmt.pix.sizeimage;
+	if (st.w <= 0 || st.h <= 0 || st.w > SCAN_SIDE_MAX ||
+	    st.h > SCAN_SIDE_MAX || st.stride < 2 * st.w ||
+	    st.framelen < (size_t)st.stride * st.h) {
 		fprintf(err, "fugupass-scan: %s: the frame of %d by %d "
 		    "pixels is outside the bounds of the helper\n", device,
-		    w, h);
+		    st.w, st.h);
 		goto out;
 	}
 
-	graylen = (size_t)w * h;
-	if ((frame = malloc(framelen)) == NULL ||
-	    (gray = malloc(graylen)) == NULL) {
-		fprintf(err, "fugupass-scan: the frame buffer: %s\n",
-		    strerror(errno));
-		goto out;
-	}
-
-	/*
-	 * One scan reads frames for SCAN_SECONDS seconds (PROG-SCAN-9).
-	 * The core process reads the standard output of this child to
-	 * its end, so an endless read would hold that ceremony.
-	 */
-	deadline = time(NULL) + SCAN_SECONDS;
-	for (;;) {
-		if (time(NULL) >= deadline) {
-			fprintf(err, "fugupass-scan: no Standard SeedQR in "
-			    "%d seconds: %s\n", SCAN_SECONDS,
-			    scan_strerror(last));
-			goto out;
-		}
-		n = read(fd, frame, framelen);
-		if (n == -1) {
-			if (errno == EINTR)
-				continue;
-			fprintf(err, "fugupass-scan: %s: the read of a frame: "
-			    "%s\n", device, strerror(errno));
-			goto out;
-		}
-		if ((size_t)n < (size_t)stride * h) {
-			fprintf(err, "fugupass-scan: %s: the device gives %zd "
-			    "bytes of a frame of %zu\n", device, n,
-			    (size_t)stride * h);
-			goto out;
-		}
-		for (y = 0; y < h; y++)
-			for (x = 0; x < w; x++)
-				gray[(size_t)y * w + x] =
-				    frame[(size_t)y * stride + 2 * x];
-		result = scan_decode(gray, w, h, line);
-		if (result != SCAN_OK) {
-			last = result;
-			continue;
-		}
-		if (fputs(line, out) == EOF || fflush(out) == EOF) {
-			fprintf(err, "fugupass-scan: the write of the words "
-			    "fails\n");
-			goto out;
-		}
-		rv = 0;
-		goto out;
-	}
+	st.fd = fd;
+	rv = scan_frames(&st, SCAN_SECONDS, out, err);
 out:
-	if (frame != NULL) {
-		explicit_bzero(frame, framelen);
-		free(frame);
-	}
-	if (gray != NULL) {
-		explicit_bzero(gray, graylen);
-		free(gray);
-	}
-	explicit_bzero(line, sizeof(line));
 	if (fd != -1)
 		close(fd);
 	return rv;

@@ -36,6 +36,13 @@
  * setrlimit(2) holds for the life of a process, so the core-limit
  * probe runs in a child of its own.
  *
+ * No probe opens a camera, so the probe of the scan bound gives the
+ * frame loop the read end of a pipe. The write end of that pipe
+ * stays open and carries no byte, so the descriptor never holds a
+ * frame and a read of it blocks without end. That probe runs in a
+ * child of its own as well, and the parent kills a child that the
+ * bound of PROG-SCAN-9 does not end.
+ *
  * The program prints nothing on a pass, and it exits 0. A wrong value
  * prints the probe to the standard error, and the program exits 1.
  *
@@ -50,9 +57,12 @@
 #include <err.h>
 #include <errno.h>
 #include <limits.h>
+#include <paths.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "scan.h"
@@ -101,6 +111,16 @@
 #define GUARD		16
 #define GUARD_BYTE	0x7f
 
+/*
+ * The seconds of the probe of the scan bound. DEADLINE_SECONDS is
+ * the bound that the probe gives the frame loop, and DEADLINE_KILL
+ * is the wait of the parent for the child. A loop that reads before
+ * it waits blocks without end, and the parent then reaches that
+ * second value.
+ */
+#define DEADLINE_SECONDS	2
+#define DEADLINE_KILL		20
+
 /* One rasterized picture. side holds the pixels of one side. */
 struct raster {
 	int		side;
@@ -114,6 +134,7 @@ static int	 test_line(void);
 static int	 test_blank(void);
 static int	 test_reject(const char *, enum scan_result, const char *);
 static int	 test_nocore(void);
+static int	 test_deadline(void);
 
 /*
  * read_raster(name, r):
@@ -492,6 +513,100 @@ test_nocore(void)
 	return -1;
 }
 
+/*
+ * test_deadline():
+ *	The frame loop must end at the bound of one scan
+ *	(PROG-SCAN-9). read(2) on video(4) takes no timeout, so a
+ *	device that opens and gives no frame would hold the ceremony
+ *	of the caller without end.
+ *
+ *	The probe gives the loop the read end of a pipe. Both ends
+ *	stay open and no byte enters that pipe, so the descriptor
+ *	never holds a frame. A loop that waits for each frame ends
+ *	at the bound and gives 1. A loop that reads first blocks
+ *	without end, and the parent kills the child of it.
+ *
+ *	The probe reads the seconds of the run as well. A loop that
+ *	gives up before the bound fails the scan of a slow camera.
+ */
+static int
+test_deadline(void)
+{
+	struct scan_stream	 st;
+	FILE			*null;
+	time_t			 start, spent;
+	pid_t			 pid, got;
+	int			 fds[2], status, i, rv = -1;
+
+	if (pipe(fds) == -1) {
+		warn("the probe of the scan bound: pipe");
+		return -1;
+	}
+	memset(&st, 0, sizeof(st));
+	st.device = "the pipe of the probe";
+	st.fd = fds[0];
+	st.w = 8;
+	st.h = 8;
+	st.stride = 2 * st.w;
+	st.framelen = (size_t)st.stride * st.h;
+
+	start = time(NULL);
+	if ((pid = fork()) == -1) {
+		warn("the probe of the scan bound: fork");
+		goto out;
+	}
+	if (pid == 0) {
+		if ((null = fopen(_PATH_DEVNULL, "w")) == NULL)
+			_exit(3);
+		_exit(scan_frames(&st, DEADLINE_SECONDS, null, null));
+	}
+	for (i = 0; i < DEADLINE_KILL; i++) {
+		if ((got = waitpid(pid, &status, WNOHANG)) == -1) {
+			warn("the probe of the scan bound: waitpid");
+			goto out;
+		}
+		if (got == pid)
+			break;
+		sleep(1);
+	}
+	if (i == DEADLINE_KILL) {
+		kill(pid, SIGKILL);
+		waitpid(pid, &status, 0);
+		warnx("the frame loop reads a stream that gives no frame, "
+		    "and it does not end in %d seconds. PROG-SCAN-9 bounds "
+		    "one scan", DEADLINE_KILL);
+		goto out;
+	}
+	spent = time(NULL) - start;
+	if (!WIFEXITED(status)) {
+		warnx("the probe of the scan bound: the signal %d stops the "
+		    "child", WTERMSIG(status));
+		goto out;
+	}
+	if (WEXITSTATUS(status) == 3) {
+		warnx("the probe of the scan bound: the child opens no %s",
+		    _PATH_DEVNULL);
+		goto out;
+	}
+	if (WEXITSTATUS(status) != 1) {
+		warnx("the frame loop gives the status %d at the bound of "
+		    "one scan, and a failed scan gives 1",
+		    WEXITSTATUS(status));
+		goto out;
+	}
+	if (spent < DEADLINE_SECONDS) {
+		warnx("the frame loop gives up after %lld seconds, and the "
+		    "bound of this probe is %d", (long long)spent,
+		    DEADLINE_SECONDS);
+		goto out;
+	}
+	rv = 0;
+out:
+	close(fds[0]);
+	close(fds[1]);
+	return rv;
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -517,6 +632,8 @@ main(int argc, char *argv[])
 	    "48 digits with a group above 2047") != 0)
 		rv = 1;
 	if (test_nocore() != 0)
+		rv = 1;
+	if (test_deadline() != 0)
 		rv = 1;
 	return rv;
 }

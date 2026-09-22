@@ -115,14 +115,15 @@
 #define RUNTIME_FILE	"/usr/libexec/ld.so"
 
 /*
- * The video devices of the machine (PROG-SPLIT-13). The directory
- * holds one entry of each device, and the name of each one starts
- * with the prefix. VIDEO_MAX bounds the count of the paths that the
- * probe of a child takes on its command line.
+ * The video devices of the unveil list (PROG-SPLIT-13). The list
+ * holds the prefix itself and the ten units 0 to 9, so VIDEO_MAX is
+ * 11 paths. A machine can hold a device above that bound, and the
+ * list of the core carries no such path. VIDEO_MAX bounds the count
+ * of the paths that the probe of a child takes on its command line.
  */
 #define VIDEO_DIR	"/dev"
 #define VIDEO_PREFIX	"video"
-#define VIDEO_MAX	16
+#define VIDEO_MAX	11
 
 /*
  * The exit status of the probe of a child. 0 is a pass, and each
@@ -136,6 +137,7 @@
 #define EXEC_VIDEO	7	/* the list hides a video device */
 #define EXEC_PROMISE	8	/* the pledge of the scan helper fails */
 #define EXEC_NOCORE	9	/* the core limit call of a helper fails */
+#define EXEC_QRSANDBOX	10	/* the sandbox of the render helper fails */
 
 static int	 probe_hidden(const char *);
 static int	 probe_readonly(const char *);
@@ -503,7 +505,7 @@ exec_probe(const char *hidden, char *device[], int count)
 	if (qr_sandbox() != 0) {
 		warnx("the sandbox of the render helper fails: errno %d",
 		    errno);
-		return EXEC_NOCORE;
+		return EXEC_QRSANDBOX;
 	}
 	return 0;
 }
@@ -511,8 +513,12 @@ exec_probe(const char *hidden, char *device[], int count)
 /*
  * video_devices(list, size):
  *	The video devices of this machine, to the size paths at list.
- *	The call reads VIDEO_DIR, and it takes each entry of the name
- *	prefix VIDEO_PREFIX that this process opens.
+ *	The call reads VIDEO_DIR, and it takes each entry of the
+ *	unveil list of PROG-SPLIT-13 that this process opens. That
+ *	list holds VIDEO_PREFIX itself and the ten units 0 to 9, so
+ *	the call drops /dev/video10 and every other name outside it.
+ *	The list of the core carries no such path, and the child of
+ *	the probe gets ENOENT there.
  *
  *	That open is the positive control of the video probe of
  *	exec_probe(). A hidden path and an absent file each give
@@ -531,6 +537,7 @@ video_devices(char list[][PATH_MAX], int size)
 {
 	struct dirent	*ent;
 	DIR		*dir;
+	const char	*unit;
 	int		 fd, n, count = 0;
 
 	if ((dir = opendir(VIDEO_DIR)) == NULL)
@@ -538,6 +545,10 @@ video_devices(char list[][PATH_MAX], int size)
 	while (count < size && (ent = readdir(dir)) != NULL) {
 		if (strncmp(ent->d_name, VIDEO_PREFIX,
 		    sizeof(VIDEO_PREFIX) - 1) != 0)
+			continue;
+		unit = ent->d_name + sizeof(VIDEO_PREFIX) - 1;
+		if (unit[0] != '\0' && (unit[1] != '\0' ||
+		    unit[0] < '0' || unit[0] > '9'))
 			continue;
 		n = snprintf(list[count], PATH_MAX, "%s/%s", VIDEO_DIR,
 		    ent->d_name);

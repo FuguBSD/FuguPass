@@ -43,6 +43,7 @@
 #define SCAN_H
 
 #include <stdio.h>
+#include <time.h>
 
 #include "wordlist.h"
 
@@ -89,6 +90,20 @@ enum scan_result {
 };
 
 /*
+ * One open frame stream: the descriptor of the device, the name of
+ * it, and the frame geometry that the device gave. scan_run() fills
+ * this structure from the device, and scan_frames() reads it.
+ */
+struct scan_stream {
+	const char	*device;	/* the path, for each report */
+	int		 fd;		/* the open device */
+	int		 w;		/* the pixels of one row */
+	int		 h;		/* the rows of one frame */
+	int		 stride;	/* the bytes of one row */
+	size_t		 framelen;	/* the bytes of one frame */
+};
+
+/*
  * scan_nocore():
  *	Set RLIMIT_CORE to zero (SEC-MEMORY-3). main() of
  *	fugupass-scan.c makes this one call first, so the core limit
@@ -126,6 +141,36 @@ enum scan_result	 scan_decode(const unsigned char *, int, int, char *);
 const char		*scan_strerror(enum scan_result);
 
 /*
+ * scan_wait(fd, deadline):
+ *	Wait until the descriptor fd holds one frame, or until the
+ *	clock reaches deadline (PROG-SCAN-9). read(2) on video(4)
+ *	takes no timeout and blocks without end, so the frame loop
+ *	makes this call before each read.
+ *
+ *	The call gives 1 for a descriptor that holds a frame, and 0
+ *	at the deadline. It gives -1 on a failure, and errno then
+ *	names the failed call. A signal gives -1 with EINTR.
+ */
+int			 scan_wait(int, time_t);
+
+/*
+ * scan_frames(st, seconds, out, err):
+ *	Read frames of the open stream st for seconds seconds, and
+ *	write the 12 words of the first Standard SeedQR to the stream
+ *	out (PROG-SCAN-1). The loop gives up at that bound, and it
+ *	then writes one report line to the stream err (PROG-SCAN-9).
+ *	A stream that gives no frame and a stream that gives frames
+ *	of no SeedQR take one report each, so the report names the
+ *	cause (PROG-SCAN-13).
+ *
+ *	The call gives 0 on a scan, and 1 on a failure. It takes and
+ *	frees the two frame buffers, and it erases each buffer of its
+ *	own (SEC-MEMORY-1). It closes no descriptor of st.
+ */
+int			 scan_frames(const struct scan_stream *, int, FILE *,
+			     FILE *);
+
+/*
  * scan_run(device, out, err):
  *	Open the video device device, read frames of it, and write the
  *	12 words of the first Standard SeedQR to the stream out
@@ -133,8 +178,9 @@ const char		*scan_strerror(enum scan_result);
  *	err, and a report of the device names it (PROG-SCAN-7).
  *
  *	The call opens the device, and it then pledges SCAN_PROMISES
- *	(PROG-SPLIT-4). It reads frames for SCAN_SECONDS seconds, and
- *	it then gives up (PROG-SCAN-9).
+ *	(PROG-SPLIT-4). It asks the device for the frame format, and
+ *	it gives the open stream to scan_frames() for SCAN_SECONDS
+ *	seconds (PROG-SCAN-9).
  *
  *	The call gives the exit status of the program: 0 on a scan, and
  *	1 on a failure. It erases each buffer of its own (SEC-MEMORY-1).

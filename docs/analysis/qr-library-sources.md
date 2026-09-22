@@ -12,8 +12,11 @@ D-15 puts the camera code and the QR codecs in two sandboxed helper programs.
 That decision names no library. `fugupass-scan` needs a decoder (PROG-SCAN-1),
 and `fugupass-qr` needs an encoder (PROG-QR-1). PROG-QR-5 asks the documentation
 for the record of each library, with the provenance of it and the license of it.
-This record holds the candidates and the reason of each pick. The manual page of
-each helper holds the record of the library that the program links.
+This record owns the evaluation: the candidates, the ports provenance of each,
+the license of each, and the reason of each pick. `src/quirc/SOURCE.md` owns the
+copy of the decoder in this tree: the release, the files and the digest of each
+one (PROG-BUILD-5). `spec/programs.md` owns each rule. The manual page of each
+helper states what its program does, and it points at these records.
 
 FuguPass runs on an air-gapped machine (PROG-PORT). A package of the ports tree
 costs the run dependencies of it as well, and each dependency reaches that
@@ -54,10 +57,7 @@ and `sdl` needs the X11 shared libraries. The demonstration programs of the
 release need those libraries, and the library itself needs none of them. A port
 dependency therefore pulls SDL and X11 onto an air-gapped machine.
 
-`src/quirc` holds the six source files of the release `v1.2` and the license
-file of it, byte for byte. `src/quirc/SOURCE.md` records the origin, the
-release, the license and the SHA-256 of each file. `quirc_version()` of that
-release gives the string `1.0`, and that string is stale upstream.
+`src/quirc` holds the copy, and `src/quirc/SOURCE.md` records it.
 
 ### zbar
 
@@ -131,8 +131,7 @@ code of each project.
 `QRinput_free()` releases that buffer with `free(3)`, and it erases no byte of
 it. `nm(1)` on `/usr/local/lib/libqrencode.a` of the package names no
 `explicit_bzero` symbol, so the library holds no erasure call that a compiler
-must keep. The digits of a mnemonic stay in the freed heap of the helper
-process, and FuguPass cannot reach that memory.
+must keep. `fugupass-qr(1)` states the outcome for the operator.
 
 Four properties bound that residue. The helper renders one code, and it then
 exits. Its core limit is zero, so a crash of it writes no core file

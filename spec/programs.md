@@ -363,7 +363,11 @@ no keyboard.
   value of it. A device that gives another pixel format is a failure. The
   program must read frames for 60 seconds, and it must then report and exit 1.
   The core process reads the standard output of the helper to its end, so an
-  endless read would hold a ceremony.
+  endless read would hold a ceremony. `read(2)` on that driver takes no timeout,
+  so the program must wait for each frame with `poll(2)` first. The wait must
+  end at the bound of the scan, and `poll(2)` needs the `stdio` promise alone. A
+  device that gives no frame is one cause. Frames that hold no Standard SeedQR
+  are another cause. The report must name the cause that ends the scan.
 - **PROG-SCAN-10** — The BIP39 English list holds 2048 words, so a group of four
   digits above 2047 names no word. The program must report such a code as a
   failure.
@@ -489,9 +493,6 @@ with a C source adds a Makefile to that directory. The archive keeps one object
 of each archive source. The C build needs an OpenBSD machine, and the gates of
 the repository root need none.
 
-The tree holds the QR decoder, and the ports tree holds the encoder. The package
-of the decoder declares the SDL libraries as run dependencies, for the
-demonstration programs of it, and SDL needs the X11 libraries. The decoder
-itself needs the standard C functions alone. A port dependency would therefore
-pull SDL and X11 onto an air-gapped machine, and the vendored source pulls
-nothing.
+The tree holds the QR decoder, and the ports tree holds the encoder.
+`docs/analysis/qr-library-sources.md` records the evaluation of each library and
+the reason of each pick (PROG-QR-5).

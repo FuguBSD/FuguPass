@@ -18,7 +18,7 @@
  * The sandbox of the core process. sandbox.h states the interface.
  *
  * The order is the order of PROG-SPLIT-3: every unveil call, then
- * the pledge call. main() of fugupass.c sets RLIMIT_CORE to zero
+ * the pledge call. main() of fugupass.c holds RLIMIT_CORE at zero
  * before it calls this file (SEC-MEMORY-3).
  *
  * The pledge call names SANDBOX_EXEC_PROMISES as its execpromises

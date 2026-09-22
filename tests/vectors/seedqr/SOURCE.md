@@ -71,9 +71,17 @@ entropy bytes of the same 12 words, in QR byte mode:
 5bbd9d71a8ec7990831aff359d426545
 ```
 
-`words24.picture` is the Standard SeedQR of the 24 words `abandon` 23 times and
-`art`. The BIP39 specification prints that mnemonic as the first 24-word test
-vector, and its 96 digits are 23 groups of `0000` and one group of `0103`.
+`words24.picture` is the Standard SeedQR of 24 words. Its 96 digits are 23
+groups of `0000` and one group of `0103`, so the words are `abandon` 23 times
+and `artefact`. `src/wordlist.c` gives `artefact` the index 103, and it gives
+`art` the index 102.
+
+Those 24 words are no test vector of BIP39. The published vector of 32 zero
+bytes ends with `art`, and `src/regress/kat.c` holds that line as `WORDS_24`.
+This picture holds the index 103 in place of 102, so its last group is `0103`.
+The fixture drives the count gate, and 96 digits fail that gate whatever the
+words are (PROG-SCAN-2). `fugupass-scan` computes no checksum (PROG-SCAN-3), so
+the checksum of these words reaches no gate.
 
 `overflow.picture` holds the 48 digits of test vector 4 with the last group
 changed to `9999`. The BIP39 English list holds 2048 words, so no word carries

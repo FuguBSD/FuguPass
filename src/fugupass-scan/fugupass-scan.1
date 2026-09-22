@@ -70,6 +70,17 @@ starts at the first read.
 takes the luminance byte of each pixel as the grey value of it.
 It reads frames for 60 seconds, and it then reports and exits.
 .Pp
+.Xr read 2
+on
+.Xr video 4
+takes no timeout, and it blocks until the device gives a frame.
+.Nm
+therefore waits for each frame with
+.Xr poll 2 ,
+and that wait ends at the 60 seconds of the scan.
+A device that opens and gives no frame ends the scan at that bound,
+and the report names that cause.
+.Pp
 The
 .Va kern.video.record
 variable of
@@ -89,26 +100,14 @@ A virtual machine needs host device passthrough for the camera.
 decodes each frame with
 .Sy quirc ,
 by Daniel Beer.
-The library carries the ISC license, the license of FuguPass.
-FuguPass holds a copy of the release
-.Sy v1.2
-in its own tree, and that copy records the origin, the license and
-the digest of each file.
-The source of the release is
-.Lk https://github.com/dlbeer/quirc .
-.Pp
-The
-.Ox
-ports tree holds the library as
-.Pa graphics/libquirc .
-That package declares
-.Pa graphics/sdl-gfx
-as a run dependency, for the demonstration programs of the release.
-.Pa sdl-gfx
-needs SDL, and SDL needs the X11 shared libraries.
-The library itself calls the standard C functions alone, so FuguPass
-takes the copy and pulls none of those packages onto a signing
-machine.
+FuguPass holds a copy of that library in its own tree, and it takes
+no package of the ports tree for the decode.
+.Pa src/quirc/SOURCE.md
+of the FuguPass source tree records the copy: the origin, the
+release, the license and the digest of each file.
+.Pa docs/analysis/qr-library-sources.md
+of that tree records the evaluation of each QR library, and the
+reason of each pick.
 .Pp
 .Nm
 gives the library one grey byte of each pixel.
@@ -190,7 +189,11 @@ The frame of the device is outside the bounds of the program.
 .It
 The buffer of a frame takes no memory.
 .It
+The wait for a frame fails.
+.It
 A read of a frame fails, or it gives fewer bytes than one frame.
+.It
+The device gives no frame in 60 seconds.
 .It
 No frame of 60 seconds holds a Standard SeedQR.
 .It
@@ -203,6 +206,8 @@ Every report goes to the standard error, and it names the cause.
 .Xr fugupass-qr 1 ,
 .Xr getrlimit 2 ,
 .Xr pledge 2 ,
+.Xr poll 2 ,
+.Xr read 2 ,
 .Xr sysctl 2 ,
 .Xr video 4
 .Sh AUTHORS
@@ -212,3 +217,5 @@ A scan of a drawn code from a camera runs by hand.
 The regress tests feed the decoder from the fixtures of
 .Pa tests/vectors/seedqr ,
 and no test opens a camera.
+The probe of the 60 seconds gives the frame loop a pipe that carries
+no byte, in place of a device that gives no frame.

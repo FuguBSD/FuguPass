@@ -40,17 +40,10 @@ upstream, and the tag of the source is `v1.2`.
 
 ## Why the tree holds a copy
 
-The ports tree holds `graphics/libquirc`. That package declares `sdl-gfx` as a
-run dependency, and `sdl-gfx` declares `sdl`, which needs the X11 shared
-libraries. A `pkg_add -n libquirc` on an OpenBSD 7.8 machine with the base sets
-alone stops with `Can't install sdl-1.2.15p12 because of libraries`. The
-demonstration programs of the package need SDL, and the library needs nothing
-but the standard C functions.
-
-FuguPass runs on an air-gapped machine, so the port of
-[PROG-PORT](../../spec/programs.md#prog-port) must not pull SDL and X11 onto
-that machine. This directory therefore holds the library, and the port of
-FuguPass declares no dependency for the decoder.
+[qr-library-sources.md](../../docs/analysis/qr-library-sources.md) holds the
+evaluation of each QR library, and it gives the reason of this copy. The port of
+FuguPass declares no dependency for the decoder
+([PROG-PORT](../../spec/programs.md#prog-port)).
 
 ## The build
 

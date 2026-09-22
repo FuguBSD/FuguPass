@@ -58,8 +58,10 @@ threshold 3 and coefficient 1. The entry labels are `fugupass/v1/client-key` ‖
 
 - **KEY-MASTER-1** — One vault has one master `M`: a BIP39 mnemonic of 12 words
   (D-01).
-- **KEY-MASTER-2** — The master enters a vault by a SeedQR scan, or as a BIP85
-  child of an external seed.
+- **KEY-MASTER-2** — The master enters a vault by a SeedQR scan of a plate. The
+  plate holds a master made outside FuguPass, or a BIP85 child of an external
+  seed. FuguPass makes neither plate, and it reads the two the same way
+  ([CER-CREATE](ceremonies.md#cer-create)).
 - **KEY-MASTER-3** — The master appears only during ceremonies and must not
   persist on disk.
 - **KEY-MASTER-4** — Every vault key derives from `root`.
@@ -71,8 +73,7 @@ threshold 3 and coefficient 1. The entry labels are `fugupass/v1/client-key` ‖
   count or the checksum, never a word.
 
 The documented default is a master made outside FuguPass with the FuguSeed
-procedure. It enters by a plate scan. A BIP85 child of an existing cold seed is
-a supported alternative, and the tool stays neutral between the two input paths.
+procedure. A BIP85 child of an existing cold seed is the supported alternative.
 BIP85 derivation is one-way: a vault compromise reveals nothing about the parent
 seed. The master and the vault passphrase are different secrets. `M` is the
 recovery root on the plate, and the passphrase is the daily reveal secret

@@ -88,30 +88,19 @@ The program clears each buffer of its own before it exits.
 encodes each code with
 .Sy libqrencode ,
 by Kentaro Fukuchi.
-The library carries the GNU Lesser General Public License, version
-2.1 or later.
-The
-.Ox
-ports tree holds it as
-.Pa graphics/libqrencode ,
-and the package of
-.Ox 7.8
-is
-.Sy libqrencode-4.1.1 .
-That package declares one run dependency,
-.Pa graphics/png .
+FuguPass holds no source of that library, and the port of FuguPass
+declares the package of it as a library dependency.
 .Nm
-links the shared library of the package, and it runs no program of
-that package.
-FuguPass holds no source of the library.
+links the shared library, and it runs no program of that package.
+.Pa docs/analysis/qr-library-sources.md
+of the FuguPass source tree records the evaluation of each QR
+library: the provenance of it, the license of it, and the cost of
+it.
 .Pp
-The library picks the mask pattern of a code by penalty score.
-A mnemonic code must carry pattern 0, so
+The library picks the mask pattern of a code by penalty score, and a
+mnemonic code must carry pattern 0.
 .Nm
-re-masks such a code.
-It reads the pattern of the library from the format bits, it undoes
-that pattern, and it applies pattern 0.
-It then writes the format bits of level L and mask 0.
+therefore re-masks such a code.
 .Pp
 The library frees the digit buffer of an input with
 .Xr free 3 ,

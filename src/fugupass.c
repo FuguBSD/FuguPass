@@ -19,7 +19,7 @@
  * and the passphrase read (PROG-SPLIT-1). fugupass.h states the two
  * functions that a subcommand takes from this file.
  *
- * main() sets RLIMIT_CORE to zero first, so no crash of this
+ * main() holds RLIMIT_CORE at zero first, so no crash of this
  * program writes a secret to a core file (SEC-MEMORY-3). It enters
  * the sandbox next, before the subcommand runs (PROG-SPLIT-3).
  *
@@ -351,7 +351,7 @@ fugupass_passphrase_new(char *buf, size_t bufsize)
 int
 main(int argc, char *argv[])
 {
-	struct rlimit			 nocore = { 0, 0 };
+	struct rlimit			 limit, nocore = { 0, 0 };
 	const struct commands_cmd	*c;
 	char				 vault[PATH_MAX];
 	const char			*dir = NULL;
@@ -362,8 +362,17 @@ main(int argc, char *argv[])
 	 * The first call of main(), before every other one: no crash
 	 * of this program writes a secret to a core file
 	 * (SEC-MEMORY-3).
+	 *
+	 * The call reads the limit first, and it writes the limit of
+	 * a run that inherits another value alone. That shape is the
+	 * rule of every program of the tree, and scan.c and qr.c hold
+	 * it as well. This process holds the proc promise, so a
+	 * setrlimit(2) call of it is no pledge violation. A child of
+	 * it takes no such promise (PROG-SPLIT-3).
 	 */
-	if (setrlimit(RLIMIT_CORE, &nocore) == -1)
+	if (getrlimit(RLIMIT_CORE, &limit) == -1)
+		err(1, "getrlimit");
+	if (limit.rlim_cur != 0 && setrlimit(RLIMIT_CORE, &nocore) == -1)
 		err(1, "setrlimit");
 
 	/*
