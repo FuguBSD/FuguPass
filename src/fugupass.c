@@ -35,9 +35,9 @@
  * re-enrollment. commands_table of commands.h holds the six
  * commands of the session, and commands_oneshot() runs one of them
  * (PROG-ONESHOT-1, PROG-ONESHOT-2). A name that neither table holds
- * gives the usage and the status 2. PROG-IFACE-1 gives the
- * interactive session to a run with no subcommand, and that session
- * is not in this program yet. Such a run gives the usage as well.
+ * gives the usage and the status 2. A run with no subcommand starts
+ * the interactive session of iface.h, and that session runs each
+ * command of the interface process (PROG-IFACE-1).
  *
  * A subcommand reads the options and the arguments of its own
  * command line, and ceremony.c holds the steps of a ceremony
@@ -66,6 +66,7 @@
 #include "commands.h"
 #include "derive.h"
 #include "fugupass.h"
+#include "iface.h"
 #include "sandbox.h"
 #include "session.h"
 
@@ -118,6 +119,9 @@ usage(void)
 		    c->args);
 		lead = "      ";
 	}
+
+	/* The line of the interactive session (PROG-IFACE-1). */
+	fprintf(stderr, "%s %s [-d directory]\n", lead, getprogname());
 	exit(2);
 }
 
@@ -380,26 +384,30 @@ main(int argc, char *argv[])
 	}
 	argc -= optind;
 	argv += optind;
-	if (argc < 1)
-		usage();
 
 	/*
 	 * The frame reads the two tables before the sandbox, so a
 	 * wrong subcommand makes no vault directory. The sandbox
 	 * comes before the command line of the subcommand, so a
 	 * rejected option of a subcommand makes that directory.
+	 *
+	 * A run with no subcommand reads neither table: it starts
+	 * the interactive session (PROG-IFACE-1).
 	 */
-	for (i = 0; i < nitems(commands); i++) {
-		if (strcmp(argv[0], commands[i].name) == 0)
-			break;
-	}
-	if (i == nitems(commands)) {
-		for (c = commands_table; c->name != NULL; c++) {
-			if (strcmp(argv[0], c->name) == 0)
+	i = nitems(commands);
+	if (argc >= 1) {
+		for (i = 0; i < nitems(commands); i++) {
+			if (strcmp(argv[0], commands[i].name) == 0)
 				break;
 		}
-		if (c->name == NULL)
-			usage();
+		if (i == nitems(commands)) {
+			for (c = commands_table; c->name != NULL; c++) {
+				if (strcmp(argv[0], c->name) == 0)
+					break;
+			}
+			if (c->name == NULL)
+				usage();
+		}
 	}
 
 	if (vault_dir(dir, vault, sizeof(vault)) != 0)
@@ -407,6 +415,8 @@ main(int argc, char *argv[])
 	if (sandbox_enter(vault) != 0)
 		err(1, "sandbox");
 
+	if (argc < 1)
+		return iface_session(vault);
 	if (i < nitems(commands))
 		return commands[i].run(argc, argv, vault);
 	return commands_oneshot(vault, argc, argv);

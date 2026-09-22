@@ -56,9 +56,11 @@
  * entry of another type (ENTRY-SHADOW-4, ENTRY-SHADOW-5,
  * PROG-REPL-4).
  *
- * Every record goes to the standard output, and every report goes
- * to the standard error (PROG-ONESHOT-3). A secret goes to
- * /dev/tty, so a pipe of the standard output carries none
+ * Every record goes through record(), and every report goes to the
+ * standard error (PROG-ONESHOT-3). A one-shot subcommand takes its
+ * records from the standard output, and the session of iface.c takes
+ * them from the sink of commands_sink() (PROG-IFACE-13). A secret
+ * goes to /dev/tty, so a pipe of the standard output carries none
  * (PROG-OUTPUT-1, PROG-OUTPUT-4).
  *
  * The secret of an entry lives in the plaintext of the session, and
@@ -72,6 +74,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -148,6 +151,7 @@ static void	 text_cat(struct text *, const struct text *);
 static int	 gate(const struct vault_line *, void *);
 static int	 write_all(int, const char *, size_t);
 static int	 secret_print(const char *);
+static void	 record(const char *, ...);
 static const struct commands_cmd *find(const char *);
 static int	 usage_cmd(const char *);
 static int	 index_ready(const struct session *);
@@ -180,6 +184,13 @@ static int	 cmd_add(struct session *, int, char *[]);
 static int	 cmd_gen(struct session *, int, char *[]);
 static int	 cmd_totp(struct session *, int, char *[]);
 static int	 cmd_audit(struct session *, int, char *[]);
+
+/*
+ * The sink of the output records (PROG-IFACE-13). The standard
+ * output takes each record of a one-shot subcommand, and iface.c
+ * gives the reply pipe of a session in place of it.
+ */
+static void	(*sink)(const char *);
 
 /*
  * The six commands of the session (PROG-REPL-3). The interface
@@ -316,6 +327,33 @@ secret_print(const char *value)
 		warn("/dev/tty");
 	close(fd);
 	return rv;
+}
+
+/*
+ * record(fmt, ...):
+ *	One output record of a command, on one line of its own
+ *	(PROG-ONESHOT-3). The caller gives the record without the
+ *	line feed, and the sink of the session takes the record in
+ *	place of the standard output (PROG-IFACE-13).
+ *
+ *	One record holds one line of a vault file at most, so the
+ *	buffer takes the line of VAULT-FORMAT-5.
+ */
+static void
+record(const char *fmt, ...)
+{
+	char	 line[VAULT_LINE_MAX];
+	va_list	 ap;
+
+	va_start(ap, fmt);
+	if (sink == NULL) {
+		vprintf(fmt, ap);
+		putchar('\n');
+	} else {
+		(void)vsnprintf(line, sizeof(line), fmt, ap);
+		sink(line);
+	}
+	va_end(ap);
 }
 
 /*
@@ -1007,8 +1045,8 @@ out:
 /*
  * show_line(line, arg):
  *	Print one line of an entry file. The secret of the file goes
- *	to the terminal, and each other field goes to the standard
- *	output (PROG-OUTPUT-1, PROG-ONESHOT-9).
+ *	to the terminal, and each other field goes to the sink of the
+ *	records (PROG-OUTPUT-1, PROG-ONESHOT-9).
  */
 static int
 show_line(const struct vault_line *line, void *arg)
@@ -1017,7 +1055,7 @@ show_line(const struct vault_line *line, void *arg)
 
 	if ((line->field->flags & VAULT_FIELD_SECRET) != 0)
 		return secret_print(line->value);
-	printf("%s: %s\n", line->field->name, line->value);
+	record("%s: %s", line->field->name, line->value);
 	return 0;
 }
 
@@ -1144,14 +1182,14 @@ cmd_ls(struct session *s, int argc, char *argv[])
 	if ((list = session_list(s, &count)) == NULL)
 		return -1;
 	for (i = 0; i < count; i++)
-		printf("%s\n", list[i].name);
+		record("%s", list[i].name);
 	return 0;
 }
 
 /*
  * cmd_show(s, argc, argv):
  *	One entry of the index: the secret of it to the terminal, and
- *	each metadata field to the standard output (PROG-REPL-3,
+ *	each metadata field to the sink of the records (PROG-REPL-3,
  *	PROG-OUTPUT-1). The reveal is one quorum event (PROG-REPL-4).
  *
  *	The words of a mnemonic take the -w option (PROG-OUTPUT-2,
@@ -1330,7 +1368,7 @@ cmd_audit(struct session *s, int argc, char *argv[])
 	    vault_scan(text, len, vault_index_fields, date_line, &plate) != 0)
 		return -1;
 	if (plate.have)
-		printf("verified: %s\n", plate.date);
+		record("verified: %s", plate.date);
 	else
 		warnx("the index holds no date of a plate verification");
 
@@ -1355,9 +1393,15 @@ cmd_audit(struct session *s, int argc, char *argv[])
 			continue;
 		}
 		if (strcmp(entry.date, cutoff) < 0)
-			printf("%s %s\n", entry.date, list[i].name);
+			record("%s %s", entry.date, list[i].name);
 	}
 	return 0;
+}
+
+void
+commands_sink(void (*fn)(const char *))
+{
+	sink = fn;
 }
 
 int

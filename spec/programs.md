@@ -118,6 +118,16 @@ modules.
   `ok` or `fail`. The tag keeps the frame apart from the text, so an entry name
   cannot forge an end line. A line with another tag is a protocol failure, and
   the interface process must stop.
+- **PROG-IFACE-12** — The core process must split a request line at each space
+  and at each tab. The words are the argument list of one command, and the first
+  word is the command name. The core process must reject a request line of more
+  than 4096 bytes ([VAULT-FORMAT](vault.md#vault-format)). It must answer that
+  line with a `fail` end line.
+- **PROG-IFACE-13** — The core process must write each output record of a
+  command to one sink. A one-shot subcommand takes the standard output as that
+  sink ([PROG-ONESHOT](programs.md#prog-oneshot)). A command of the session
+  takes the reply pipe, and one reply line carries one record. A secret takes no
+  sink, and it goes to the terminal ([PROG-OUTPUT](programs.md#prog-output)).
 
 Entry names and oracle error text carry external bytes, so the display filter
 guards the operator's terminal. `Fugu::REPL` holds the terminal in raw mode only
@@ -192,15 +202,18 @@ through Fugu.
   request. It must send one `ls` request before the first prompt, and it must
   show no line of that reply. It must send no other request of its own, so each
   operator command is one request line.
+- **PROG-REPL-11** — The default lock timeout is 300 seconds. The config file
+  holds the tunable value ([VAULT-CONFIG](vault.md#vault-config)).
 
 `ls` reads the open index and sends no entry request. The unlock reads the
 passphrase once and verifies it at the canary record of each quorum oracle. Each
 reveal in the session computes one `pin_ei` per quorum oracle
 ([KEY-PIN](keys.md#key-pin)). A session that reveals many entries pays the KDF
-cost `k` times per entry. An HTTP error is not an attempt and is retryable. A
-transport failure is ambiguous, and a junk answer can burn a strike
-([ORC-REVEAL](oracle.md#orc-reveal)). The reports therefore name different user
-actions.
+cost `k` times per entry. The default lock timeout of 300 seconds bounds an
+unattended session, and a shorter timeout repeats that unlock cost. An HTTP
+error is not an attempt and is retryable. A transport failure is ambiguous, and
+a junk answer can burn a strike ([ORC-REVEAL](oracle.md#orc-reveal)). The
+reports therefore name different user actions.
 
 <a id="prog-oneshot"></a>
 
