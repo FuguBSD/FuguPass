@@ -55,16 +55,16 @@ A vault file is ciphertext, so the paper copy of such a code is a
 safe backup.
 .Pp
 .Nm
-holds
+holds the soft limit and the hard limit of
 .Dv RLIMIT_CORE
 at zero, before every other act of the program.
-It reads the limit with
+It reads the two limits with
 .Xr getrlimit 2 ,
 and it calls
 .Xr setrlimit 2
-only when the limit is not zero.
+only when one of them is not zero.
 .Xr fugupass 1
-holds the limit at zero, and a child of it inherits that limit.
+holds both limits at zero, and a child of it inherits them.
 The execpromises of that process hold no
 .Dq proc
 promise, so a

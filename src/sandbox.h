@@ -15,13 +15,14 @@
  */
 
 /*
- * The sandbox of the core process: the unveil(2) list, and the
- * pledge(2) call after it (PROG-SPLIT-3).
+ * The sandbox of the core process: the core limit, the unveil(2)
+ * list, and the pledge(2) call after it (SEC-MEMORY-3,
+ * PROG-SPLIT-3).
  *
- * main() of fugupass.c makes one call of sandbox_enter(), and
- * src/regress/sandbox.c makes the same call. The list therefore has
- * one implementation, and the test reads the list that the program
- * runs under.
+ * main() of fugupass.c makes one call of sandbox_nocore() and one
+ * call of sandbox_enter(), and src/regress/sandbox.c makes the same
+ * two calls. Each rule therefore has one implementation, and the
+ * test reads the code that the program runs.
  */
 
 #ifndef SANDBOX_H
@@ -72,6 +73,25 @@
  */
 #define SANDBOX_EXEC_PROMISES \
 	"stdio rpath prot_exec tty video"
+
+/*
+ * sandbox_nocore():
+ *	Hold the soft limit and the hard limit of RLIMIT_CORE at zero
+ *	(SEC-MEMORY-3). main() of fugupass.c makes this one call
+ *	first, so the core limit is the first act of the program.
+ *
+ *	The call reads the two limits first, and it calls setrlimit(2)
+ *	only when one of them is not zero. A child of the core process
+ *	inherits two zero limits, so the call of that child writes no
+ *	limit. The execpromises of the core process hold no proc
+ *	promise, and setrlimit(2) needs that promise (PROG-SPLIT-3).
+ *	scan_nocore() of scan.h and qr_sandbox() of qr.h hold the same
+ *	rule for the two helpers.
+ *
+ *	The call gives 0, and -1 on a failure. errno then names the
+ *	failed call.
+ */
+int	sandbox_nocore(void);
 
 /*
  * sandbox_enter(vault):

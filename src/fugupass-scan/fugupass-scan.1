@@ -63,9 +63,6 @@ holds that gate.
 asks the device for frames of 640 by 480 pixels in the YUYV format,
 and it reads one frame at a time with
 .Xr read 2 .
-The stream of
-.Xr video 4
-starts at the first read.
 .Nm
 takes the luminance byte of each pixel as the grey value of it.
 It reads frames for 60 seconds, and it then reports and exits.
@@ -80,6 +77,18 @@ therefore waits for each frame with
 and that wait ends at the 60 seconds of the scan.
 A device that opens and gives no frame ends the scan at that bound,
 and the report names that cause.
+.Pp
+The stream of the read access of
+.Xr video 4
+starts at the first
+.Xr read 2 ,
+and the read filter of that driver starts it as well.
+.Xr poll 2
+of OpenBSD registers that filter through
+.Xr kqueue 2 ,
+so the first wait of
+.Nm
+starts the stream.
 .Pp
 The
 .Va kern.video.record
@@ -115,16 +124,16 @@ The library gives the version, the mode and the payload of each code
 that it reads, and the gates above read the mode and the payload.
 .Sh THE SANDBOX
 .Nm
-holds
+holds the soft limit and the hard limit of
 .Dv RLIMIT_CORE
 at zero, before every other act of the program.
-It reads the limit with
+It reads the two limits with
 .Xr getrlimit 2 ,
 and it calls
 .Xr setrlimit 2
-only when the limit is not zero.
+only when one of them is not zero.
 .Xr fugupass 1
-holds the limit at zero, and a child of it inherits that limit.
+holds both limits at zero, and a child of it inherits them.
 The execpromises of that process hold no
 .Dq proc
 promise, so a
@@ -205,6 +214,7 @@ Every report goes to the standard error, and it names the cause.
 .Xr fugupass 1 ,
 .Xr fugupass-qr 1 ,
 .Xr getrlimit 2 ,
+.Xr kqueue 2 ,
 .Xr pledge 2 ,
 .Xr poll 2 ,
 .Xr read 2 ,
@@ -219,3 +229,5 @@ The regress tests feed the decoder from the fixtures of
 and no test opens a camera.
 The probe of the 60 seconds gives the frame loop a pipe that carries
 no byte, in place of a device that gives no frame.
+That probe reads the report of the loop, and the report names the
+device and the cause.

@@ -365,9 +365,12 @@ no keyboard.
   The core process reads the standard output of the helper to its end, so an
   endless read would hold a ceremony. `read(2)` on that driver takes no timeout,
   so the program must wait for each frame with `poll(2)` first. The wait must
-  end at the bound of the scan, and `poll(2)` needs the `stdio` promise alone. A
-  device that gives no frame is one cause. Frames that hold no Standard SeedQR
-  are another cause. The report must name the cause that ends the scan.
+  end at the bound of the scan, and `poll(2)` needs the `stdio` promise alone.
+  The stream of the read access starts at the first `read(2)`, and the read
+  filter of `video(4)` starts it as well. `poll(2)` registers that filter, so
+  the first wait starts the stream. A device that gives no frame is one cause.
+  Frames that hold no Standard SeedQR are another cause. The report must name
+  the cause that ends the scan.
 - **PROG-SCAN-10** — The BIP39 English list holds 2048 words, so a group of four
   digits above 2047 names no word. The program must report such a code as a
   failure.

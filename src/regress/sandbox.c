@@ -60,9 +60,13 @@
  * RLIMIT_CORE at zero (SEC-MEMORY-3), and the execpromises hold no
  * proc promise. A setrlimit(2) call of such a child is a pledge
  * violation, and the kernel kills it with SIGABRT. The child of
- * probe_exec() therefore sets the core limit to zero before the
- * sandbox call, as main() of fugupass.c does, and each helper call
- * reads that limit and writes none.
+ * probe_exec() therefore calls sandbox_nocore(), the call of main()
+ * of fugupass.c, before the sandbox call, and each helper call then
+ * reads two zero limits and writes none.
+ *
+ * probe_nocore() proves that call of the core process: it reads the
+ * two limits of RLIMIT_CORE after the call, in a child of a run
+ * that holds a soft zero and a hard limit above it.
  *
  * The test needs a file outside the vault directory, so the work
  * directory of the run holds the vault directory and that file. The
@@ -142,6 +146,7 @@
 static int	 probe_hidden(const char *);
 static int	 probe_readonly(const char *);
 static int	 probe_vault(const char *);
+static int	 probe_nocore(void);
 static int	 probe_pledge(const char *);
 static int	 probe_exec(const char *, const char *, const char *,
 		     char [][PATH_MAX], int);
@@ -238,6 +243,97 @@ probe_vault(const char *vault)
 	}
 	close(fd);
 	return 0;
+}
+
+/*
+ * probe_nocore():
+ *	getrlimit(2) after sandbox_nocore() must read a soft limit of
+ *	zero and a hard limit of zero (SEC-MEMORY-3).
+ *
+ *	A child takes the limits of its parent, so the child below
+ *	writes the state that the rule answers first: a soft limit of
+ *	zero, and the hard limit of this process above it. A call
+ *	that reads the soft limit alone writes nothing there, and the
+ *	hard limit of the child then stays above zero.
+ *
+ *	setrlimit(2) holds for the life of a process, so the call
+ *	runs in a child of its own. The child exits 5 when it does
+ *	not write that state, 2 when the call of the core fails, 3
+ *	when the read of the limits fails, and 4 for a limit above
+ *	zero.
+ *
+ *	The call gives 0, and -1 for every other outcome.
+ */
+static int
+probe_nocore(void)
+{
+	struct rlimit	 rl;
+	pid_t		 pid, done;
+	int		 status;
+
+	if (getrlimit(RLIMIT_CORE, &rl) == -1) {
+		warn("getrlimit");
+		return -1;
+	}
+	if (rl.rlim_max == 0) {
+		warnx("the hard core limit of this process is zero, so the "
+		    "probe proves no call of the core process");
+		return -1;
+	}
+
+	if ((pid = fork()) == -1) {
+		warn("fork");
+		return -1;
+	}
+	if (pid == 0) {
+		struct rlimit	 soft = { 0, rl.rlim_max }, got;
+
+		if (setrlimit(RLIMIT_CORE, &soft) == -1)
+			_exit(5);
+		if (sandbox_nocore() != 0)
+			_exit(2);
+		if (getrlimit(RLIMIT_CORE, &got) == -1)
+			_exit(3);
+		if (got.rlim_cur != 0 || got.rlim_max != 0)
+			_exit(4);
+		_exit(0);
+	}
+	while ((done = waitpid(pid, &status, 0)) == -1 && errno == EINTR)
+		;
+	if (done != pid) {
+		warn("waitpid");
+		return -1;
+	}
+	if (!WIFEXITED(status)) {
+		warnx("the probe of the core limit: the signal %d stops the "
+		    "child", WTERMSIG(status));
+		return -1;
+	}
+	switch (WEXITSTATUS(status)) {
+	case 0:
+		return 0;
+	case 2:
+		warnx("the probe of the core limit: the call of the core "
+		    "process fails");
+		break;
+	case 3:
+		warnx("the probe of the core limit: the getrlimit call "
+		    "fails");
+		break;
+	case 4:
+		warnx("a core limit after the call of the core process is "
+		    "not zero, and SEC-MEMORY-3 asks for zero in both");
+		break;
+	case 5:
+		warnx("the probe of the core limit: the child writes no "
+		    "soft zero with a hard limit above it");
+		break;
+	default:
+		warnx("the probe of the core limit: the child exits %d",
+		    WEXITSTATUS(status));
+		break;
+	}
+	return -1;
 }
 
 /*
@@ -360,15 +456,13 @@ probe_exec(const char *vault, const char *outside, const char *self,
 		return -1;
 	}
 	if (pid == 0) {
-		struct rlimit	 nocore = { 0, 0 };
-
 		/*
-		 * The core limit of main() of fugupass.c, before the
-		 * sandbox call (SEC-MEMORY-3). A child of this child
-		 * inherits the zero limit, and the first call of each
-		 * helper reads it.
+		 * The core-limit call of main() of fugupass.c, before
+		 * the sandbox call (SEC-MEMORY-3). A child of this
+		 * child inherits the two zero limits, and the first
+		 * call of each helper reads them and writes none.
 		 */
-		if (setrlimit(RLIMIT_CORE, &nocore) == -1)
+		if (sandbox_nocore() != 0)
 			_exit(EXEC_SANDBOX);
 		if (mkdir(vault, S_IRWXU) == -1 && errno != EEXIST)
 			_exit(EXEC_SANDBOX);
@@ -729,6 +823,10 @@ main(int argc, char *argv[])
 		goto out;
 	}
 	if (WEXITSTATUS(status) != 0)
+		goto out;
+
+	/* The core limit of the core process (SEC-MEMORY-3). */
+	if (probe_nocore() != 0)
 		goto out;
 
 	/* The pledge, after the list: the child of it dies. */

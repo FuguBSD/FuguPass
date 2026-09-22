@@ -71,9 +71,9 @@ topology is 2-of-3: a home box, a VPS, and a friend's box. One oracle with
 
 The scope covers:
 
-- One 12-word BIP39 master on a SeedQR plate. The master enters by a SeedQR
-  scan, or as a BIP85 child of an external seed
-  ([KEY-MASTER](keys.md#key-master)).
+- One 12-word BIP39 master on a SeedQR plate. The master enters by a SeedQR scan
+  of that plate. The plate holds a master made outside FuguPass, or a BIP85
+  child of an external seed ([KEY-MASTER](keys.md#key-master)).
 - BIP85 derivation of passwords and child mnemonics
   ([KEY-BIP85](keys.md#key-bip85)).
 - A flat-file vault of sealed entries, with an encrypted index and a strict
@@ -135,7 +135,10 @@ one use (D-21).
   and a file that a pack of FuguBSD/Tooling owns. It also skips a record under
   `docs/research/`, a file under `ports/`, a file of a vendored copy, and the
   rule that names the words. A `SOURCE.md` that forbids an edit of its directory
-  marks such a copy, and the scan reads that record itself.
+  marks such a copy. That record gives one table row for each file of the copy,
+  with the name and the SHA-256 of it. The scan skips a file of such a row, and
+  every other file of the directory stays inside the scan. The scan reads each
+  record itself.
 
 <a id="ovw-risks"></a>
 

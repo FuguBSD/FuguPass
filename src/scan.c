@@ -24,12 +24,12 @@
  * 48 digits are a Standard SeedQR of 12 words, and every other code
  * is a failure.
  *
- * video(4) gives the frames. The read(2) access of that driver starts
- * the stream at the first read, and it needs no buffer map
- * (PROG-SCAN-9). The helper therefore opens the device, it reads one
- * frame at a time, and it takes the luminance byte of each YUYV
- * pixel as the grey byte of it. The mmap access needs VIDIOC_REQBUFS
- * and a map of the device, and this helper needs neither one.
+ * video(4) gives the frames. The read(2) access of that driver needs
+ * no buffer map (PROG-SCAN-9). The helper therefore opens the device,
+ * it reads one frame at a time, and it takes the luminance byte of
+ * each YUYV pixel as the grey byte of it. The mmap access needs
+ * VIDIOC_REQBUFS and a map of the device, and this helper needs
+ * neither one.
  *
  * The frames of a plate scan are blank while kern.video.record is 0.
  * The driver blanks the image data of every reader at that value, and
@@ -41,6 +41,22 @@
  * of PROG-SCAN-9 (SCAN_SECONDS). poll(2) needs the stdio promise
  * alone, and video(4) reports a frame to it through the read filter
  * of the driver.
+ *
+ * The wait stands before the first read, and it starts the stream of
+ * the read access. A character device of OpenBSD carries no poll
+ * entry point: poll(2) registers the read filter of the driver
+ * through kqueue(2) (struct cdevsw of sys/conf.h, ppollregister() of
+ * sys/kern/sys_generic.c). videokqfilter() of sys/dev/video.c starts
+ * the stream in read mode when no read started it, and videoread()
+ * starts it as well. The two entry points therefore start the same
+ * stream, and the first wait of this loop reaches a started stream.
+ *
+ * O_NONBLOCK reaches no read of this driver: videoread() takes the
+ * ioflag argument of a read and reads no bit of it, so a read of a
+ * device that gives no frame sleeps without a bound whatever the
+ * flag of the descriptor holds. The wait above is the one bound of
+ * the loop. The statements of this paragraph and the one above come
+ * from the source of OpenBSD 7.8, the release of the test guest.
  */
 
 #include <sys/types.h>
@@ -81,6 +97,7 @@ _Static_assert(SCAN_WORDS * (WORDLIST_MAX + 1) + 1 <= SCAN_LINE_MAX,
     "SCAN_LINE_MAX must take 12 words, the separators and the terminator");
 
 static enum scan_result	 scan_words(const struct quirc_data *, char *);
+static int		 scan_wait(int, time_t);
 
 int
 scan_nocore(void)
@@ -92,17 +109,20 @@ scan_nocore(void)
 	 * program: no crash of it writes the master to a core file
 	 * (SEC-MEMORY-3).
 	 *
-	 * A child of the core process inherits the zero limit of that
-	 * process, and the execpromises of it hold no proc promise
-	 * (PROG-SPLIT-3). setrlimit(2) needs that promise, and the
-	 * kernel kills a child that calls it. The call below therefore
-	 * reads the limit first, and it writes the limit of a run
-	 * outside the core process alone. getrlimit(2) needs the stdio
-	 * promise alone (SEC-MEMORY-3).
+	 * A child of the core process inherits the two zero limits of
+	 * that process, and the execpromises of it hold no proc
+	 * promise (PROG-SPLIT-3). setrlimit(2) needs that promise, and
+	 * the kernel kills a child that calls it. The call below
+	 * therefore reads the two limits first, and it calls
+	 * setrlimit(2) only when one of them is not zero. getrlimit(2)
+	 * needs the stdio promise alone (SEC-MEMORY-3).
+	 *
+	 * The zero of the soft limit stops every core file, and the
+	 * zero of the hard limit stops a raise of the soft one.
 	 */
 	if (getrlimit(RLIMIT_CORE, &limit) == -1)
 		return -1;
-	if (limit.rlim_cur == 0)
+	if (limit.rlim_cur == 0 && limit.rlim_max == 0)
 		return 0;
 	if (setrlimit(RLIMIT_CORE, &nocore) == -1)
 		return -1;
@@ -245,7 +265,24 @@ scan_decode(const unsigned char *gray, int w, int h, char *line)
 	return rv;
 }
 
-int
+/*
+ * scan_wait(fd, deadline):
+ *	Wait until poll(2) reports the descriptor fd, or until the
+ *	clock reaches deadline (PROG-SCAN-9). read(2) on video(4)
+ *	takes no timeout and blocks without end, so the frame loop
+ *	makes this call before each read.
+ *
+ *	The call gives 1 for each event of fd: a frame, an error and
+ *	a hangup each give that value. The read that follows gives
+ *	one frame, a failure, or fewer bytes than one frame, and the
+ *	caller reports each of the two last outcomes. This call
+ *	therefore reads no bit of revents.
+ *
+ *	The call gives 0 at the deadline. It gives -1 on a failure,
+ *	and errno then names the failed call. A signal gives -1 with
+ *	EINTR.
+ */
+static int
 scan_wait(int fd, time_t deadline)
 {
 	struct pollfd	 pfd;

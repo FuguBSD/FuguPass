@@ -43,7 +43,6 @@
 #define SCAN_H
 
 #include <stdio.h>
-#include <time.h>
 
 #include "wordlist.h"
 
@@ -141,24 +140,13 @@ enum scan_result	 scan_decode(const unsigned char *, int, int, char *);
 const char		*scan_strerror(enum scan_result);
 
 /*
- * scan_wait(fd, deadline):
- *	Wait until the descriptor fd holds one frame, or until the
- *	clock reaches deadline (PROG-SCAN-9). read(2) on video(4)
- *	takes no timeout and blocks without end, so the frame loop
- *	makes this call before each read.
- *
- *	The call gives 1 for a descriptor that holds a frame, and 0
- *	at the deadline. It gives -1 on a failure, and errno then
- *	names the failed call. A signal gives -1 with EINTR.
- */
-int			 scan_wait(int, time_t);
-
-/*
  * scan_frames(st, seconds, out, err):
  *	Read frames of the open stream st for seconds seconds, and
  *	write the 12 words of the first Standard SeedQR to the stream
- *	out (PROG-SCAN-1). The loop gives up at that bound, and it
- *	then writes one report line to the stream err (PROG-SCAN-9).
+ *	out (PROG-SCAN-1). The loop waits for each frame with poll(2),
+ *	because read(2) on video(4) takes no timeout and blocks
+ *	without end. The loop gives up at that bound, and it then
+ *	writes one report line to the stream err (PROG-SCAN-9).
  *	A stream that gives no frame and a stream that gives frames
  *	of no SeedQR take one report each, so the report names the
  *	cause (PROG-SCAN-13).

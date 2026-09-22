@@ -121,6 +121,9 @@
 #define DEADLINE_SECONDS	2
 #define DEADLINE_KILL		20
 
+/* The bytes of the report that the probe of the bound reads. */
+#define DEADLINE_REPORT		256
+
 /* One rasterized picture. side holds the pixels of one side. */
 struct raster {
 	int		side;
@@ -430,13 +433,14 @@ test_reject(const char *name, enum scan_result want, const char *why)
 /*
  * test_nocore():
  *	getrlimit(2) after the core-limit call of the helper must read
- *	a RLIMIT_CORE of zero (SEC-MEMORY-3).
+ *	a soft limit of zero and a hard limit of zero (SEC-MEMORY-3).
  *
- *	A child takes the limit of its parent, so a parent of a zero
- *	limit would pass this probe without scan_nocore(). The probe
- *	therefore raises the limit of this process first, and it
- *	reports a limit that stays zero. The probe then proves the call
- *	and not the inheritance.
+ *	A child takes the limits of its parent, so the child below
+ *	writes the state that the rule answers first: a soft limit of
+ *	zero, and the hard limit of this process above it. A call that
+ *	reads the soft limit alone writes nothing there, and the hard
+ *	limit of the child then stays above zero. The probe therefore
+ *	proves the call and not the inheritance.
  */
 static int
 test_nocore(void)
@@ -449,21 +453,10 @@ test_nocore(void)
 		warn("getrlimit");
 		return -1;
 	}
-	if (rl.rlim_cur == 0) {
-		rl.rlim_cur = rl.rlim_max;
-		if (setrlimit(RLIMIT_CORE, &rl) == -1) {
-			warn("setrlimit");
-			return -1;
-		}
-		if (getrlimit(RLIMIT_CORE, &rl) == -1) {
-			warn("getrlimit");
-			return -1;
-		}
-		if (rl.rlim_cur == 0) {
-			warnx("the core limit of this process stays zero, so "
-			    "the probe proves no call of the helper");
-			return -1;
-		}
+	if (rl.rlim_max == 0) {
+		warnx("the hard core limit of this process is zero, so the "
+		    "probe proves no call of the helper");
+		return -1;
 	}
 
 	if ((pid = fork()) == -1) {
@@ -471,8 +464,10 @@ test_nocore(void)
 		return -1;
 	}
 	if (pid == 0) {
-		struct rlimit	 got;
+		struct rlimit	 soft = { 0, rl.rlim_max }, got;
 
+		if (setrlimit(RLIMIT_CORE, &soft) == -1)
+			_exit(5);
 		if (scan_nocore() != 0)
 			_exit(2);
 		if (getrlimit(RLIMIT_CORE, &got) == -1)
@@ -502,8 +497,12 @@ test_nocore(void)
 		warnx("the probe of the core limit: the getrlimit call fails");
 		break;
 	case 4:
-		warnx("the core limit after the sandbox call of the helper is "
-		    "not zero, and SEC-MEMORY-3 asks for zero");
+		warnx("a core limit after the sandbox call of the helper is "
+		    "not zero, and SEC-MEMORY-3 asks for zero in both");
+		break;
+	case 5:
+		warnx("the probe of the core limit: the child writes no soft "
+		    "zero with a hard limit above it");
 		break;
 	default:
 		warnx("the probe of the core limit: the child exits %d",
@@ -528,18 +527,32 @@ test_nocore(void)
  *
  *	The probe reads the seconds of the run as well. A loop that
  *	gives up before the bound fails the scan of a slow camera.
+ *
+ *	The standard error of the child goes to a second pipe, and
+ *	the probe reads the report of it. A stream that gives no
+ *	frame and a stream that gives frames of no SeedQR take one
+ *	report each, so the report must name the device and the
+ *	cause that ends the scan (PROG-SCAN-9, PROG-SCAN-13).
  */
 static int
 test_deadline(void)
 {
 	struct scan_stream	 st;
-	FILE			*null;
+	FILE			*null, *err;
+	char			 report[DEADLINE_REPORT];
 	time_t			 start, spent;
+	ssize_t			 n;
 	pid_t			 pid, got;
-	int			 fds[2], status, i, rv = -1;
+	int			 fds[2], out[2], status, i, rv = -1;
 
 	if (pipe(fds) == -1) {
 		warn("the probe of the scan bound: pipe");
+		return -1;
+	}
+	if (pipe(out) == -1) {
+		warn("the probe of the scan bound: pipe");
+		close(fds[0]);
+		close(fds[1]);
 		return -1;
 	}
 	memset(&st, 0, sizeof(st));
@@ -556,10 +569,30 @@ test_deadline(void)
 		goto out;
 	}
 	if (pid == 0) {
+		int	 status_child;
+
 		if ((null = fopen(_PATH_DEVNULL, "w")) == NULL)
 			_exit(3);
-		_exit(scan_frames(&st, DEADLINE_SECONDS, null, null));
+		if ((err = fdopen(out[1], "w")) == NULL)
+			_exit(4);
+		status_child = scan_frames(&st, DEADLINE_SECONDS, null, err);
+
+		/*
+		 * _exit(2) flushes no stream of stdio, and the parent
+		 * reads the report of this stream.
+		 */
+		if (fflush(err) == EOF)
+			_exit(5);
+		_exit(status_child);
 	}
+
+	/*
+	 * The read of the report ends at the last write end of the
+	 * pipe, so this process closes its own write end here.
+	 */
+	close(out[1]);
+	out[1] = -1;
+
 	for (i = 0; i < DEADLINE_KILL; i++) {
 		if ((got = waitpid(pid, &status, WNOHANG)) == -1) {
 			warn("the probe of the scan bound: waitpid");
@@ -588,6 +621,11 @@ test_deadline(void)
 		    _PATH_DEVNULL);
 		goto out;
 	}
+	if (WEXITSTATUS(status) == 4 || WEXITSTATUS(status) == 5) {
+		warnx("the probe of the scan bound: the child writes no "
+		    "report to the pipe of it");
+		goto out;
+	}
 	if (WEXITSTATUS(status) != 1) {
 		warnx("the frame loop gives the status %d at the bound of "
 		    "one scan, and a failed scan gives 1",
@@ -600,10 +638,24 @@ test_deadline(void)
 		    DEADLINE_SECONDS);
 		goto out;
 	}
+	if ((n = read(out[0], report, sizeof(report) - 1)) == -1) {
+		warn("the probe of the scan bound: the read of the report");
+		goto out;
+	}
+	report[n] = '\0';
+	if (strstr(report, st.device) == NULL ||
+	    strstr(report, "gives no frame") == NULL) {
+		warnx("the report at the bound is \"%s\", and it must name "
+		    "the device and the cause that ends the scan", report);
+		goto out;
+	}
 	rv = 0;
 out:
 	close(fds[0]);
 	close(fds[1]);
+	close(out[0]);
+	if (out[1] != -1)
+		close(out[1]);
 	return rv;
 }
 

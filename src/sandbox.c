@@ -18,8 +18,9 @@
  * The sandbox of the core process. sandbox.h states the interface.
  *
  * The order is the order of PROG-SPLIT-3: every unveil call, then
- * the pledge call. main() of fugupass.c holds RLIMIT_CORE at zero
- * before it calls this file (SEC-MEMORY-3).
+ * the pledge call. main() of fugupass.c calls sandbox_nocore() of
+ * this file before sandbox_enter(), so the core limit is the first
+ * act of the program (SEC-MEMORY-3).
  *
  * The pledge call names SANDBOX_EXEC_PROMISES as its execpromises
  * argument, and that argument carries the list below to each child
@@ -44,6 +45,7 @@
  */
 
 #include <sys/param.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 
 #include <errno.h>
@@ -98,6 +100,36 @@ static const struct unveil_path unveil_list[] = {
 	 */
 	UNVEIL_PATHS_DERIVED
 };
+
+int
+sandbox_nocore(void)
+{
+	struct rlimit	 limit, nocore = { 0, 0 };
+
+	/*
+	 * The core limit comes first, before every other act of the
+	 * program: no crash of it writes a secret to a core file
+	 * (SEC-MEMORY-3).
+	 *
+	 * A child of the core process inherits the two zero limits of
+	 * that process, and the execpromises of it hold no proc
+	 * promise (PROG-SPLIT-3). setrlimit(2) needs that promise, and
+	 * the kernel kills a child that calls it. The call below
+	 * therefore reads the two limits first, and it calls
+	 * setrlimit(2) only when one of them is not zero. getrlimit(2)
+	 * needs the stdio promise alone (SEC-MEMORY-3).
+	 *
+	 * The zero of the soft limit stops every core file, and the
+	 * zero of the hard limit stops a raise of the soft one.
+	 */
+	if (getrlimit(RLIMIT_CORE, &limit) == -1)
+		return -1;
+	if (limit.rlim_cur == 0 && limit.rlim_max == 0)
+		return 0;
+	if (setrlimit(RLIMIT_CORE, &nocore) == -1)
+		return -1;
+	return 0;
+}
 
 /*
  * unveil_video():

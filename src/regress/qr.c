@@ -677,13 +677,15 @@ test_pledge(void)
 /*
  * test_nocore():
  *	getrlimit(2) after the core-limit call of the helper must
- *	read a RLIMIT_CORE of zero (SEC-MEMORY-3).
+ *	read a soft limit of zero and a hard limit of zero
+ *	(SEC-MEMORY-3).
  *
- *	A child takes the limit of its parent, so a parent of a zero
- *	limit would pass this probe without qr_sandbox(). The probe
- *	therefore raises the limit of this process first, and it
- *	reports a limit that stays zero. The probe then proves the
- *	call and not the inheritance.
+ *	A child takes the limits of its parent, so the child below
+ *	writes the state that the rule answers first: a soft limit of
+ *	zero, and the hard limit of this process above it. A call
+ *	that reads the soft limit alone writes nothing there, and the
+ *	hard limit of the child then stays above zero. The probe
+ *	therefore proves the call and not the inheritance.
  */
 static int
 test_nocore(void)
@@ -696,21 +698,10 @@ test_nocore(void)
 		warn("getrlimit");
 		return -1;
 	}
-	if (rl.rlim_cur == 0) {
-		rl.rlim_cur = rl.rlim_max;
-		if (setrlimit(RLIMIT_CORE, &rl) == -1) {
-			warn("setrlimit");
-			return -1;
-		}
-		if (getrlimit(RLIMIT_CORE, &rl) == -1) {
-			warn("getrlimit");
-			return -1;
-		}
-		if (rl.rlim_cur == 0) {
-			warnx("the core limit of this process stays zero, so "
-			    "the probe proves no call of the helper");
-			return -1;
-		}
+	if (rl.rlim_max == 0) {
+		warnx("the hard core limit of this process is zero, so the "
+		    "probe proves no call of the helper");
+		return -1;
 	}
 
 	if ((pid = fork()) == -1) {
@@ -718,8 +709,10 @@ test_nocore(void)
 		return -1;
 	}
 	if (pid == 0) {
-		struct rlimit	 got;
+		struct rlimit	 soft = { 0, rl.rlim_max }, got;
 
+		if (setrlimit(RLIMIT_CORE, &soft) == -1)
+			_exit(5);
 		if (qr_sandbox() != 0)
 			_exit(2);
 		if (getrlimit(RLIMIT_CORE, &got) == -1)
@@ -749,8 +742,12 @@ test_nocore(void)
 		warnx("the probe of the core limit: the getrlimit call fails");
 		break;
 	case 4:
-		warnx("the core limit after the sandbox call of the helper is "
-		    "not zero, and SEC-MEMORY-3 asks for zero");
+		warnx("a core limit after the sandbox call of the helper is "
+		    "not zero, and SEC-MEMORY-3 asks for zero in both");
+		break;
+	case 5:
+		warnx("the probe of the core limit: the child writes no soft "
+		    "zero with a hard limit above it");
 		break;
 	default:
 		warnx("the probe of the core limit: the child exits %d",
