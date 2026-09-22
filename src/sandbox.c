@@ -26,8 +26,11 @@
  * table below. helper.h gives the path of each helper program, so
  * the list of the sandbox and the list of the child runs agree.
  *
- * PROG-SPLIT-10 derives the paths of the Perl runtime of the
- * interface process, and this file carries no derived path yet.
+ * unveil_paths.h holds the paths of the Perl runtime of the
+ * interface process, and the build step of src/lib/Makefile writes
+ * that header (PROG-SPLIT-10). The resolver files and the service
+ * tables of PROG-SPLIT-3 come from that list as well, because
+ * Fugu::Sandbox->system_paths names them.
  */
 
 #include <sys/param.h>
@@ -40,6 +43,7 @@
 #include "helper.h"
 #include "http.h"
 #include "sandbox.h"
+#include "unveil_paths.h"
 
 /* One path of the unveil list, with the permissions of that path. */
 struct unveil_path {
@@ -61,13 +65,15 @@ static const struct unveil_path unveil_list[] = {
 	{ "/usr/lib",			"r" },
 	{ "/usr/local/lib",		"r" },
 
-	/* The resolver files of a name lookup. */
-	{ "/etc/resolv.conf",		"r" },
-	{ "/etc/hosts",			"r" },
-	{ "/etc/services",		"r" },
-
 	/* The trust anchors of a https oracle (PROG-SPLIT-12). */
-	{ HTTP_CA_FILE,			"r" }
+	{ HTTP_CA_FILE,			"r" },
+
+	/*
+	 * The library tree of the perl of the interface process, and
+	 * the read-only system paths that the resolver files and the
+	 * service tables of PROG-SPLIT-3 belong to (PROG-SPLIT-10).
+	 */
+	UNVEIL_PATHS_DERIVED
 };
 
 int

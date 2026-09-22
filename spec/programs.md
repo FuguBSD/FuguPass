@@ -25,7 +25,9 @@ page in `mdoc(7)`: `fugupass(1)`, `fugupass-repl(1)`, `fugupass-scan(1)`, and
   It must unveil only these paths. They are the vault directory (`rwc`),
   `/dev/tty` (`rw`), and the three child programs (`x`). The other paths are the
   runtime files that the child programs load (`r`), and the resolver files that
-  name lookup needs (`r`).
+  name lookup needs (`r`). The derived list of PROG-SPLIT-10 carries the
+  resolver files, the service tables and the library tree of the interpreter of
+  the interface process.
 - **PROG-SPLIT-4** — `fugupass-scan` must unveil the video devices
   (`/dev/video*`) only and must pledge `stdio video` after it opens the device.
 - **PROG-SPLIT-5** — `fugupass-qr` must pledge `stdio` only.

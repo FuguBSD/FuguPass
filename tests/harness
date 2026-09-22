@@ -62,18 +62,24 @@
 #
 # The plate scan of a ceremony takes the double
 # tests/stubs/fugupass-scan.c, and that double prints the fixed test
-# master. The unveil list of the core process holds each helper path
-# with the x permission and no interpreter, so the double is a
-# program, and the guest build compiles it (PROG-SPLIT-3). The core
-# process reads the helper directory from FUGUPASS_HELPERS in a
-# regress build alone, so the guest build runs
+# master. tests/vectors/derive.h holds that value as a C constant,
+# so the double is a C program and the guest build compiles it
+# (TEST-KAT-4). The core process reads the helper directory from
+# FUGUPASS_HELPERS in a regress build alone, so the guest build runs
 # 'make FUGUPASS_REGRESS=1' (PROG-SPLIT-11).
 #
 # The harness fails when no counterparty is available. A pass over
 # zero legs is no pass.
 #
+# The interface process is Perl on the Fugu library, and the build
+# step of src/lib derives the unveil list of that process from
+# Fugu::Sandbox (PROG-SPLIT-7, PROG-SPLIT-10). build_guest()
+# therefore installs the Fugu library of the host into the guest
+# before the build, and it installs bin/fugupass-repl into the
+# helper directory after it.
+#
 # The harness builds the tree of HEAD in the guest, and it runs the
-# legs of the working tree. git status of src and tests must
+# legs of the working tree. git status of bin, src and tests must
 # therefore report no change, and no untracked file. A local build
 # leaves an obj directory that no ignore rule covers, so remove it
 # before a run.
@@ -387,25 +393,29 @@ sub free_port ()
 #	Build the source of the checkout $root in the guest, and
 #	leave the driver at $DRIVER (TEST-HARNESS-7).
 #
-#	git archive writes the committed tree of src and tests, so
-#	the copy needs no file list. A hand-written list of files
+#	git archive writes the committed tree of bin, src and tests,
+#	so the copy needs no file list. A hand-written list of files
 #	goes stale, and a stale list hides a defect behind a green
 #	gate.
 #
 #	The build therefore takes HEAD, and load_legs() takes the
 #	legs of the working tree. One tree must be under test, so a
-#	change of src or tests that no commit holds stops the run.
+#	change of one of the three directories that no commit holds
+#	stops the run.
 sub build_guest ($root)
 {
+	my @dir = qw(bin src tests);
+
 	my $dirty = host_ok(
 		'git status',
-		[ 'git', 'status', '--porcelain', '--', 'src', 'tests' ],
+		[ 'git', 'status', '--porcelain', '--', @dir ],
 		cwd     => $root,
 		timeout => $GUEST_TIMEOUT );
-	die "the harness builds HEAD, and src or tests holds a change "
-	    . "that no commit holds. Commit the change, or remove the "
-	    . "file. An untracked file counts, and no ignore rule "
-	    . "covers the obj directory of a build:\n$dirty"
+	die "the harness builds HEAD, and "
+	    . join( ', ', @dir )
+	    . " holds a change that no commit holds. Commit the change, "
+	    . "or remove the file. An untracked file counts, and no "
+	    . "ignore rule covers the obj directory of a build:\n$dirty"
 	    if $dirty =~ /\S/;
 
 	my $tar = File::Temp->new(
@@ -417,7 +427,7 @@ sub build_guest ($root)
 		'git archive',
 		[
 			'git', 'archive', '--format=tar', '-o', "$tar",
-			'HEAD', 'src', 'tests'
+			'HEAD', @dir
 		],
 		cwd     => $root,
 		timeout => $GUEST_TIMEOUT );
@@ -428,20 +438,82 @@ sub build_guest ($root)
 		[ $FUGUVM, 'put', "$tar", "$WORK/tree.tar" ],
 		timeout => $GUEST_TIMEOUT );
 	guest_ok( 'the unpack', "cd $TREE && tar xf $WORK/tree.tar" );
+
+	# The Fugu library comes before the build: src/unveil-paths
+	# reads Fugu::Sandbox at build time (PROG-SPLIT-10).
+	fugu_library();
+
 	guest_ok( 'the build',
 		"cd $TREE/src && make obj && make FUGUPASS_REGRESS=1",
 		$BUILD_TIMEOUT );
 	guest_ok( 'the driver',  "test -x $DRIVER" );
 	guest_ok( 'the program', "test -x $PROGRAM" );
 
-	# The scan double of the ceremony legs. The core process
-	# runs it from the directory that FUGUPASS_HELPERS names,
-	# and it reads the vectors of the tree above.
+	# The doubles and the programs of the helper directory. The
+	# core process runs each one from the directory that
+	# FUGUPASS_HELPERS names (PROG-SPLIT-11). The scan double
+	# reads the vectors of the tree above, and the interface
+	# program is the one helper that the repository ships whole
+	# (PROG-SPLIT-1).
 	guest_ok(
 		'the scan double',
 		"mkdir -p $HELPERS $RUN && cc -Wall -Wextra -Werror "
 		    . "-I$TREE/tests -o $HELPERS/fugupass-scan "
 		    . "$TREE/tests/stubs/fugupass-scan.c" );
+	guest_ok(
+		'the interface program',
+		"cp $TREE/bin/fugupass-repl $HELPERS/fugupass-repl && "
+		    . "chmod 0755 $HELPERS/fugupass-repl" );
+	return;
+}
+
+# fugu_library():
+#	Install the Fugu library of this host into the guest
+#	(PROG-SPLIT-7). bin/fugupass-repl is Perl on that library,
+#	and src/unveil-paths reads Fugu::Sandbox at build time
+#	(PROG-SPLIT-10).
+#
+#	The host runs this harness on Fugu::Process, so 'make deps'
+#	already installed the library here, and %INC names the tree
+#	of it. The guest therefore takes the one tree that the host
+#	proves, and no second download can disagree with it. The
+#	OpenBSD port takes devel/p5-Fugu instead (PROG-PORT-3).
+#
+#	The library is pure Perl, so the copy needs no build. It goes
+#	to the site directory of the guest perl, which
+#	Fugu::Sandbox->system_paths does not name and
+#	Fugu::Sandbox->perl_lib_dirs does.
+sub fugu_library ()
+{
+	my $tree = $INC{'Fugu/Process.pm'}
+	    or die "the harness runs without the Fugu library\n";
+	my $dir = dirname($tree);
+	my $at  = dirname($dir);
+
+	my $tar = File::Temp->new(
+		TEMPLATE => 'fugupass-fugu-XXXXXX',
+		TMPDIR   => 1,
+		SUFFIX   => '.tar'
+	);
+	host_ok(
+		'tar of the Fugu library',
+		[ 'tar', '-C', $at, '-cf', "$tar", basename($dir) ],
+		timeout => $GUEST_TIMEOUT );
+	host_ok(
+		'fuguvm put',
+		[ $FUGUVM, 'put', "$tar", "$WORK/fugu.tar" ],
+		timeout => $GUEST_TIMEOUT );
+
+	my $site = guest_ok( 'the site directory of the guest perl',
+		q{perl -MConfig -e 'print $Config{sitelibexp}'} );
+	chomp $site;
+	die "the guest perl names no site directory\n" if $site !~ m{\A/\S+\z};
+
+	guest_ok( 'the Fugu library',
+		"rm -rf $site/Fugu && mkdir -p $site && "
+		    . "tar xf $WORK/fugu.tar -C $site" );
+	guest_ok( 'the load of the Fugu library',
+		'perl -MFugu::Sandbox -e 1' );
 	return;
 }
 
@@ -1036,6 +1108,60 @@ sub program ( $, @argv )
 		error => $result->{stderr}    // '' };
 }
 
+# $cp->elapsed($run):
+#	The seconds of one step of console(), from the guest clock
+#	before it and after it.
+sub elapsed ( $, $run )
+{
+	my ( $from, $to ) = @{ $run->{clock} };
+	return $to - $from;
+}
+
+# $cp->terminal($run):
+#	The lines that one step of console() wrote to the terminal,
+#	without the prompts of it (PROG-OUTPUT-1). A revealed secret
+#	takes one line, and a step that reveals none gives the empty
+#	list.
+sub terminal ( $, $run )
+{
+	return grep {
+		length
+		    && !/\A(?:Passphrase|Passphrase again|Secret): \z/
+	}
+	    map { s/\r//gr } split /\n/, $run->{console} // '';
+}
+
+# $cp->helper($name):
+#	The path of one helper program of the guest (PROG-SPLIT-11).
+#	The core process runs the programs of that directory, and a
+#	leg drives one of them on its own.
+sub helper ( $, $name )
+{
+	return "$main::HELPERS/$name";
+}
+
+# $cp->perl($script, @argv):
+#	One run of the Perl program $script of the guest tree, with
+#	the arguments @argv and with no terminal. The path is
+#	relative to the tree, so a leg names a file of the
+#	repository.
+#
+#	The hash of the call holds 'exit', the exit status of the
+#	shell, and 'out' and 'error', the two streams. A pledge
+#	violation kills the process with SIGABRT, and the shell then
+#	gives 134. The run sets the core size to zero, because the
+#	dump of an aborted perl fills the guest (SEC-MEMORY-3).
+sub perl ( $, $script, @argv )
+{
+	my $result = main::guest( 'ulimit -c 0; ' . join ' ',
+		map { main::_shq($_) } ( 'perl', "$main::TREE/$script",
+			@argv ) );
+	return {
+		exit  => $result->{exit_code} // -1,
+		out   => $result->{stdout}    // '',
+		error => $result->{stderr}    // '' };
+}
+
 # $cp->create($vault, %opt):
 #	The vault creation ceremony in the vault $vault (CER-CREATE).
 #	The hash of the call holds 'exit', the exit status of the
@@ -1076,6 +1202,17 @@ sub create ( $self, $vault, %opt )
 #	'answers', the names of the answers that the terminal reads
 #	of the step take.
 #
+#	A step of an interactive session also holds 'input', the
+#	operator command lines of it, and 'hold', the seconds that
+#	the standard input stays open and silent after those lines
+#	(PROG-REPL-1). A step of either key takes its standard input
+#	from a named pipe, and a writer of the guest shell fills that
+#	pipe in the background. The step therefore ends with the core
+#	process, and not with the writer, so the idle lock of a
+#	session costs the seconds of the timeout and not the seconds
+#	of 'hold' (PROG-REPL-7). A step of neither key keeps the
+#	standard input of the console.
+#
 #	The call gives one hash for each step. 'exit' is the exit
 #	status of the step, and 'out' and 'error' are the two streams
 #	of it. 'console' is the console text of the step, and a
@@ -1096,18 +1233,28 @@ sub console ( $self, $vault, @step )
 		push @answer, map { $main::ANSWER{$_}
 			    // die "the harness holds no answer $_\n" }
 		    @{ $step->{answers} // [] };
+
+		my $at    = "$base.$count";
+		my $stdin = q{};
+		if ( defined $step->{input} || defined $step->{hold} ) {
+			push @line, "rm -f $at.fifo", "mkfifo $at.fifo",
+			    '{ ' . _writer($step) . "; } > $at.fifo &";
+			$stdin = " < $at.fifo";
+		}
+
 		push @line,
 		    "echo '$main::STEP_MARK $count'",
-		    "date +%s > $base.$count.clock",
+		    "date +%s > $at.clock",
 		    join( ' ',
 			map { main::_shq($_) }
 			    ( $main::PROGRAM, '-d', $vault->{dir},
 				@{ $step->{argv} } ) )
-			. " > $base.$count.out 2> $base.$count.err",
-		    "echo \$? > $base.$count.status",
-		    "date +%s >> $base.$count.clock",
+			. "$stdin > $at.out 2> $at.err",
+		    "echo \$? > $at.status",
+		    "date +%s >> $at.clock",
 		    'cat ' . main::_shq( $self->counters($vault) )
-			. " > $base.$count.counters 2>/dev/null; :";
+			. " > $at.counters 2>/dev/null; :";
+		push @line, "rm -f $at.fifo" if length $stdin;
 	}
 	die "a console session holds one step at least\n" if $count == 0;
 	push @line, "echo '$main::STEP_MARK 0'";
@@ -1144,6 +1291,28 @@ sub console ( $self, $vault, @step )
 				$file{"$base.$i.clock"} // '' ] };
 	}
 	return @run;
+}
+
+# _writer($step):
+#	The command list that fills the named pipe of one step: the
+#	operator command lines of 'input', and then the seconds of
+#	'hold'. A step of 'hold' alone gives a standard input that
+#	stays open and sends nothing, and a step of 'input' alone
+#	gives the end of the input after the last line.
+sub _writer ($step)
+{
+	my @input = @{ $step->{input} // [] };
+	my $hold  = $step->{hold}     // 0;
+
+	die "the hold of a step is the count of the seconds\n"
+	    if $hold !~ /\A[0-9]+\z/;
+
+	my @cmd;
+	push @cmd, "printf '%s\\n' "
+	    . join ' ', map { main::_shq($_) } @input
+	    if @input;
+	push @cmd, "sleep $hold" if $hold;
+	return @cmd ? join '; ', @cmd : ':';
 }
 
 # $cp->_slurp($base):

@@ -36,7 +36,12 @@ use Test::More;
 
 my $PROGRAM = "$RealBin/../../bin/fugupass-repl";
 
-eval { require Fugu::REPL; 1 }
+# The build step of the unveil list, and the file of the core
+# process that carries that list (PROG-SPLIT-10).
+my $GENERATOR = "$RealBin/../../src/unveil-paths";
+my $SANDBOX   = "$RealBin/../../src/sandbox.c";
+
+eval { require Fugu::REPL; require Fugu::Sandbox; 1 }
     or plan skip_all => 'the Fugu library is absent';
 
 # The bound of every wait. A program that stalls fails the test
@@ -369,5 +374,86 @@ subtest 'the completion offers the commands and the entry names' => sub {
 	is_deeply( [ sort @wired ],
 		[qw(=ok alpha beta)], 'the editor holds that callback' );
 };
+
+# The build derives the unveil list of the interface process, and the
+# core process carries it (PROG-SPLIT-10). Neither Fugu::Sandbox
+# method calls a syscall, so this host test proves the list.
+#
+# The test runs the build step with the perl of this test, and the
+# expected list comes from the two methods. The generated header is
+# no file of the repository, so the run here is the one way to read
+# it off OpenBSD.
+subtest 'the build derives the unveil list of the interface' => sub {
+	my $header = _generate();
+
+	like(
+		$header,
+		qr/^\#define UNVEIL_PATHS_DERIVED\b/m,
+		'the header defines the macro of the list'
+	);
+
+	my @got;
+	push @got, [ $1, $2 ]
+	    while $header =~ /\{ "([^"]*)",\s*"([a-z]+)" \}/g;
+
+	my ( @want, %seen );
+	for my $path ( Fugu::Sandbox->perl_lib_dirs ) {
+		push @want, [ $path, 'r' ] if !$seen{$path}++;
+	}
+	for my $entry ( Fugu::Sandbox->system_paths ) {
+		push @want, [ $entry->[0], $entry->[1] ]
+		    if !$seen{ $entry->[0] }++;
+	}
+
+	is_deeply( \@got, \@want,
+		      'perl_lib_dirs and system_paths give the list that the '
+		    . 'header holds' );
+
+	# The core process no longer names the resolver files and the
+	# service tables itself: system_paths carries them
+	# (PROG-SPLIT-3).
+	my %perm = map { $_->[0] => $_->[1] } @got;
+	for my $path (qw(/etc/resolv.conf /etc/hosts /etc/services)) {
+		is( $perm{$path}, 'r',
+			      "the list holds $path with the r permission "
+			    . '(PROG-SPLIT-3)' );
+	}
+
+	# The core process carries the list, so the one file of the
+	# unveil calls reads the header and expands the macro
+	# (PROG-SPLIT-10).
+	my $sandbox = _read($SANDBOX);
+	like(
+		$sandbox,
+		qr/^\#include "unveil_paths\.h"$/m,
+		'the sandbox of the core process reads the header'
+	);
+	like( $sandbox, qr/unveil_list\[\]\s*=\s*\{.*\bUNVEIL_PATHS_DERIVED\b/s,
+		'the unveil list of the core process holds the derived list '
+		    . '(PROG-SPLIT-10)' );
+};
+
+# _generate():
+#	The header that the build step writes. The test runs the step
+#	with its own perl, because the shebang of the step names the
+#	perl of the target machine.
+sub _generate ()
+{
+	open my $fh, '-|', $^X, $GENERATOR
+	    or die "the test runs no $GENERATOR: $!\n";
+	my $text = do { local $/ = undef; <$fh> };
+	close $fh or die "$GENERATOR failed\n";
+	return $text;
+}
+
+# _read($path):
+#	Every byte of the file at $path.
+sub _read ($path)
+{
+	open my $fh, '<', $path or die "the test reads no $path: $!\n";
+	my $text = do { local $/ = undef; <$fh> };
+	close $fh;
+	return $text;
+}
 
 done_testing();
