@@ -337,21 +337,28 @@ secret_print(const char *value)
  *	place of the standard output (PROG-IFACE-13).
  *
  *	One record holds one line of a vault file at most, so the
- *	buffer takes the line of VAULT-FORMAT-5.
+ *	buffer takes the line of VAULT-FORMAT-5. A record above that
+ *	bound reaches no sink, because a truncated record is a wrong
+ *	record. The report of it goes to the standard error.
  */
 static void
 record(const char *fmt, ...)
 {
 	char	 line[VAULT_LINE_MAX];
 	va_list	 ap;
+	int	 n;
 
 	va_start(ap, fmt);
 	if (sink == NULL) {
 		vprintf(fmt, ap);
 		putchar('\n');
 	} else {
-		(void)vsnprintf(line, sizeof(line), fmt, ap);
-		sink(line);
+		n = vsnprintf(line, sizeof(line), fmt, ap);
+		if (n < 0 || (size_t)n >= sizeof(line))
+			warnx("the record of the command does not fit one "
+			    "line");
+		else
+			sink(line);
 	}
 	va_end(ap);
 }

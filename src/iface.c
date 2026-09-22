@@ -83,9 +83,11 @@
  * The bytes of one request line and of one output record, without
  * the line feed. A record comes from one line of a vault file, and a
  * request line names an entry of such a line, so both take the line
- * of VAULT-FORMAT-5.
+ * of VAULT-FORMAT-5. That line counts the line feed inside its
+ * 4096 bytes, so the text of it takes one byte less
+ * (PROG-IFACE-12).
  */
-#define TEXT_MAX	VAULT_LINE_MAX
+#define TEXT_MAX	(VAULT_LINE_MAX - 1)
 
 /*
  * The words of one request line. A command takes one -f option per
@@ -452,7 +454,7 @@ iface_session(const char *vault)
 			break;
 		case REQUEST_LONG:
 			warnx("the request line holds more than %d bytes",
-			    TEXT_MAX);
+			    VAULT_LINE_MAX);
 			end = END_FAIL;
 			break;
 		case REQUEST_IDLE:

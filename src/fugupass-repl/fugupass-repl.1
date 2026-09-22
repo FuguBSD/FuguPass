@@ -113,6 +113,8 @@ It replaces every other byte with a question mark, and it removes
 .Dv DEL
 and the C1 range.
 It breaks no UTF-8 sequence.
+The completion of an entry name takes the same filter, because the
+editor writes a candidate to the terminal with no filter of its own.
 An entry name and the error text of an oracle carry external bytes,
 and an escape sequence of such bytes can rewrite what the operator
 sees.

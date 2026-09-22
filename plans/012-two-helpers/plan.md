@@ -3,7 +3,7 @@
 ## Status
 
 Proposed. It waits on plan 006 for the helper boundary, and on plan 007 for the
-six commands. It also waits on plan 011 for the interface rules of PROG-SPLIT.
+six commands.
 
 Implements: PROG-SCAN, PROG-QR, KEY-MASTER, TEST-KAT. Implements: PROG-SPLIT,
 PROG-OUTPUT, SEC-MEMORY. Implements: VAULT-BACKUP without VAULT-BACKUP-3.
@@ -36,10 +36,11 @@ ISC-licensed decoder, in tree or from a port. The render helper encodes with
 library, its provenance, and its license (PROG-QR-5). The source evaluation
 names the candidates that the developer weighed.
 
-**The sandbox fits each helper.** `fugupass-scan` unveils the video devices only
-and pledges `stdio video` after it opens the device (PROG-SPLIT-4).
-`fugupass-qr` pledges `stdio` (PROG-SPLIT-5). Both set `RLIMIT_CORE` to zero
-first (SEC-MEMORY-3).
+**The sandbox fits each helper.** `fugupass-scan` unveils no path, and it
+pledges `stdio video` after it opens the device. The core process carries the
+video devices in its unveil list, and its execpromises hold `video`
+(PROG-SPLIT-4). `fugupass-qr` pledges `stdio` (PROG-SPLIT-5). Both set
+`RLIMIT_CORE` to zero first (SEC-MEMORY-3).
 
 **The render helper knows two shapes.** A mnemonic renders in the Standard
 SeedQR form, version 2, numeric mode, so a signer scans it from the screen

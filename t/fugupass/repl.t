@@ -263,6 +263,23 @@ subtest 'the display filter guards the terminal' => sub {
 	);
 };
 
+# A reply line with another tag is a protocol failure, and the
+# interface must stop (PROG-IFACE-11). The core and the interface
+# disagree there, and a guess is worse than a stop.
+subtest 'an unknown reply tag stops the interface' => sub {
+	my $core = _spawn();
+
+	is( _request($core), 'ls', 'the interface asks for the listing' );
+	_reply( $core, '!alpha', '=ok' );
+
+	is( _reap($core), 1, 'the unknown tag stops the interface' );
+	like(
+		_slurp( $core->{err} ),
+		qr/reply tag '!'/,
+		'and the report names the tag'
+	);
+};
+
 # The core locks and closes the reply pipe, and that ends the
 # interface even with the operator input still open (PROG-IFACE-6,
 # PROG-REPL-7).
@@ -279,9 +296,11 @@ subtest 'a closed reply pipe ends the interface' => sub {
 		qr/\e/, 'the plain mode writes no escape' );
 };
 
-# One Fugu::Signal manager holds the interrupt flag, and the prompt
-# loop reads it (PROG-IFACE-9). Without the handler the default
-# action of SIGINT kills the process, and _reap then reports nothing.
+# One Fugu::Signal manager installs the interrupt handler, and that
+# handler keeps the process alive (PROG-IFACE-9). Without it the
+# default action of SIGINT kills the process, and _reap then reports
+# nothing. The case below proves that the prompt loop reads the flag
+# of the manager.
 subtest 'a signal ends the session' => sub {
 	my $core = _spawn();
 
@@ -353,7 +372,13 @@ subtest 'the completion offers the commands and the entry names' => sub {
 	# The middle entry carries the text of an end line. The tag of
 	# each line keeps the frame apart from the text, so that name
 	# cannot end the reply (PROG-IFACE-11).
-	syswrite $rep_write, ">alpha\n>=ok\n>beta\n=ok\n"
+	#
+	# The last entry carries a BEL and an escape sequence. The
+	# editor writes a candidate to the terminal on a Tab press, and
+	# it filters nothing there, so the listing takes the display
+	# filter (PROG-IFACE-5). The expected bytes are literal here: a
+	# filter that the test computes would pass against itself.
+	syswrite $rep_write, ">alpha\n>=ok\n>beta\n>ga\x07mma\x1B[31m\n=ok\n"
 	    or die "write: $!\n";
 	ok( main::request_listing( $editor, $session ),
 		'the listing reply arrives' );
@@ -363,16 +388,47 @@ subtest 'the completion offers the commands and the entry names' => sub {
 
 	my $callback = main::completion_callback($session);
 	my @offered  = $callback->( 'a', 'show a' );
-	is_deeply( [ sort @offered ],
-		[qw(=ok alpha beta)],
-		'the callback offers the entry names of the listing' );
+	is_deeply(
+		[ sort @offered ],
+		[ '=ok', 'alpha', 'beta', 'ga?mma?[31m' ],
+		'the callback offers the filtered entry names of the listing'
+	);
 
 	# Fugu::REPL keeps the callback under the constructor key, and
 	# it has no reader for it. The test reads the key, because the
 	# wiring of the callback is what PROG-REPL-9 demands.
 	my @wired = $editor->{complete}->( 'a', 'show a' );
-	is_deeply( [ sort @wired ],
-		[qw(=ok alpha beta)], 'the editor holds that callback' );
+	is_deeply(
+		[ sort @wired ],
+		[ '=ok', 'alpha', 'beta', 'ga?mma?[31m' ],
+		'the editor holds that callback'
+	);
+};
+
+# The prompt loop must read the interrupt flag of the manager
+# (PROG-IFACE-9). The fake editor counts each read of a command
+# line, so a loop that reads no flag counts one there.
+subtest 'the prompt loop reads the interrupt flag' => sub {
+	require $PROGRAM;
+
+	pipe my $req_read, my $req_write or die "pipe: $!\n";
+	pipe my $rep_read, my $rep_write or die "pipe: $!\n";
+
+	# The one listing of the loop comes first, and the flag stands
+	# at the prompt after it (PROG-REPL-10).
+	syswrite $rep_write, "=ok\n" or die "write: $!\n";
+
+	my $session = main::new_session( $req_write, $rep_read );
+	my $editor  = FakeEditor->new;
+	my $signals = FakeSignals->new;
+
+	is( main::run_session( $editor, $session, $signals ),
+		0, 'the interrupt ends the prompt loop with no failure' );
+	is( $signals->{asked}, 1, 'the loop asked the manager for the flag' );
+	is( $editor->{reads},  0, 'and it read no command line after it' );
+
+	my $asked = readline $req_read;
+	is( $asked, "ls\n", 'the listing is the one request of the loop' );
 };
 
 # The build derives the unveil list of the interface process, and the
@@ -431,6 +487,16 @@ subtest 'the build derives the unveil list of the interface' => sub {
 	like( $sandbox, qr/unveil_list\[\]\s*=\s*\{.*\bUNVEIL_PATHS_DERIVED\b/s,
 		'the unveil list of the core process holds the derived list '
 		    . '(PROG-SPLIT-10)' );
+
+	# The build runs the step through the shebang of it, and the
+	# core process runs the interface program through the shebang
+	# of that program. The two lines must name one perl: the list
+	# of the header then names the perl of the interface process
+	# (PROG-SPLIT-10).
+	my ($step)      = split /\n/, _read($GENERATOR);
+	my ($interface) = split /\n/, _read($PROGRAM);
+	is( $step, $interface,
+		'the build step and the interface program name one perl' );
 };
 
 # _generate():
@@ -445,6 +511,48 @@ sub _generate ()
 	close $fh or die "$GENERATOR failed\n";
 	return $text;
 }
+
+# The fake editor of the prompt loop. run_session calls read_line at
+# the prompt, and event and restore after it.
+package FakeEditor;
+
+sub new ($class)
+{
+	return bless { reads => 0 }, $class;
+}
+
+sub read_line ($self)
+{
+	$self->{reads}++;
+	return;
+}
+
+sub event ($)
+{
+	return;
+}
+
+sub restore ($self)
+{
+	return $self;
+}
+
+# The fake signal manager of the prompt loop. It reports an
+# interrupt, and it counts each read of the flag.
+package FakeSignals;
+
+sub new ($class)
+{
+	return bless { asked => 0 }, $class;
+}
+
+sub interrupted ($self)
+{
+	$self->{asked}++;
+	return 1;
+}
+
+package main;
 
 # _read($path):
 #	Every byte of the file at $path.

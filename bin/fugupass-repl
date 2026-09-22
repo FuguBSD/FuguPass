@@ -172,6 +172,16 @@ sub completion_callback ($session)
 	};
 }
 
+# entry_names($lines):
+#	The completion set of one listing reply. The editor writes a
+#	candidate to the terminal on a Tab press, and it filters
+#	nothing there, so the names take the display filter here
+#	(PROG-IFACE-5).
+sub entry_names ($lines)
+{
+	return [ map { Fugu::REPL::display_filter($_) } @$lines ];
+}
+
 # build_editor($session):
 #	The line editor of the prompt (PROG-REPL-8). The command
 #	table gives the help text and the first word, and the
@@ -276,7 +286,7 @@ sub request_listing ( $editor, $session )
 	my $reply = exchange( $editor, $session, 'ls', 0 );
 	return unless $reply;
 
-	$session->{entries} = $reply->{lines}
+	$session->{entries} = entry_names( $reply->{lines} )
 	    if $reply->{outcome} eq 'ok';
 
 	return 1;
@@ -336,7 +346,7 @@ sub run_session ( $editor, $session, $signals )
 
 		# The listing of the operator refreshes the completion
 		# set, so no second request follows it (PROG-REPL-10).
-		$session->{entries} = $reply->{lines}
+		$session->{entries} = entry_names( $reply->{lines} )
 		    if $name eq 'ls' && $reply->{outcome} eq 'ok';
 	}
 }

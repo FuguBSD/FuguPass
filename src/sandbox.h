@@ -41,11 +41,13 @@
  *
  * A child reduces a promise set and never widens one, so this value
  * holds every promise that a child pledges: tty of fugupass-repl
- * (PROG-SPLIT-7), and video of fugupass-scan (PROG-SPLIT-4). rpath
- * carries the runtime files of each child, and the program text of
- * the interface process. The scan helper opens the video device
- * before its own pledge call, and a read of that device needs
- * rpath as well.
+ * (PROG-SPLIT-7). rpath carries the runtime files of each child,
+ * and the program text of the interface process.
+ *
+ * The value holds no video, and no row of the unveil list carries
+ * /dev/video*. PROG-SPLIT-4 adds the promise and the rows together
+ * with fugupass-scan. A promise with no path behind it grants
+ * nothing, and it widens the set of every other child.
  *
  * prot_exec carries the XS modules of the interpreter of the
  * interface process: the loader of such a module maps it with
@@ -59,7 +61,7 @@
  * as well, so no child widens the list of this process.
  */
 #define SANDBOX_EXEC_PROMISES \
-	"stdio rpath prot_exec tty video"
+	"stdio rpath prot_exec tty"
 
 /*
  * sandbox_enter(vault):

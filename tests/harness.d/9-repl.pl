@@ -47,6 +47,11 @@ my $POOL = 2;
 my $IDLE = 3;
 my $HOLD = 40;
 
+# The bytes of the entry name of the long request line. The line of
+# the vault format takes 4096 bytes, and that count holds the line
+# feed (PROG-IFACE-12, VAULT-FORMAT-5).
+my $LONG = 5000;
+
 # session_case($t, $vault):
 #	One session of the six commands (PROG-IFACE-2, PROG-REPL-3).
 #
@@ -143,6 +148,45 @@ sub idle_case ( $t, $vault )
 	cmp_ok( $t->elapsed($run), '<', $HOLD,
 		'the lock ends the step before the standard input closes '
 		    . '(PROG-IFACE-6)' );
+
+	# The bound below is the measure of the wait. A deadline that
+	# is wrong returns at once, and it prints the same lock line.
+	cmp_ok( $t->elapsed($run), '>=', $IDLE,
+		"the session waited the $IDLE seconds of the timeout before "
+		    . 'the lock (PROG-REPL-7)' );
+	return;
+}
+
+# long_case($t, $vault):
+#	A request line above the line bound of the vault format
+#	(PROG-IFACE-12). The core must answer that line with a fail end
+#	line, and the session must go on.
+#
+#	The step types the long line, one ls, and quit. The listing
+#	after the long line proves the end line: the interface waits
+#	for the reply of one request, and it sends the next request
+#	after that reply alone.
+sub long_case ( $t, $vault )
+{
+	my ($run) = $t->console(
+		$vault,
+		{
+			argv    => [],
+			answers => ['right'],
+			input   => [ 'show ' . ( 'a' x $LONG ), 'ls', 'quit' ]
+		} );
+
+	is( $run->{exit}, 0,
+		'the long request line ends no session (PROG-IFACE-12)' )
+	    or diag( $run->{error} );
+	like(
+		$run->{error},
+		qr/the request line holds more than 4096 bytes/,
+		'the core refuses a request line above the line bound '
+		    . '(PROG-IFACE-12, VAULT-FORMAT-5)' );
+	like( $run->{out}, qr/^a1$/m,
+		'the ls after the long line reaches the core, so that line '
+		    . 'took an end line (PROG-IFACE-12)' );
 	return;
 }
 
@@ -186,7 +230,7 @@ sub pledge_case ($t)
 
 return sub ($t)
 {
-	# One ceremony serves the two session cases. The idle case
+	# One ceremony serves the three session cases. The idle case
 	# runs last, because it rewrites the config of the vault.
 	my $vault = $t->ceremony_vault( 'repl', pool => $POOL );
 	my $made  = $t->create($vault);
@@ -195,6 +239,8 @@ return sub ($t)
 
 	subtest 'the session of the interface process' =>
 	    sub { session_case( $t, $vault ) };
+	subtest 'a request line above the line bound' =>
+	    sub { long_case( $t, $vault ) };
 	subtest 'the idle lock of a session' =>
 	    sub { idle_case( $t, $vault ) };
 	subtest 'the pledge of the interface process' =>
