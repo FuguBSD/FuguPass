@@ -363,9 +363,39 @@ no keyboard.
   [PROG-SPLIT](programs.md#prog-split).
 - **PROG-QR-5** — The documentation must record the chosen QR decode and render
   libraries, with their ports provenance and their licenses.
+- **PROG-QR-6** — A mnemonic code must be version 2, level L, numeric mode, and
+  mask pattern 0. FuguSeed pins that mask pattern, and the picture of test
+  vector 4 holds it ([TEST-KAT](testing.md#test-kat)). A render library picks a
+  mask pattern by penalty score, so the program must re-mask a mnemonic code.
+  The program must read the mask number from the format bits of the library
+  output. It must undo that pattern over each module of the encoding region, and
+  it must apply pattern 0 there. It must then write the format bits
+  `111011111000100` to both copies of that field.
+- **PROG-QR-7** — The program must take the shape from the bytes on its standard
+  input. An input of 12 words of the BIP39 English list is a mnemonic. One space
+  stands between two words, and at most one line feed ends the input. Every
+  other input is a vault file. The core process sends the words of a mnemonic
+  entry and the bytes of a vault file on the same pipe
+  ([PROG-OUTPUT](programs.md#prog-output),
+  [PROG-SPLIT](programs.md#prog-split)).
+- **PROG-QR-8** — A vault-file code must be level L in byte mode, at the lowest
+  version that takes the file. The one-code capacity is 2953 bytes, the byte
+  capacity of version 40 at level L. The program must write the report of
+  PROG-QR-3 to its standard error, and it must then write no code. The report
+  must name that count, so the operator reads the bound from the tool.
+- **PROG-QR-9** — The render must write one character for two module rows. A
+  block half of a character is a light module, and a space half of it is a dark
+  module. The render must use four characters. `U+2588` is two light modules.
+  `U+2580` is a light module above a dark one. `U+2584` is a dark module above a
+  light one. The space is two dark modules. One line feed must end each line.
+  Each code must carry a quiet zone of 4 light modules on each side. An odd
+  module count must take one more light module row at the end.
 
 A vault file is ciphertext, so its paper QR is a safe backup object
-([VAULT-BACKUP](vault.md#vault-backup)).
+([VAULT-BACKUP](vault.md#vault-backup)). A signer scans a mnemonic code from the
+screen, and the terminal of the operator gives the light modules of it. The
+scanners of the signer flow read that one form. The mask pattern and the quiet
+zone of a mnemonic code are therefore fixed values.
 
 <a id="prog-port"></a>
 

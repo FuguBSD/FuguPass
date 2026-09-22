@@ -22,20 +22,20 @@
 # tests of it. The layout follows usr.bin/ssh of the OpenBSD tree.
 #
 # Each program gets a directory of its own, and a program with a C
-# source builds there through bsd.prog.mk (PROG-BUILD-2). fugupass is
-# the first one. fugupass-repl is Perl, so its directory holds the
-# manual page of it alone, and SUBDIR below does not name that
-# directory.
+# source builds there through bsd.prog.mk (PROG-BUILD-2). fugupass
+# and fugupass-qr are two of them. fugupass-repl is Perl, so its
+# directory holds the manual page of it alone, and SUBDIR below does
+# not name that directory.
 #
 # The regress loop links the archive of lib, so it must run after the
 # build loop. bsd.subdir.mk declares regress with the double-colon
 # operator, and this line must use the same operator.
 #
 # SUBDIR holds the build order of the loop: lib builds the archive
-# that fugupass links, and regress comes last.
+# that each program links, and regress comes last.
 
 regress:: all
 
-SUBDIR=	lib fugupass regress
+SUBDIR=	lib fugupass fugupass-qr regress
 
 .include <bsd.subdir.mk>

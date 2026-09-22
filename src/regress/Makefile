@@ -13,18 +13,19 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-# envelope, http, kat, oracle-client, sandbox, share and vault, the
-# seven programs of this directory. bsd.regress.mk builds each
+# envelope, http, kat, oracle-client, qr, sandbox, share and vault,
+# the eight programs of this directory. bsd.regress.mk builds each
 # program of PROGS, and a run of exit 0 is a pass. envelope holds
 # the known-answer tests of the oracle protocol, kat holds the tests
-# of the derivation tree, sandbox holds the test of the unveil list
-# and the pledge call, share holds the tests of the custody layer,
-# and vault holds the tests of the vault on disk. Each of those five
-# is a whole test, and REGRESS_TARGETS names the default target of
-# it.
+# of the derivation tree, qr holds the tests of the render helper,
+# sandbox holds the test of the unveil list and the pledge call,
+# share holds the tests of the custody layer, and vault holds the
+# tests of the vault on disk. Each of those six is a whole test, and
+# REGRESS_TARGETS names the default target of it.
 #
 # sandbox runs on OpenBSD alone, because unveil(2) and pledge(2)
-# restrict this process. Every program of this directory builds on
+# restrict this process. qr runs there as well, for the pledge call
+# of the render helper. Every program of this directory builds on
 # OpenBSD alone (PROG-BUILD-1).
 #
 # http is the driver of the transport tests, and it holds no test
@@ -50,9 +51,9 @@
 # Every other program of PROGS takes a line.
 #
 # bsd.prog.mk takes the source of each program from the name of it,
-# so envelope.c, http.c, kat.c, oracle-client.c, sandbox.c, share.c
-# and vault.c need no SRCS line. Every test source sits in this one
-# directory (PROG-BUILD-1).
+# so envelope.c, http.c, kat.c, oracle-client.c, qr.c, sandbox.c,
+# share.c and vault.c need no SRCS line. Every test source sits in
+# this one directory (PROG-BUILD-1).
 #
 # Two include directories reach the headers of a test. The first one
 # holds the interfaces of the flat sources, and the second one holds
@@ -63,16 +64,16 @@
 # envelope.c holds a name of its own in each directory: the interface
 # is envelope.h, and the vectors are vectors/oracle.h.
 #
-# Three C files of this directory carry the name of an archive
-# source: envelope.c, http.c and sandbox.c. This directory holds the
-# test, and the directory above holds the archive source. This file
-# sets no .PATH, so each program takes the source of this directory,
-# and the archive carries the other one.
+# Four C files of this directory carry the name of an archive
+# source: envelope.c, http.c, qr.c and sandbox.c. This directory
+# holds the test, and the directory above holds the archive source.
+# This file sets no .PATH, so each program takes the source of this
+# directory, and the archive carries the other one.
 #
 # The archive one directory up links nothing, so this directory owns
-# the link line of the libraries. libsecp256k1 comes from the ports
-# tree, under LOCALBASE. bcrypt_pbkdf(3) comes from libutil of the
-# base system. http.c reads <tls.h> of libtls, and libtls needs
+# the link line of the libraries. libsecp256k1 and libqrencode come
+# from the ports tree, under LOCALBASE. bcrypt_pbkdf(3) comes from
+# libutil of the base system. http.c reads <tls.h> of libtls, and libtls needs
 # libssl. The lookup of the archive tests the obj directory of lib.
 # make obj puts the archive there, and a tree without make obj holds
 # the archive in lib. This file writes the literal name obj, because
@@ -80,7 +81,7 @@
 
 .include <bsd.own.mk>
 
-PROGS=		envelope http kat oracle-client sandbox share vault
+PROGS=		envelope http kat oracle-client qr sandbox share vault
 
 # bsd.prog.mk takes a manual page name from each name of PROGS, and
 # this directory holds no manual page. That line sets a value for an
@@ -97,6 +98,12 @@ LIBFUGUPASS=	${.CURDIR}/../lib
 # envelope.c and share.c read <secp256k1.h> of the ports tree.
 CFLAGS+=	-I${LOCALBASE}/include
 
+# qr.c reads the picture of test vector 4 at a run, from the file of
+# tests/vectors/seedqr. The picture is text and no C header, because
+# it is the byte-for-byte copy of the FuguSeed fixture. That
+# directory holds the commit and the digest of the copy.
+CFLAGS+=	-DQR_PICTURE=\"${.CURDIR}/../../tests/vectors/seedqr/vector4.picture\"
+
 .if exists(${LIBFUGUPASS}/obj)
 LDADD+=		-L${LIBFUGUPASS}/obj -lfugupass
 DPADD+=		${LIBFUGUPASS}/obj/libfugupass.a
@@ -105,7 +112,8 @@ LDADD+=		-L${LIBFUGUPASS} -lfugupass
 DPADD+=		${LIBFUGUPASS}/libfugupass.a
 .endif
 
-LDADD+=		-ltls -lssl -lcrypto -lutil -L${LOCALBASE}/lib -lsecp256k1
+LDADD+=		-ltls -lssl -lcrypto -lutil
+LDADD+=		-L${LOCALBASE}/lib -lsecp256k1 -lqrencode
 DPADD+=		${LIBTLS} ${LIBSSL} ${LIBCRYPTO} ${LIBUTIL}
 
 # http.t writes the request of one case, and the body of one case,
@@ -113,8 +121,8 @@ DPADD+=		${LIBTLS} ${LIBSSL} ${LIBCRYPTO} ${LIBUTIL}
 CLEANFILES+=	http.body http.request
 
 REGRESS_TARGETS=	run-regress-envelope run-regress-kat \
-			run-regress-sandbox run-regress-share \
-			run-regress-vault run-http
+			run-regress-qr run-regress-sandbox \
+			run-regress-share run-regress-vault run-http
 
 run-http: http
 	perl ${.CURDIR}/http.t ${.OBJDIR}/http </dev/null

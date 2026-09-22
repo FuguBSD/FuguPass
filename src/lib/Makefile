@@ -25,8 +25,8 @@
 
 LIB=		fugupass
 SRCS=		bip85.c ceremony.c commands.c derive.c entry.c envelope.c \
-		helper.c http.c iface.c oracle.c pin.c sandbox.c seal.c \
-		session.c share.c vault.c wordlist.c
+		helper.c http.c iface.c oracle.c pin.c qr.c sandbox.c \
+		seal.c session.c share.c vault.c wordlist.c
 
 CFLAGS+=	-Wall -Wextra -Werror
 CFLAGS+=	-I${.CURDIR}/..
@@ -75,6 +75,12 @@ CFLAGS+=	-DHELPER_DIR=\"${LOCALBASE}/bin\"
 .if defined(FUGUPASS_REGRESS)
 CFLAGS+=	-DFUGUPASS_REGRESS
 .endif
+
+# libqrencode comes from the ports tree as well, under LOCALBASE.
+# qr.c reads its header, and src/fugupass-qr and src/regress each
+# add -L${LOCALBASE}/lib -lqrencode to LDADD. The core process
+# references no function of qr.c, so the link of it extracts no
+# object of that source and it needs no such line (PROG-SPLIT-2).
 
 # bcrypt_pbkdf(3) comes from libutil of the base system. pin.c reads
 # <util.h>, and each directory that links this archive adds -lutil
