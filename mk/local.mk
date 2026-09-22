@@ -1,6 +1,12 @@
 # mk/local.mk: the consumer hook of this repository (MK-LOCAL).
 # sync never touches this file.
 
+# The Perl sources of this repository: the interface program in bin/
+# and the tests in t/ (PROG-SPLIT-7). The repository makes no CPAN
+# distribution, so no lib/ directory holds a module, and the dist
+# target of the perl pack stays unused.
+PERL_SRC_DIRS	= bin t
+
 # The full test tier set of make test
 TEST_GLOBS	= t/fugupass/*.t t/ci/*.t
 

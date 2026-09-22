@@ -14,8 +14,8 @@ deployment.
 ## Commands
 
 ```sh
-make deps        # install signify and gitleaks
-make deps-test   # add the Fugu dist, for the harness
+make deps        # install signify, gitleaks and the Fugu library
+make deps-test   # add the Perl lint and format modules
 make check       # run every gate; run it before each commit
 make test        # run the test suite
 make harness     # run the interop harness against each counterparty

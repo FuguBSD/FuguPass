@@ -106,6 +106,18 @@ modules.
   with one `Fugu::Signal` manager. It must build the manager, and it must then
   call `setup_interrupt_flag` on it. The signal path is one exit path, so the
   process must restore the terminal state.
+- **PROG-IFACE-10** — The core process must spawn `fugupass-repl` with the
+  request pipe on file descriptor 3, and the reply pipe on file descriptor 4.
+  The interface process must take no argument. It must report the absent
+  descriptor and must stop, because the core process is its only parent.
+- **PROG-IFACE-11** — Each line of the two pipes ends with one newline. A
+  request line holds the operator command line, without the space at each end.
+  An empty command line sends no request. The first byte of a reply line is the
+  tag. A reply line starts with `>`, and the rest of that line is one line of
+  the command output. The end line starts with `=`, and the rest of that line is
+  `ok` or `fail`. The tag keeps the frame apart from the text, so an entry name
+  cannot forge an end line. A line with another tag is a protocol failure, and
+  the interface process must stop.
 
 Entry names and oracle error text carry external bytes, so the display filter
 guards the operator's terminal. `Fugu::REPL` holds the terminal in raw mode only
@@ -174,6 +186,12 @@ through Fugu.
 - **PROG-REPL-9** — `Fugu::REPL` must take each completion candidate from a
   caller callback. The interface process gives the command names and the entry
   names of the open index listing, as PROG-REPL-8 states.
+- **PROG-REPL-10** — The command names of the completion come from the command
+  table of `Fugu::REPL`, and the entry names come from the completion callback.
+  The interface process must take the entry names from the reply of each `ls`
+  request. It must send one `ls` request before the first prompt, and it must
+  show no line of that reply. It must send no other request of its own, so each
+  operator command is one request line.
 
 `ls` reads the open index and sends no entry request. The unlock reads the
 passphrase once and verifies it at the canary record of each quorum oracle. Each
