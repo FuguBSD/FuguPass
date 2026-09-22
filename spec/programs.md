@@ -143,15 +143,20 @@ through Fugu.
   `k` `get_pin` requests ([ORC-QUORUM](oracle.md#orc-quorum), D-07). `add` and
   `gen` consume one pool slot each, with one quorum reveal of the consumed slot
   ([ENTRY-POOL](entries.md#entry-pool)). `audit` reads shadow metadata through
-  quorum reveals ([ENTRY-SHADOW](entries.md#entry-shadow)).
+  quorum reveals ([ENTRY-SHADOW](entries.md#entry-shadow)). It must take the
+  type of each entry from the index, and it must reveal the shadow entries
+  alone. It must send no oracle request for an entry of another type
+  ([VAULT-INDEX](vault.md#vault-index)).
 - **PROG-REPL-5** — With fewer than `k` reachable oracles, the tool must perform
   no reveal and must report the state of each oracle
-  ([ORC-QUORUM](oracle.md#orc-quorum)). An HTTP error or a transport failure can
-  happen at a quorum oracle. The tool can then substitute the next reachable
-  oracle, after that oracle's canary check. It must refuse the reveal only when
-  no untried quorum remains (ORC-QUORUM-5). The report uses the distinct
-  HTTP-error and transport-failure states of [ORC-REVEAL](oracle.md#orc-reveal),
-  and both are distinct from the junk report.
+  ([ORC-QUORUM](oracle.md#orc-quorum)). A decrypt failure or a failed request
+  can happen at a quorum oracle, and a request also fails at this machine
+  (ORC-QUORUM-5, ORC-COUNTER-5). The tool can then substitute the next reachable
+  oracle, after that oracle's canary check. It must refuse the reveal when no
+  untried reachable oracle remains, and when a record of the quorum holds the
+  request count of ORC-QUORUM-8. The report uses the distinct HTTP-error and
+  transport-failure states of [ORC-REVEAL](oracle.md#orc-reveal), and both are
+  distinct from the junk report.
 - **PROG-REPL-6** — Plate verification and every data-restore path must work
   without the oracle ([CER-VERIFY](ceremonies.md#cer-verify),
   [REC-PRINCIPLE](recovery.md#rec-principle), D-04).
@@ -209,10 +214,26 @@ actions.
   The subcommand must take the machine name from `-m`
   ([KEY-DEVICE](keys.md#key-device)), and the `bcrypt_pbkdf(3)` round count from
   `-r` ([KEY-PIN](keys.md#key-pin)). The `-k`, `-m` and `-r` options and the
-  argument list are mandatory.
+  argument list are mandatory. The subcommand must take the slots of the new
+  pool from the optional `-p` option ([ENTRY-POOL](entries.md#entry-pool)).
 - **PROG-ONESHOT-7** — The `create` subcommand must write the revocation kit
   ([ORC-REVOKE](oracle.md#orc-revoke)) at the path of
   [VAULT-LAYOUT](vault.md#vault-layout). It must print the path of that file.
+- **PROG-ONESHOT-8** — `add` and `gen` must take the entry type of a new entry
+  from the `-T` option ([ENTRY-TYPES](entries.md#entry-types)). A rotation must
+  take the type from the index, and it must refuse a `-T` option of another type
+  ([VAULT-INDEX](vault.md#vault-index)). Each `-f name=value` option gives one
+  metadata field of the entry. `add` must take the origin class from the `-c`
+  option, and the class `stored` without that option
+  ([ENTRY-MODEL](entries.md#entry-model)). The secret of `add` must enter from
+  the terminal, and an argument must not carry it.
+- **PROG-ONESHOT-9** — `ls` must print one entry name on each line. `show` must
+  print each metadata field of the entry as one line of the line format
+  ([VAULT-FORMAT](vault.md#vault-format)). `show` must print the words of a
+  mnemonic on the `-w` option ([PROG-OUTPUT](programs.md#prog-output)). `audit`
+  must print the date of the last plate verification as a `verified` line. It
+  must then print one line of each stale shadow entry: the verification date,
+  one space, and the entry name.
 
 <a id="prog-output"></a>
 

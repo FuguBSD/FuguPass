@@ -27,8 +27,15 @@
 #ifndef CEREMONY_H
 #define CEREMONY_H
 
-/* The slots of a new pool, and the low watermark of it. */
+/*
+ * The slots of a new pool, and the low watermark of it. The pool
+ * size is tunable, and CEREMONY_POOL_SIZE is the default of it
+ * (ENTRY-POOL-2). CEREMONY_POOL_MAX is the bound of the tunable,
+ * because the index text and the revocation kit of a ceremony take
+ * one row of each slot.
+ */
 #define CEREMONY_POOL_SIZE	64	/* ENTRY-POOL-2 */
+#define CEREMONY_POOL_MAX	255	/* ENTRY-POOL-2 */
 #define CEREMONY_POOL_WATERMARK	8	/* ENTRY-POOL-6 */
 
 /*
@@ -43,6 +50,7 @@ struct ceremony_create {
 	unsigned int		 count;		/* n, the value count */
 	unsigned int		 threshold;	/* k */
 	unsigned int		 rounds;	/* kdf-rounds, KEY-PIN-5 */
+	unsigned int		 pool;		/* pool-size, ENTRY-POOL-2 */
 };
 
 /*
@@ -56,6 +64,10 @@ struct ceremony_create {
  *	(ORC-PROVISION-1, PROG-ONESHOT-6). Position 1 comes first,
  *	and the position of a value is the oracle index of it
  *	(ORC-PROVISION-5).
+ *
+ *	The pool of arg holds the slots of the new pool, and it takes
+ *	1 to CEREMONY_POOL_MAX (ENTRY-POOL-2). The caller gives
+ *	CEREMONY_POOL_SIZE for the default.
  *
  *	The call reads the master from the scan helper, and it reads
  *	the passphrase twice from the terminal (CER-CREATE-1,

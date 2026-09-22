@@ -514,7 +514,7 @@ static const char	 text_slot[] =
     "slot: 17\n";
 
 static const char	 text_index[] =
-    "entry: " TEST_HEX64 " 17,40 the test entry of a site\n"
+    "entry: " TEST_HEX64 " password 17,40 the test entry of a site\n"
     "machine: laptop\n"
     "machine: old-desktop retired\n"
     "pool-free: 41,42\n"
@@ -792,11 +792,18 @@ test_scan(void)
 		{ "a slot list with a space", vault_index_fields,
 		    "pool-free: 41, 42\n", 0 },
 		{ "an entry with no slot list", vault_index_fields,
-		    "entry: " TEST_HEX64 " the test entry\n", 0 },
+		    "entry: " TEST_HEX64 " password the test entry\n", 0 },
 		{ "an entry with no name", vault_index_fields,
-		    "entry: " TEST_HEX64 " 17\n", 0 },
-		{ "an entry with a name that is not hex", vault_index_fields,
-		    "entry: not-a-hex-name 17 the test entry\n", 0 },
+		    "entry: " TEST_HEX64 " password 17\n", 0 },
+		{ "an entry with a file name that is not hex",
+		    vault_index_fields,
+		    "entry: not-a-hex-name password 17 the test entry\n", 0 },
+		{ "an entry with no type, of a vault of an earlier tool",
+		    vault_index_fields,
+		    "entry: " TEST_HEX64 " 17,40 the test entry\n", 0 },
+		{ "an entry type with an upper-case letter",
+		    vault_index_fields,
+		    "entry: " TEST_HEX64 " Password 17 the test entry\n", 0 },
 		{ "a text of no byte", vault_slot_fields, "", 0 },
 		{ "a machine name with an upper-case letter",
 		    vault_index_fields, "machine: LAPTOP\n", 0 },
@@ -807,8 +814,8 @@ test_scan(void)
 		{ "a slot record twice", vault_counters_fields,
 		    "17-1: 3\n17-1: 4\n", 0 },
 		{ "an entry file name twice", vault_index_fields,
-		    "entry: " TEST_HEX64 " 17 the first entry\n"
-		    "entry: " TEST_HEX64 " 40 the second entry\n", 0 },
+		    "entry: " TEST_HEX64 " password 17 the first entry\n"
+		    "entry: " TEST_HEX64 " note 40 the second entry\n", 0 },
 		{ "a machine name twice", vault_index_fields,
 		    "machine: laptop\nmachine: laptop retired\n", 0 },
 		{ "a re-enrolled record twice", vault_change_fields,

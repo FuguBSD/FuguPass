@@ -45,9 +45,30 @@
  * that slot in the slot list. The list holds every version
  * (ENTRY-ROTATION-2), and the plate re-derives the key of an old
  * slot, so an old version stays recoverable (ENTRY-ROTATION-3).
+ * entry_slots_add() extends that list with the slot of a rotation
+ * (ENTRY-ROTATION-1).
+ *
+ * entry_pool_set() and entry_pool_take() hold the free slots of
+ * the pool. The index carries the pool state, and the caller gives
+ * the value of it (VAULT-INDEX-2). The take gives the lowest free
+ * slot that the callback of the caller accepts, and the wraps of
+ * this machine are that test (ENTRY-POOL-3, KEY-MASK-4).
+ * entry_slot_read() gates the consumption of that slot: the slot
+ * file holds the two candidates, and the caller keeps the candidate
+ * of the entry type (ENTRY-POOL-9, ENTRY-TYPES-4).
+ *
+ * entry_audit_cutoff() gives the date of the audit age. A shadow
+ * entry of an older verification date is stale (ENTRY-SHADOW-4,
+ * ENTRY-SHADOW-6). A date of the line format holds the year, the
+ * month and the day in that order, so one strcmp(3) of two dates
+ * compares them (VAULT-FORMAT-7).
  *
  * entry_totp() computes one TOTP code offline, with HMAC from
  * libcrypto (ENTRY-TYPES-3). RFC 6238 states the construction.
+ *
+ * Every function of this file takes the values of the caller. The
+ * file reads no file, and it opens no session, so the model stays
+ * below each program of the tree.
  *
  * A TOTP key and a TOTP code are secrets. entry_totp() clears each
  * temporary on each exit path, and a failure leaves no code at the
@@ -60,7 +81,9 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <time.h>
 
+#include "bip85.h"
 #include "vault.h"
 
 /* The origin classes (ENTRY-MODEL-1). */
@@ -145,6 +168,35 @@ struct entry_type_row {
 extern const struct entry_class_row	entry_classes[ENTRY_CLASS_MAX];
 extern const struct entry_type_row	entry_types[ENTRY_TYPE_MAX];
 
+/* The bytes of the longer candidate of a slot, with the terminator. */
+#define ENTRY_CANDIDATE_MAX	BIP85_MNEMONIC_MAX
+
+/* The bytes of one date of the line format, with the terminator. */
+#define ENTRY_DATE_MAX		11
+
+/*
+ * The days of the audit age of a vault that states none
+ * (ENTRY-SHADOW-6). The config file holds the tunable value
+ * (VAULT-CONFIG-1).
+ */
+#define ENTRY_AUDIT_AGE_DEFAULT	365
+
+/*
+ * The free slots of the pool (ENTRY-POOL-1). free is the value of
+ * the pool-free line of the index, and count is the slots of that
+ * value (VAULT-INDEX-2).
+ */
+struct entry_pool {
+	char		free[VAULT_VALUE_MAX + 1];
+	unsigned int	count;
+};
+
+/*
+ * The test of one free slot, for entry_pool_take(). The call gives
+ * 0 for a slot that the caller takes, and -1 for every other slot.
+ */
+typedef int	(*entry_ready_cb)(void *, uint32_t);
+
 /*
  * The digits of one code, and the bytes of one code with the
  * terminator. RFC 6238 gives 8 digits in the test vectors of it,
@@ -169,6 +221,14 @@ extern const struct entry_type_row	entry_types[ENTRY_TYPE_MAX];
  *	of an entry file. A name that no row holds gives -1.
  */
 int	entry_type_find(const char *, size_t, enum entry_type *);
+
+/*
+ * entry_class_find(name, namelen, out):
+ *	The origin class of the class name of namelen bytes at name,
+ *	to out (ENTRY-MODEL-1). The name is the value of the class
+ *	option of a command. A name that no row holds gives -1.
+ */
+int	entry_class_find(const char *, size_t, enum entry_class *);
 
 /*
  * entry_class_check(type, class):
@@ -199,6 +259,83 @@ int	entry_totp_alg_find(const char *, size_t, enum entry_totp_alg *);
  *	(VAULT-FORMAT-7).
  */
 int	entry_version(const char *, size_t, uint32_t, unsigned int *);
+
+/*
+ * entry_slots_add(slots, slot, out, outlen):
+ *	The slot list at slots, with the slot index slot at the end,
+ *	to the outlen bytes at out (ENTRY-ROTATION-1,
+ *	ENTRY-ROTATION-2). An empty list at slots gives the list of
+ *	one slot, for a new entry.
+ *
+ *	The call gives -1 for a list that outlen does not take. The
+ *	caller holds the slot: the pool gives one free slot of the
+ *	vault, and a free slot sits in no list (ENTRY-POOL-3).
+ */
+int	entry_slots_add(const char *, uint32_t, char *, size_t);
+
+/*
+ * entry_pool_set(pool, value, valuelen):
+ *	The free slots of the valuelen bytes at value, to pool
+ *	(ENTRY-POOL-1). The value is the pool-free line of the index
+ *	(VAULT-INDEX-2).
+ *
+ *	A NULL value gives an empty pool, of the count 0: the index
+ *	of an empty pool holds no line of that field
+ *	(ENTRY-POOL-7, VAULT-FORMAT-7). A list that the form of a
+ *	slot index rejects gives -1.
+ */
+int	entry_pool_set(struct entry_pool *, const char *, size_t);
+
+/*
+ * entry_pool_take(pool, ready, arg, out):
+ *	The lowest free slot of pool that ready accepts, to out
+ *	(ENTRY-POOL-3). ready takes arg and one slot index, and it
+ *	gives 0 for a slot that this machine can reveal. The call
+ *	takes the slot out of the free list of pool, and it lowers
+ *	the count of it.
+ *
+ *	The call gives -1 when ready accepts no free slot of pool.
+ *	The count of pool then states the cause: a count of 0 is the
+ *	empty pool of ENTRY-POOL-7, and a higher count is the machine
+ *	of ENTRY-POOL-3. The caller reports the cause, and it names
+ *	the ceremony of it.
+ */
+int	entry_pool_take(struct entry_pool *, entry_ready_cb, void *,
+	    uint32_t *);
+
+/*
+ * entry_slot_read(plain, plainlen, slot, candidate, out, outlen):
+ *	Read the slot file of plainlen bytes at plain, of the slot
+ *	index slot (ENTRY-POOL-9). The file must hold the two
+ *	candidates and the slot index slot.
+ *
+ *	candidate names the candidate that the entry type needs, and
+ *	the call gives that value to the outlen bytes at out, with a
+ *	terminator (ENTRY-TYPES-4). ENTRY_CANDIDATE_NONE gives no
+ *	value, and out takes an empty string: a stored, sovereign or
+ *	shadow entry discards both candidates.
+ *
+ *	The call gives -1 for a file that holds fewer than the two
+ *	candidates, for another slot index, and for a value that
+ *	outlen does not take. The caller then consumes no slot.
+ *
+ *	A candidate is a secret, and the caller clears out
+ *	(SEC-MEMORY-1).
+ */
+int	entry_slot_read(const char *, size_t, uint32_t, enum entry_candidate,
+	    char *, size_t);
+
+/*
+ * entry_audit_cutoff(age, now, out, outlen):
+ *	The date of age days before the Unix time now, to the outlen
+ *	bytes at out, with a terminator (ENTRY-SHADOW-4). outlen must
+ *	be ENTRY_DATE_MAX or more.
+ *
+ *	The date takes the form of the line format, in UTC
+ *	(VAULT-FORMAT-7). A verification date below this value is
+ *	older than the audit age, and strcmp(3) compares the two.
+ */
+int	entry_audit_cutoff(unsigned int, time_t, char *, size_t);
 
 /*
  * entry_totp(key, keylen, alg, digits, period, at, out, outlen):

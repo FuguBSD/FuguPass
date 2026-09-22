@@ -43,9 +43,10 @@
  * (ORC-ENROLL-3).
  *
  * The report of a failed step goes to the standard error, and a
- * failed enrollment names its oracle (CER-CREATE-6). The four
- * states of oracle.h take four texts, because the tool must hold
- * them apart (ORC-REVEAL-6, ORC-REVEAL-8).
+ * failed enrollment names its oracle (CER-CREATE-6).
+ * oracle_state_text() gives the text of each state of a request,
+ * and the tool holds the four states apart (ORC-REVEAL-6,
+ * ORC-REVEAL-8).
  */
 
 #include <sys/stat.h>
@@ -65,6 +66,7 @@
 #include "bip85.h"
 #include "ceremony.h"
 #include "derive.h"
+#include "entry.h"
 #include "envelope.h"
 #include "fugupass.h"
 #include "helper.h"
@@ -87,7 +89,7 @@
 #define SLOT_MAX	(BIP85_PWD_MAX + BIP85_MNEMONIC_MAX + 96)
 
 /* The index of a new vault: the machine row and the pool rows. */
-#define INDEX_MAX	(DERIVE_MACHINE_MAX + CEREMONY_POOL_SIZE * 11 + 96)
+#define INDEX_MAX	(DERIVE_MACHINE_MAX + CEREMONY_POOL_MAX * 11 + 96)
 
 /* One record row of the kit: the oracle index and the file name. */
 #define KIT_LINE_MAX	(sizeof("record 255 ") + 2 * DERIVE_KEYLEN + \
@@ -95,7 +97,7 @@
 
 /* One oracle of the kit: the URL row, each slot, and the canary. */
 #define KIT_ORACLE_MAX	(sizeof("oracle 255 ") + VAULT_URL_MAX + 1 + \
-			    (CEREMONY_POOL_SIZE + 1) * KIT_LINE_MAX)
+			    (CEREMONY_POOL_MAX + 1) * KIT_LINE_MAX)
 
 /* The kit: the machine row, and one block of each position. */
 #define KIT_MAX		(DERIVE_ORACLE_MAX * KIT_ORACLE_MAX + \
@@ -121,7 +123,6 @@ struct state {
 	size_t				 passlen;
 };
 
-static const char	*state_text(int);
 static void		 hex(const unsigned char *, size_t, char *);
 static void		 ctx_of(struct oracle_ctx *, const struct state *,
 			    unsigned int);
@@ -137,29 +138,6 @@ static int		 step_index(const struct state *);
 static int		 kit_name(const struct state *, unsigned int, uint32_t,
 			    int, char *, size_t);
 static int		 step_kit(const struct state *);
-
-/*
- * state_text(state):
- *	The text of one state of oracle.h. The four failure states
- *	are distinct, and the report of each one is distinct as well
- *	(ORC-REVEAL-6, ORC-REVEAL-8).
- */
-static const char *
-state_text(int state)
-{
-	switch (state) {
-	case ORACLE_ESTATUS:
-		return "the oracle answers an HTTP error";
-	case ORACLE_ETRANSPORT:
-		return "the transport fails";
-	case ORACLE_EAUTH:
-		return "the answer fails the authentication of the oracle";
-	case ORACLE_EJUNK:
-		return "the answer is junk";
-	default:
-		return "the request fails";
-	}
-}
 
 /*
  * hex(in, inlen, out):
@@ -294,8 +272,9 @@ step_factor(struct state *st)
  * step_config(st):
  *	CER-CREATE-3. The config file holds the ordered oracle set,
  *	the threshold, the machine name, the round count, the plate
- *	check value and the pool tunables (VAULT-CONFIG-1,
- *	KEY-MASTER-5, ENTRY-POOL-2, ENTRY-POOL-6).
+ *	check value, the pool tunables and the audit age
+ *	(VAULT-CONFIG-1, KEY-MASTER-5, ENTRY-POOL-2, ENTRY-POOL-6,
+ *	ENTRY-SHADOW-6).
  *
  *	The reader of vault.c holds each rule of the file, so this
  *	step parses the text before it writes the file. A wrong
@@ -342,9 +321,11 @@ step_config(struct state *st)
 	    "kdf-rounds: %u\n"
 	    "plate-check: %s\n"
 	    "pool-size: %u\n"
-	    "pool-watermark: %u\n",
+	    "pool-watermark: %u\n"
+	    "audit-age: %u\n",
 	    st->arg->threshold, st->arg->machine, st->arg->rounds, plate,
-	    CEREMONY_POOL_SIZE, CEREMONY_POOL_WATERMARK);
+	    st->arg->pool, CEREMONY_POOL_WATERMARK,
+	    ENTRY_AUDIT_AGE_DEFAULT);
 	if (n < 0 || (size_t)n >= CONFIG_MAX - len) {
 		warnx("the config: the text does not fit");
 		goto out;
@@ -376,8 +357,8 @@ out:
  * step_passphrase(st):
  *	CER-CREATE-4. readpassphrase(3) reads the passphrase twice,
  *	and a mismatch stops the ceremony (SEC-MEMORY-4). The
- *	ceremony enrolls a canary under this value, so the warning
- *	of ORC-CANARY-6 comes first.
+ *	ceremony verifies this value against no canary record, so
+ *	the warning of ORC-CANARY-6 comes first.
  */
 static int
 step_passphrase(struct state *st)
@@ -435,7 +416,7 @@ step_canaries(struct state *st)
 		    st->idxkey, sizeof(st->idxkey));
 		if (rv != 0) {
 			warnx("the canary of oracle %u (%s): %s", i,
-			    st->config.oracle[i - 1].url, state_text(rv));
+			    st->config.oracle[i - 1].url, oracle_state_text(rv));
 			return -1;
 		}
 	}
@@ -496,7 +477,7 @@ step_slot(struct state *st, uint32_t slot)
 		n = oracle_enroll(&ctx, slot, key, sizeof(key));
 		if (n != 0) {
 			warnx("slot %" PRIu32 " at oracle %u (%s): %s", slot,
-			    i, st->config.oracle[i - 1].url, state_text(n));
+			    i, st->config.oracle[i - 1].url, oracle_state_text(n));
 			goto out;
 		}
 	}
@@ -546,8 +527,8 @@ out:
 /*
  * step_slots(st):
  *	CER-CREATE-6. The slot loop runs over each slot of the pool.
- *	The pool of a new vault holds CEREMONY_POOL_SIZE slots, and
- *	the slot indexes of it start at 0 (ENTRY-POOL-2,
+ *	The pool of a new vault holds the slots of the command line,
+ *	and the slot indexes of it start at 0 (ENTRY-POOL-2,
  *	KEY-ENTRY-1).
  */
 static int
@@ -555,7 +536,7 @@ step_slots(struct state *st)
 {
 	uint32_t	 slot;
 
-	for (slot = 0; slot < CEREMONY_POOL_SIZE; slot++) {
+	for (slot = 0; slot < st->arg->pool; slot++) {
 		if (step_slot(st, slot) != 0)
 			return -1;
 	}
@@ -586,7 +567,7 @@ step_index(const struct state *st)
 		return -1;
 	}
 	len = (size_t)n;
-	for (slot = 0; slot < CEREMONY_POOL_SIZE; slot++) {
+	for (slot = 0; slot < st->arg->pool; slot++) {
 		n = snprintf(&plain[len], sizeof(plain) - len, "%s%" PRIu32,
 		    slot == 0 ? "" : ",", slot);
 		if (n < 0 || (size_t)n >= sizeof(plain) - len) {
@@ -596,7 +577,7 @@ step_index(const struct state *st)
 		len += (size_t)n;
 	}
 	n = snprintf(&plain[len], sizeof(plain) - len, "\npool-next: %u\n",
-	    CEREMONY_POOL_SIZE);
+	    st->arg->pool);
 	if (n < 0 || (size_t)n >= sizeof(plain) - len) {
 		warnx("the index: the text does not fit");
 		return -1;
@@ -742,8 +723,8 @@ step_kit(const struct state *st)
 		len += (size_t)n;
 
 		/* One name of each slot, and one of the canary. */
-		for (slot = 0; slot <= CEREMONY_POOL_SIZE; slot++) {
-			if (kit_name(st, i, slot, slot == CEREMONY_POOL_SIZE,
+		for (slot = 0; slot <= st->arg->pool; slot++) {
+			if (kit_name(st, i, slot, slot == st->arg->pool,
 			    name, sizeof(name)) != 0)
 				goto out;
 			n = snprintf(&text[len], KIT_MAX - len,
@@ -775,13 +756,18 @@ ceremony_create(const struct ceremony_create *arg)
 
 	if (arg == NULL || arg->vault == NULL || arg->machine == NULL ||
 	    arg->oracle == NULL || arg->count == 0 || arg->threshold == 0 ||
-	    arg->rounds == 0) {
+	    arg->rounds == 0 || arg->pool == 0) {
 		warnx("the ceremony takes an incomplete argument set");
 		return -1;
 	}
 	if (arg->count > DERIVE_ORACLE_MAX) {
 		warnx("the oracle set takes %d positions at the most",
 		    DERIVE_ORACLE_MAX);
+		return -1;
+	}
+	if (arg->pool > CEREMONY_POOL_MAX) {
+		warnx("the pool takes %d slots at the most",
+		    CEREMONY_POOL_MAX);
 		return -1;
 	}
 	if (machine_dir(arg->vault) != 0)

@@ -27,7 +27,40 @@
 .Fl k Ar threshold
 .Fl m Ar machine
 .Fl r Ar rounds
+.Op Fl p Ar slots
 .Ar oracle ...
+.Nm
+.Op Fl d Ar directory
+.Cm canary
+.Ar oracle
+.Nm
+.Op Fl d Ar directory
+.Cm ls
+.Nm
+.Op Fl d Ar directory
+.Cm show
+.Op Fl w
+.Ar name
+.Nm
+.Op Fl d Ar directory
+.Cm add
+.Op Fl T Ar type
+.Op Fl c Ar class
+.Op Fl f Ar name Ns = Ns Ar value ...
+.Ar name
+.Nm
+.Op Fl d Ar directory
+.Cm gen
+.Op Fl T Ar type
+.Op Fl f Ar name Ns = Ns Ar value ...
+.Ar name
+.Nm
+.Op Fl d Ar directory
+.Cm totp
+.Ar name
+.Nm
+.Op Fl d Ar directory
+.Cm audit
 .Sh DESCRIPTION
 .Nm
 is the core process of FuguPass.
@@ -38,6 +71,30 @@ One vault is one directory of files.
 reads each passphrase from the terminal.
 It runs each helper program as a child process, and text alone
 crosses that boundary.
+.Pp
+Every subcommand but
+.Cm create
+opens a session of the vault first.
+The session reads the passphrase once.
+It takes the quorum of
+.Ar threshold
+oracles from the reachable oracles, in the order of the config file.
+It prefers the oracles that hold a live index wrap on this machine.
+It then verifies the passphrase at the canary record of each quorum
+oracle, one oracle at a time, and it stops at the first failure.
+The same answers open the index of the vault.
+.Pp
+A reveal of one entry sends one request to each quorum oracle.
+The session unmasks one share of each answer, it reconstructs the
+key of the entry, and it opens the entry file of that key.
+A failure at one oracle moves that oracle out of the quorum, and the
+next reachable oracle takes the place.
+Each reveal substitutes each reachable oracle at most once, and it
+stops when no untried reachable oracle remains.
+One record is one slot at one oracle, and one session sends two
+requests at most to one record.
+The third wrong request destroys the key material of that record at
+the oracle.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
@@ -59,6 +116,7 @@ The subcommands are as follows:
 .Fl k Ar threshold
 .Fl m Ar machine
 .Fl r Ar rounds
+.Op Fl p Ar slots
 .Ar oracle ...
 .Xc
 Make a new vault on this machine.
@@ -66,8 +124,8 @@ The ceremony takes the master from a plate scan of
 .Xr fugupass-scan 1 .
 It writes the device factor and the config file, and it reads the
 passphrase.
-It then enrolls a canary record at each oracle, and it fills a pool
-of 64 slots.
+It then enrolls a canary record at each oracle, and it fills the
+pool of slots.
 Each slot takes one record at each oracle.
 The ceremony ends with the index and the revocation kit.
 .Pp
@@ -93,6 +151,17 @@ The round count of
 .Xr bcrypt_pbkdf 3 .
 .El
 .Pp
+The option below is optional:
+.Bl -tag -width Ds
+.It Fl p Ar slots
+The count of slots of the new pool.
+The default is 64 slots.
+The ceremony derives each slot, so a large pool takes a long
+ceremony and many oracle requests.
+The config file records the value as
+.Ic pool-size .
+.El
+.Pp
 The ceremony reads the passphrase twice, at the prompt
 .Dq Passphrase:
 and at the prompt
@@ -114,7 +183,141 @@ The kit holds no secret.
 An operator of a self-hosted oracle needs a record file name to
 delete that record.
 The subcommand prints the path of the kit on the standard output.
+.It Cm canary Ar oracle
+Enroll the canary record of one oracle again.
+.Ar oracle
+is the position of that oracle in the ordered set.
+The unlock of the session verifies the current passphrase first, so
+a wiped canary of another oracle stops this subcommand.
+The enrollment takes two reads of the passphrase, and the unlock
+took the first one.
+The subcommand therefore reads the same passphrase once more, and it
+enrolls the record under a fresh canary mask.
+It proves the fresh record with one immediate request, and it writes
+the canary seal of that oracle.
+.Pp
+The re-enrollment kills this machine's index wrap of that oracle.
+A session that holds the index key wraps the index share again at
+once.
+A session without that key deletes the dead wrap file, and it names
+the provisioning ceremony.
+.It Cm ls
+Print the name of each entry of the index, one name on each line.
+The subcommand reads the open index, and it sends no entry request.
+.It Cm show Op Fl w Ar name
+Reveal the entry
+.Ar name .
+The subcommand prints the secret of the entry to the terminal, and
+it prints each metadata field to the standard output.
+A metadata line holds the field name, a colon, one space, and the
+value.
+.Pp
+The index holds the type of each entry, so a
+.Cm show
+of a mnemonic entry without the
+.Fl w
+option fails before the reveal.
+.Bl -tag -width Ds
+.It Fl w
+Print the words of a mnemonic entry.
 .El
+.It Xo
+.Cm add
+.Op Fl T Ar type
+.Op Fl c Ar class
+.Op Fl f Ar name Ns = Ns Ar value ...
+.Ar name
+.Xc
+Import a secret into the entry
+.Ar name .
+The subcommand reads the secret from the terminal, at the prompt
+.Dq Secret: .
+No argument and no environment variable carries a secret.
+.Pp
+A name that the index holds takes a rotation.
+.Cm add
+then seals the new secret in the slot of that entry, and it consumes
+no slot of the pool.
+.Bl -tag -width Ds
+.It Fl T Ar type
+The type of the entry: password, mnemonic, passphrase, totp, note,
+or shadow.
+A new entry needs this option, and a rotation takes the type of the
+entry from the index.
+.It Fl c Ar class
+The origin class of the entry: derived, stored, sovereign, or shadow.
+The default is stored.
+The type of the entry sets the classes that it takes, so a shadow
+entry needs this option.
+No file of the vault records the class, so the option reaches this
+command alone.
+.It Fl f Ar name Ns = Ns Ar value
+One metadata field of the entry.
+The option can come more than one time, and each field name comes
+one time only.
+The type of the entry sets the field names that it takes.
+.El
+.It Xo
+.Cm gen
+.Op Fl T Ar type
+.Op Fl f Ar name Ns = Ns Ar value ...
+.Ar name
+.Xc
+Make the derived entry
+.Ar name
+from a slot of the pool.
+The entry takes the derived origin class, and the subcommand keeps
+the candidate that the type needs.
+.Pp
+A name that the index holds takes a rotation.
+.Cm gen
+then consumes a new slot, it increments the version of the entry,
+and it extends the slot list of the entry.
+Each old version stays recoverable from the master plate.
+.Bl -tag -width Ds
+.It Fl T Ar type
+The type of the entry: password, mnemonic, or passphrase.
+A new entry needs this option, and a rotation takes the type of the
+entry from the index.
+.It Fl f Ar name Ns = Ns Ar value
+One metadata field of the entry, as
+.Cm add
+takes it.
+.El
+.It Cm totp Ar name
+Reveal the totp entry
+.Ar name ,
+compute the current code of it, and print the code to the terminal.
+The computation runs on this machine, and it takes no request of its
+own.
+.It Cm audit
+Print the state of the plate verification and of the shadow entries.
+The first line holds
+.Dq verified ,
+a colon, one space, and the date of the last plate verification.
+The subcommand then prints one line of each stale shadow entry: the
+verification date of it, one space, and the entry name.
+A shadow entry is stale when its verification date is older than the
+audit age.
+The config file holds that age as
+.Ic audit-age ,
+and the default is 365 days.
+.Pp
+The index holds the type of each entry, so the subcommand reveals
+the shadow entries alone.
+An entry of another type takes no oracle request.
+.El
+.Pp
+.Cm add
+and
+.Cm gen
+consume the lowest free slot of the pool that holds the wraps of
+this machine at
+.Ar threshold
+live oracles or more.
+Each one writes the index with the slot consumed, and it writes the
+entry file after that.
+The records and the wraps of the slot stay as they are.
 .Sh ENVIRONMENT
 .Bl -tag -width HOME
 .It Ev HOME
@@ -130,6 +333,9 @@ the vault directory of a run without the
 option
 .It Pa index
 the sealed index of the vault
+.It Pa machine/canary.\& Ns Ar i
+the canary check seal of oracle
+.Ar i
 .It Pa machine/config
 the config file of this machine, plaintext
 .It Pa machine/counters
@@ -138,13 +344,100 @@ the last counter of each record of this machine
 the device factor of this machine
 .It Pa machine/revocation-kit
 the revocation kit of this machine, plaintext
+.It Pa machine/wrap.index.\& Ns Ar i
+this machine's index wrap of oracle
+.Ar i
+.It Pa machine/wrap.\& Ns Ar e Ns Pa \&.\& Ns Ar i
+this machine's wrap of slot
+.Ar e
+at oracle
+.Ar i
 .El
+.Pp
+The sealed file of one entry, and the sealed file of one free slot,
+each take the lowercase hex of the hash of the slot key as the file
+name.
+A listing of the vault directory therefore names no entry.
 .Sh EXIT STATUS
 The
 .Nm
 utility exits 0 on success, and 1 when a subcommand fails.
 An absent subcommand, an unknown subcommand, and a wrong command line
 give the usage on the standard error and the exit status 2.
+.Sh DIAGNOSTICS
+Every report goes to the standard error.
+A report of a failed request names the oracle and one of the four
+states below.
+The four states take four different user actions.
+.Bl -tag -width Ds
+.It the oracle answers an HTTP error
+The oracle counted no attempt, and the request is retryable.
+.It the transport fails
+The oracle can have counted the attempt, because the answer can get
+lost after the record changes.
+.It the answer fails the authentication of the oracle
+The static public key of the config file does not match the oracle
+that answered.
+Check the provisioning of that position, and the transport to it.
+.It the answer is junk
+The oracle answers junk for a wrong passphrase, for a missing or
+wiped record, and for a counter violation.
+The response bytes hold the cause of none of them.
+.El
+.Pp
+The reports below name a state of the session.
+.Bl -tag -width Ds
+.It the canary of oracle Ar i : the check fails
+The passphrase does not open the canary of that oracle, and the
+report names the URL of it.
+A failure at the first canary of the session names the passphrase
+and the record-side causes of that oracle, because the two look
+identical.
+A failure after a pass at another oracle names the record-side
+causes alone.
+The session sends no entry request to that oracle.
+.It the quorum takes Ar k No reachable oracles, and Ar m No answered
+Fewer than
+.Ar k
+oracles are reachable.
+The report names the state of each oracle, and the session performs
+no reveal.
+.It the index does not open, and the canary of each quorum oracle passed
+The index file or one index wrap of this machine is wrong.
+This failure is no junk answer, and the report names both causes.
+.It the index stays closed: the quorum covers fewer than Ar k No live index wraps
+The report names each dead or unreachable index wrap, and it names
+the provisioning ceremony.
+The session opens no entry name until the wraps come back.
+.It slot Ar e : the entry of this quorum does not open
+The reconstructed key does not open the entry file.
+The failing oracle has no name, because the decrypt is the only junk
+detector.
+The session substitutes one place of the quorum and tries again.
+.It slot Ar e No at oracle Ar i : the session sent two requests to this record
+A decrypt failure names no oracle, so each record of the quorum can
+hold the wrong pin.
+The third wrong request destroys the key material of that record at
+the oracle.
+The session therefore stops the reveal of that slot.
+.It slot Ar e : the session reveals it no other way
+No untried reachable oracle remains, so the substitutions end.
+.It the pool holds Ar n No free slots, at the low watermark of Ar w
+The refill ceremony adds slots to the pool.
+.Cm add
+and
+.Cm gen
+still run.
+.It the pool of this vault holds no free slot
+.Cm add
+and
+.Cm gen
+refuse a new entry.
+The refill ceremony adds slots to the pool.
+.It no free slot of the pool holds the wraps of this machine at Ar k No live oracles
+Free slots remain, and no one of them reveals on this machine.
+The provisioning ceremony writes the wraps of this machine.
+.El
 .Sh SEE ALSO
 .Xr fugupass-qr 1 ,
 .Xr fugupass-repl 1 ,

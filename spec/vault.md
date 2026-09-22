@@ -126,17 +126,18 @@ The slot file fields are:
 
 The index fields are:
 
-| Field       | Content                                                                       |
-| ----------- | ----------------------------------------------------------------------------- |
-| `entry`     | one entry: the file name, one space, the slot list, one space, the entry name |
-| `machine`   | one machine name, or one machine name, one space, and the word `retired`      |
-| `pool-free` | the free slot indexes, as a slot list                                         |
-| `pool-next` | the lowest slot index that no ceremony has reserved                           |
-| `verified`  | the date of the last plate verification                                       |
+| Field       | Content                                                                  |
+| ----------- | ------------------------------------------------------------------------ |
+| `entry`     | one entry: the file name, the type, the slot list, and the entry name    |
+| `machine`   | one machine name, or one machine name, one space, and the word `retired` |
+| `pool-free` | the free slot indexes, as a slot list                                    |
+| `pool-next` | the lowest slot index that no ceremony has reserved                      |
+| `verified`  | the date of the last plate verification                                  |
 
-The entry name comes last in the `entry` value, so the name can hold a space.
-The file name in the `entry` value is the entry-file name of the current version
-([VAULT-LAYOUT](vault.md#vault-layout)).
+The four parts of the `entry` value take one space between two parts. The entry
+name comes last, so the name can hold a space. The file name is the entry-file
+name of the current version ([VAULT-LAYOUT](vault.md#vault-layout)), and the
+type is the type name of [ENTRY-TYPES](entries.md#entry-types).
 
 The counters file fields are:
 
@@ -169,11 +170,14 @@ scanner discipline of the oracle service.
 
 - **VAULT-INDEX-1** — The index is one shared ciphertext object, sealed under
   `K_idx` in the seal format ([KEY-MASK](keys.md#key-mask)).
-- **VAULT-INDEX-2** — The index maps each entry name to its file name. It
-  records each entry's slot list, the pool state, the machine registry, and the
-  date of the last plate verification. The machine registry holds the
+- **VAULT-INDEX-2** — The index maps each entry name to its file name and its
+  type. It records each entry's slot list, the pool state, the machine registry,
+  and the date of the last plate verification. The machine registry holds the
   provisioned machine names and marks each retired name
-  ([ORC-REVOKE](oracle.md#orc-revoke)).
+  ([ORC-REVOKE](oracle.md#orc-revoke)). The entry file owns the type, and the
+  index holds a copy of it ([ENTRY-TYPES](entries.md#entry-types)). A command
+  reads the type of an entry from that copy, and it sends no oracle request for
+  the value.
 - **VAULT-INDEX-3** — A daily read unwraps `k` index shares through this
   machine's index wraps and reconstructs `K_idx`
   ([KEY-SHARE](keys.md#key-share), [KEY-MASK](keys.md#key-mask)). The read uses

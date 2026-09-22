@@ -206,8 +206,8 @@ is an accepted FuguOracle transport risk, and TLS mitigates it.
   verification is the canary check decrypt of ORC-ENROLL-8. On a decrypt failure
   with an untried reachable oracle, the tool can retry with a different quorum.
   It runs the canary check of each substitute oracle first (ORC-QUORUM-5). A
-  decrypt failure with no untried quorum must stop the change before any
-  `set_pin` of that slot. The client must report the failing slot and each
+  decrypt failure with no untried reachable oracle must stop the change before
+  any `set_pin` of that slot. The client must report the failing slot and each
   quorum used. The change stays incomplete, and the marker records the progress
   (ORC-ENROLL-10).
 - **ORC-ENROLL-10** — The client must persist the change marker with the kind
@@ -308,16 +308,25 @@ record at one oracle.
   decrypt the entry file under `K_e` ([VAULT-SEAL](vault.md#vault-seal)). The
   decrypt failure is the only junk detector, and it does not name the failing
   oracle.
-- **ORC-QUORUM-5** — A decrypt failure, an HTTP error, or a transport failure
-  can happen at a quorum oracle. The tool can then substitute the next reachable
-  oracle, after the canary check of that oracle. The tool must stop the
-  substitutions when no untried quorum remains. Every failure report must name
-  the quorum oracles of the attempt.
+- **ORC-QUORUM-5** — A decrypt failure or a failed request can happen at a
+  quorum oracle. A request fails at the oracle
+  ([ORC-REVEAL](oracle.md#orc-reveal)). It also fails at this machine, at a
+  record with no greater counter (ORC-COUNTER-5). The tool can then substitute
+  the next reachable oracle, after the canary check of that oracle. The tool
+  must try each reachable oracle at most once per reveal as a substitute. It
+  must stop the substitutions when no untried reachable oracle remains. Every
+  failure report must name the quorum oracles of the attempt.
 - **ORC-QUORUM-6** — With fewer than `k` reachable oracles, the tool must
   perform no reveal. It must report the state of each oracle, with the distinct
   states of [ORC-REVEAL](oracle.md#orc-reveal).
 - **ORC-QUORUM-7** — With `k = 1`, the quorum is one oracle, and the reveal is
   one `get_pin`. This is the general rule, not a special case.
+- **ORC-QUORUM-8** — A record of this machine is one slot at one oracle
+  ([ORC-RECORDS](oracle.md#orc-records)). The tool must count one request of
+  each quorum record, before it sends that request. One session must send no
+  third request to one record, because the third wrong attempt destroys that
+  record (ORC-REVEAL-5). The tool must stop the reveal before the third request,
+  and the report must name the slot and the oracle of that record.
 
 A junk answer from one quorum oracle yields a wrong share, and the
 reconstruction then fails the entry decrypt. The response bytes attribute
@@ -327,7 +336,7 @@ or desynchronized record, or a stale wrap on this machine. Strikes move only on
 a pin that the record was not enrolled under (FuguOracle OPS-GET-2, FuguOracle
 OPS-GET-5). A retry with the session's verified pin therefore burns no strike at
 a healthy record. A record enrolled under a different pin burns one strike per
-attempt, so the tool bounds the retries per record per session.
+attempt, and ORC-QUORUM-8 bounds the requests per record per session.
 
 <a id="orc-canary"></a>
 
@@ -357,7 +366,9 @@ attempt, so the tool bounds the retries per record per session.
   client can re-enroll a wiped canary with `set_pin` at any time, without a
   ceremony.
 - **ORC-CANARY-6** — A canary enrollment must read the passphrase twice and must
-  require a match. The tool must warn that no verifier exists at this step.
+  require a match. The tool must warn that no verifier exists when this session
+  verified the typed passphrase against no canary record. The tool must not warn
+  when the unlock of this session verified that passphrase (ORC-CANARY-1).
 - **ORC-CANARY-7** — The client must verify a fresh canary with one immediate
   `get_pin` round trip before the session proceeds.
 - **ORC-CANARY-8** — A canary re-enrollment at oracle `i` replaces that oracle's
@@ -368,7 +379,8 @@ attempt, so the tool bounds the retries per record per session.
   index and holds `K_idx` must re-wrap every dead index wrap of this machine at
   once. A client without `K_idx` must delete this machine's index wrap file of
   oracle `i` ([VAULT-LAYOUT](vault.md#vault-layout)), so the dead state is
-  detectable. The index opens while the session quorum covers `k` live index
+  detectable. A re-enrollment that fails after the `set_pin` must also delete
+  that file. The index opens while the session quorum covers `k` live index
   wraps of this machine (ORC-QUORUM-2). While the quorum cannot cover `k` live
   index wraps, the session cannot resolve an entry name. The tool must report
   each dead or unreachable index wrap, and must name the provisioning ceremony

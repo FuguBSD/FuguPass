@@ -35,6 +35,13 @@
 # counterparty through the methods of the Counterparty package
 # alone, so no leg branches on the counterparty (TEST-HARNESS-4).
 #
+# One counterparty runs $INSTANCES instances, and each instance is
+# one oracle of a topology. The example topology of TEST-HARNESS-5
+# takes three of them, with a threshold of two. The start, the stop
+# and the release of the table each take one instance, so every
+# instance holds a record store and a port of its own
+# (TEST-HARNESS-6).
+#
 # The harness runs no shell on the host: each host command is a
 # list, and Fugu::Process runs it (TEST-HARNESS-6). A guest command
 # goes through 'fuguvm ssh -- sh -c <script>', because a guest step
@@ -43,13 +50,15 @@
 # the guest no standard input, so the driver reads the passphrase
 # from a pipe of the guest shell.
 #
-# A ceremony reads the passphrase from /dev/tty, and the ssh channel
-# of fuguvm carries no terminal. A ceremony therefore runs on the
-# serial console, under 'fuguvm expect' and the script
-# tests/expect/create.exp (TEST-HARNESS-8). An expect script reports
-# its own run alone, so the script of the guest writes the exit
-# status of the ceremony to a file, and the harness reads that file
-# over 'fuguvm ssh'.
+# Every command of the core process reads the passphrase from
+# /dev/tty, and the ssh channel of fuguvm carries no terminal. Such
+# a command therefore runs on the serial console, under 'fuguvm
+# expect' and the script tests/expect/console.exp (TEST-HARNESS-8).
+# An expect script reports its own run alone, so the script of the
+# guest writes the exit status of each step to a file, and the
+# harness reads those files over 'fuguvm ssh'. A secret prints to
+# the terminal, so the console text of a step carries it, and no
+# file of the step holds one (PROG-OUTPUT-1, PROG-OUTPUT-4).
 #
 # The plate scan of a ceremony takes the double
 # tests/stubs/fugupass-scan.c, and that double prints the fixed test
@@ -166,13 +175,25 @@ our $ROUNDS  = 16;
 # that holds the value of each constant.
 our %VECTOR = vectors("$RealBin/vectors/derive.h");
 
-# The passphrases of the legs, by name. A leg names one of these
-# keys, and it holds no passphrase of its own. Each value holds no
-# single quote and no line feed, and _shq() guards that.
-our %PASSPHRASE = (
-	right => 'correct horse battery staple',
-	wrong => 'wrong horse battery staple',
-	other => 'other horse battery staple' );
+# The answers of the legs, by name: the passphrases, and the
+# secrets that a console step types. A leg names one of these keys,
+# and it holds no value of its own. Each value holds no single quote
+# and no line feed, and _shq() guards that.
+#
+# The totp key is the key of the RFC 6238 test vector, as the hex of
+# the twenty ASCII bytes 12345678901234567890 (ENTRY-TYPES-3).
+#
+# The answer 'none' is the empty line. The core process takes an
+# empty read of readpassphrase(3) as a failed read, so a step names
+# this answer to stop a terminal read.
+our %ANSWER = (
+	right    => 'correct horse battery staple',
+	wrong    => 'wrong horse battery staple',
+	other    => 'other horse battery staple',
+	none     => '',
+	secret   => 'the stored secret of one entry',
+	secret2  => 'the second stored secret of one entry',
+	totp_key => '3132333435363738393031323334353637383930' );
 
 # The generator point of secp256k1, in compressed form. It is a
 # valid public key, and it is the static key of no oracle. A leg
@@ -189,10 +210,20 @@ our $HIGH_COUNTER = 4_000_000_000;
 
 our $FUGUVM = $ENV{FUGUVM} // 'fuguvm';
 
-# The expect script of a ceremony. fuguvm expect gives it the host
+# The expect script of the console. fuguvm expect gives it the host
 # and the port of the console first, and the script needs the
 # execute bit (TEST-HARNESS-8).
-our $EXPECT = "$RealBin/expect/create.exp";
+our $EXPECT = "$RealBin/expect/console.exp";
+
+# The instances of one counterparty. The example topology of
+# TEST-HARNESS-5 holds three oracles, so a run starts three.
+our $INSTANCES = 3;
+
+# The step marker of a console session. The script of the guest
+# echoes it before each step, and it echoes the step 0 of it last.
+# console.exp waits for that last line, so a shell prompt of an
+# earlier line ends no run.
+our $STEP_MARK = '=== fugupass-console-step';
 
 # The root password of the console login of the guest.
 our $CONSOLE_PASSWORD = $ENV{FUGUPASS_CONSOLE_PASSWORD} // 'openbsd';
@@ -223,10 +254,13 @@ PYTHON
 
 # The counterparties that this harness drives (TEST-HARNESS-2). Each
 # record holds the name, the four steps of the run, and the record
-# list of the store. probe() gives undef when the counterparty is
-# available, and the reason when it is not. start() sets url, pubkey
-# and records_at_start. records() gives the record file names of the
-# store of the moment. A leg reads no member of this table.
+# list of a store. probe() takes the counterparty, and it gives
+# undef when the counterparty is available, and the reason when it
+# is not. start(), stop(), release() and records() each take the
+# counterparty and one instance of it. start() sets url, pubkey and
+# records_at_start of that instance, and records() gives the record
+# file names of the store of that instance of the moment. A leg
+# reads no member of this table.
 my @COUNTERPARTY = (
 	{
 		name    => 'blind_pin_server',
@@ -477,25 +511,25 @@ sub upstream_probe ($cp)
 	return undef;
 }
 
-sub upstream_start ($cp)
+sub upstream_start ( $cp, $in )
 {
 	my ( $python, $env ) = upstream_python( $cp->{checkout} );
 
-	if ( !defined $cp->{store} ) {
+	if ( !defined $in->{store} ) {
 
 		# The record store of the run (TEST-HARNESS-6,
 		# TEST-MASK-6). pindb.py takes the store from the
 		# pins directory of the working directory, and the
 		# server reads its static key from that directory
 		# as well.
-		$cp->{store} = File::Temp::tempdir(
+		$in->{store} = File::Temp::tempdir(
 			'fugupass-oracle-XXXXXX',
 			TMPDIR  => 1,
 			CLEANUP => 0
 		);
-		make_path("$cp->{store}/pins");
-		$cp->{port} = free_port();
-		$cp->{url}  = "http://10.0.2.2:$cp->{port}";
+		make_path("$in->{store}/pins");
+		$in->{port} = free_port();
+		$in->{url}  = "http://10.0.2.2:$in->{port}";
 
 		# generateserverkey writes the key pair at mode
 		# 0600 in the working directory, and the server
@@ -506,67 +540,68 @@ sub upstream_start ($cp)
 				$python, '-m',
 				'blind_pin_server.generateserverkey'
 			],
-			cwd     => $cp->{store},
+			cwd     => $in->{store},
 			env     => $env,
 			timeout => 120 );
 
-		open my $fh, '<:raw', "$cp->{store}/server_public_key.pub"
+		open my $fh, '<:raw', "$in->{store}/server_public_key.pub"
 		    or die "the server wrote no public key: $!\n";
 		my $bytes = do { local $/ = undef; <$fh> };
 		close $fh;
-		$cp->{pubkey} = unpack 'H*', $bytes;
+		$in->{pubkey} = unpack 'H*', $bytes;
 	}
 
 	# Each stream of each run takes a path of its own. Two
 	# handles on one path overwrite each other, and 3-states.pl
 	# restarts the server.
-	my $log = "$cp->{store}/server-" . ++$cp->{runs};
+	my $log = "$in->{store}/server-" . ++$in->{runs};
 	my $result = Fugu::Process->spawn_command(
 		cmd => [
-			$python,      '-c', $SERVER_PROGRAM, $cp->{store},
-			'0.0.0.0', $cp->{port}
+			$python,   '-c', $SERVER_PROGRAM, $in->{store},
+			'0.0.0.0', $in->{port}
 		],
 		env    => $env,
 		stdout => "$log.out",
 		stderr => "$log.err" );
 	die "the upstream server did not start: $result->{error}\n"
 	    if !$result->{success};
-	$cp->{pid} = $result->{pid};
+	$in->{pid} = $result->{pid};
 
 	my $http = HTTP::Tiny->new( timeout => 5 );
 	Fugu::Timeout::wait_until(
 		60, 0.25,
 		sub {
-			return $http->get("http://127.0.0.1:$cp->{port}/")
+			return $http->get("http://127.0.0.1:$in->{port}/")
 			    ->{status} == 200;
 		} )
 	    or die "the upstream server never answered on port "
-	    . "$cp->{port}\n";
+	    . "$in->{port}\n";
 
-	$cp->{records_at_start} //= scalar( () = upstream_records($cp) );
+	$in->{records_at_start} //=
+	    scalar( () = upstream_records( $cp, $in ) );
 	return;
 }
 
-# upstream_records($cp):
-#	The record file names of the store of this counterparty.
+# upstream_records($cp, $in):
+#	The record file names of the store of this instance.
 #	pindb.py of the upstream server holds one file of each
 #	record in the pins directory of the store.
-sub upstream_records ($cp)
+sub upstream_records ( $, $in )
 {
-	return map { basename($_) } glob "$cp->{store}/pins/*.pin";
+	return map { basename($_) } glob "$in->{store}/pins/*.pin";
 }
 
-sub upstream_stop ($cp)
+sub upstream_stop ( $, $in )
 {
-	return if !defined $cp->{pid};
-	Fugu::Process->terminate( delete $cp->{pid} );
+	return if !defined $in->{pid};
+	Fugu::Process->terminate( delete $in->{pid} );
 	return;
 }
 
-sub upstream_release ($cp)
+sub upstream_release ( $, $in )
 {
-	return if !defined $cp->{store};
-	remove_tree( delete $cp->{store} );
+	return if !defined $in->{store};
+	remove_tree( delete $in->{store} );
 	return;
 }
 
@@ -575,39 +610,97 @@ package Counterparty;
 # The counterparty of one run. A leg reads it through these methods
 # alone, so no leg branches on the counterparty (TEST-HARNESS-4).
 # The record of the table holds the four steps and the record list,
-# and the object holds the state of the run: the URL, the static
-# public key, and the record count of the store at the start.
+# and each instance holds the state of one oracle: the URL, the
+# static public key, and the record count of the store at the start.
 
 use v5.36;
 
 sub new ( $class, $recipe )
 {
-	return bless { recipe => $recipe, name => $recipe->{name} }, $class;
+	return bless {
+		recipe   => $recipe,
+		name     => $recipe->{name},
+		instance => [ map { {} } 1 .. $main::INSTANCES ]
+	}, $class;
 }
 
 sub name ($self) { return $self->{name} }
 
-sub probe ($self)   { return $self->{recipe}{probe}->($self) }
-sub start ($self)   { $self->{recipe}{start}->($self); return }
-sub stop ($self)    { $self->{recipe}{stop}->($self); return }
-sub release ($self) { $self->{recipe}{release}->($self); return }
+sub probe ($self) { return $self->{recipe}{probe}->($self) }
+
+# $cp->start, $cp->stop, $cp->release:
+#	Every instance of this counterparty. start_oracle() and
+#	stop_oracle() each take the position of one instance
+#	(ORC-QUORUM-6).
+sub start ($self)
+{
+	$self->start_oracle($_) for 1 .. @{ $self->{instance} };
+	return;
+}
+
+sub stop ($self)
+{
+	$self->stop_oracle($_) for 1 .. @{ $self->{instance} };
+	return;
+}
+
+sub release ($self)
+{
+	$self->{recipe}{release}->( $self, $_ ) for @{ $self->{instance} };
+	return;
+}
+
+sub start_oracle ( $self, $oracle )
+{
+	$self->{recipe}{start}->( $self, $self->_instance($oracle) );
+	return;
+}
+
+sub stop_oracle ( $self, $oracle )
+{
+	$self->{recipe}{stop}->( $self, $self->_instance($oracle) );
+	return;
+}
+
+# $cp->_instance($oracle):
+#	The instance of one position of the oracle list. A topology
+#	can hold more positions than the run holds instances, and the
+#	positions then take the instances in turn: position 4 of
+#	three instances sits at the first one. Each position holds a
+#	record of its own there, because the client key of a record
+#	takes the oracle index (KEY-CLIENT-1).
+sub _instance ( $self, $oracle )
+{
+	die "the harness holds no oracle $oracle\n" if $oracle < 1;
+	return $self->{instance}[ ( $oracle - 1 ) % @{ $self->{instance} } ];
+}
 
 # $cp->records_at_start:
-#	The count of the records that the store of the counterparty
+#	The count of the records that the store of the first instance
 #	held when this run started it (TEST-MASK-6).
-sub records_at_start ($self) { return $self->{records_at_start} }
+sub records_at_start ($self) { return $self->_instance(1)->{records_at_start} }
 
-# $cp->records:
-#	The record file names that the store of the counterparty
-#	holds now. A leg reads the set before a step and after it,
-#	and the difference is the records of that step
-#	(ORC-REVOKE-6).
-sub records ($self) { return $self->{recipe}{records}->($self) }
+# $cp->records($oracle):
+#	The record file names that the store of one instance holds
+#	now. The default is the first one. A leg reads the set
+#	before a step and after it, and the difference is the
+#	records of that step (ORC-REVOKE-6).
+sub records ( $self, $oracle = 1 )
+{
+	my $in = $self->_instance($oracle);
+	return $self->{recipe}{records}->( $self, $in );
+}
 
-# $cp->url:
-#	The URL of this counterparty. A ceremony report names the
-#	oracle of a failed enrollment with it (CER-CREATE-6).
-sub url ($self) { return $self->{url} }
+# $cp->url($oracle), $cp->pubkey($oracle):
+#	The URL and the static public key of one instance. The
+#	default is the first one. A ceremony report names the oracle
+#	of a failed enrollment with the URL (CER-CREATE-6).
+sub url ( $self, $oracle = 1 ) { return $self->_instance($oracle)->{url} }
+
+sub pubkey ( $self, $oracle = 1 )
+{
+	return $self->_instance($oracle)->{pubkey};
+}
 
 # $cp->foreign_key:
 #	A valid static public key that this counterparty does not
@@ -625,37 +718,70 @@ sub plate_check ($) { return $main::VECTOR{KAT_TEST_PLATE_CHECK} }
 #	A stored counter above the wall clock (ORC-COUNTER-1).
 sub high_counter ($) { return $main::HIGH_COUNTER }
 
-# $cp->record($vault), $cp->canary_record($vault):
-#	The two record names of the counters file (ORC-COUNTER-2,
-#	VAULT-FORMAT).
-sub record ( $, $vault ) { return "$vault->{slot}-$main::ORACLE" }
-sub canary_record ( $, $ ) { return "canary-$main::ORACLE" }
-
-# $cp->counters($vault), $cp->wrap($vault), $cp->seal($vault):
-#	The three machine-local files of a record: the counters
-#	file, the wrap of the slot, and the canary check seal
-#	(VAULT-LAYOUT).
-sub counters ( $, $vault ) { return "$vault->{dir}/machine/counters" }
-
-sub wrap ( $, $vault )
+# $cp->answer($name):
+#	The value of the answer $name. A step of console() names an
+#	answer, and a leg proves the secret of that step on the
+#	terminal with this value (PROG-OUTPUT-1).
+sub answer ( $, $name )
 {
-	return "$vault->{dir}/machine/wrap.$vault->{slot}.$main::ORACLE";
+	die "the harness holds no answer $name\n"
+	    if !exists $main::ANSWER{$name};
+	return $main::ANSWER{$name};
 }
 
-sub seal ( $, $vault ) { return "$vault->{dir}/machine/canary.$main::ORACLE" }
+# $cp->record($vault, %opt), $cp->canary_record($vault, %opt):
+#	The two record names of the counters file (ORC-COUNTER-2,
+#	VAULT-FORMAT). %opt takes 'slot' and 'oracle', and each one
+#	replaces the slot of the vault and the first position.
+sub record ( $, $vault, %opt )
+{
+	return ( $opt{slot} // $vault->{slot} ) . '-'
+	    . ( $opt{oracle} // $main::ORACLE );
+}
+
+sub canary_record ( $, $, %opt )
+{
+	return 'canary-' . ( $opt{oracle} // $main::ORACLE );
+}
+
+# $cp->counters($vault), $cp->wrap($vault, %opt),
+# $cp->index_wrap($vault, %opt), $cp->seal($vault, %opt):
+#	The machine-local files of a record: the counters file, the
+#	wrap of a slot, the index wrap, and the canary check seal
+#	(VAULT-LAYOUT). %opt takes 'slot' and 'oracle' as above.
+sub counters ( $, $vault ) { return "$vault->{dir}/machine/counters" }
+
+sub wrap ( $, $vault, %opt )
+{
+	return "$vault->{dir}/machine/wrap."
+	    . ( $opt{slot} // $vault->{slot} ) . '.'
+	    . ( $opt{oracle} // $main::ORACLE );
+}
+
+sub index_wrap ( $, $vault, %opt )
+{
+	return "$vault->{dir}/machine/wrap.index."
+	    . ( $opt{oracle} // $main::ORACLE );
+}
+
+sub seal ( $, $vault, %opt )
+{
+	return "$vault->{dir}/machine/canary."
+	    . ( $opt{oracle} // $main::ORACLE );
+}
 
 # $cp->vault($tag, %opt):
-#	A vault of the guest, with the config of one oracle
+#	A vault of the guest, with the config of the oracle set
 #	(VAULT-CONFIG-1, ORC-PROVISION-1). The call gives a hash
 #	with 'dir', the directory, and 'slot', the slot index of the
 #	record. Each vault of a run takes the next slot index, so a
 #	vault addresses a record of its own at the counterparty.
 #
 #	%opt takes 'pubkey' and 'url', and each one replaces the
-#	provisioned value of the counterparty.
+#	provisioned value of every position.
 sub vault ( $self, $tag, %opt )
 {
-	my $vault = $self->_empty( $tag, machine => $main::MACHINE );
+	my $vault = $self->_empty( $tag, %opt, machine => $main::MACHINE );
 	$self->config( $vault, %opt );
 	return $vault;
 }
@@ -663,9 +789,11 @@ sub vault ( $self, $tag, %opt )
 # $cp->_empty($tag, %opt):
 #	An empty vault directory of the guest, with no file in it.
 #	%opt takes 'machine', the machine name of the vault, and
-#	'slot', the slot index of the record. The machine name and
-#	the test master give the device factor, so two vaults of one
-#	machine name address one record of a slot (KEY-DEVICE-1).
+#	'slot', the slot index of the record. It also takes 'oracles',
+#	the positions of the oracle set, 'threshold', the k of it, and
+#	'pool', the slots of a ceremony. The machine name and the test
+#	master give the device factor, so two vaults of one machine
+#	name address one record of a slot (KEY-DEVICE-1).
 sub _empty ( $self, $tag, %opt )
 {
 	my $slot = $self->{next_slot} //= $main::SLOT;
@@ -676,33 +804,40 @@ sub _empty ( $self, $tag, %opt )
 		'rm -rf ' . main::_shq($dir) . ' && mkdir -p '
 		    . main::_shq("$main::WORK/vault") );
 	return {
-		dir     => $dir,
-		slot    => $opt{slot} // $slot,
-		tag     => $tag,
-		machine => $opt{machine} // $main::MACHINE };
+		dir       => $dir,
+		slot      => $opt{slot} // $slot,
+		tag       => $tag,
+		machine   => $opt{machine} // $main::MACHINE,
+		oracles   => $opt{oracles} // 1,
+		threshold => $opt{threshold} // 1,
+		pool      => $opt{pool} };
 }
 
 # $cp->config($vault, %opt):
-#	The config file of the vault $vault, with the one oracle of
-#	this counterparty at position 1 (VAULT-CONFIG-1,
-#	ORC-PROVISION-1). %opt takes 'pubkey' and 'url', and each one
-#	replaces the provisioned value of the counterparty.
+#	The config file of the vault $vault, with one instance of
+#	this counterparty at each position of the oracle set
+#	(VAULT-CONFIG-1, ORC-PROVISION-1). %opt takes 'pubkey' and
+#	'url', and each one replaces the provisioned value of every
+#	position.
 sub config ( $self, $vault, %opt )
 {
-	my $pubkey = $opt{pubkey} // $self->{pubkey};
-	my $url    = $opt{url}    // $self->{url};
+	my @line;
+	for my $oracle ( 1 .. $vault->{oracles} ) {
+		push @line, "oracle-$oracle: "
+		    . ( $opt{pubkey} // $self->pubkey($oracle) ) . ' '
+		    . ( $opt{url}    // $self->url($oracle) );
+	}
+	push @line,
+	    "threshold: $vault->{threshold}",
+	    "machine-name: $vault->{machine}",
+	    "kdf-rounds: $main::ROUNDS";
 
 	main::guest_ok(
 		"the config of $vault->{tag}",
 		'mkdir -p '
 		    . main::_shq("$vault->{dir}/machine")
 		    . " && printf '%s\\n' "
-		    . join( ' ',
-			map { main::_shq($_) } (
-				"oracle-1: $pubkey $url",
-				'threshold: 1',
-				"machine-name: $vault->{machine}",
-				"kdf-rounds: $main::ROUNDS" ) )
+		    . join( ' ', map { main::_shq($_) } @line )
 		    . ' > '
 		    . main::_shq("$vault->{dir}/machine/config") );
 	return;
@@ -714,8 +849,8 @@ sub config ( $self, $vault, %opt )
 #	(CER-CREATE-3). The machine name of the vault is the tag, so
 #	two ceremony vaults of one run address no common record.
 #
-#	%opt takes 'slot', the slot index that the counters methods
-#	then name.
+#	%opt takes the keys of _empty(): 'slot', 'oracles',
+#	'threshold' and 'pool'.
 sub ceremony_vault ( $self, $tag, %opt )
 {
 	return $self->_empty( $tag, %opt, machine => "create-$tag" );
@@ -731,11 +866,18 @@ sub ceremony_vault ( $self, $tag, %opt )
 #
 #	%opt takes 'pass', an array reference of passphrase names.
 #	The default is the correct passphrase. A canary enrollment
-#	reads the passphrase twice (ORC-CANARY-6).
+#	reads the passphrase twice (ORC-CANARY-6). enroll() also
+#	takes 'slot' and 'oracle', and each one replaces the slot of
+#	the vault and the first position. A second enrollment of one
+#	record enrolls it under the pin of that call (ORC-ENROLL-9).
 sub enroll ( $self, $vault, %opt )
 {
 	return $self->_drive(
-		[ 'enroll', $vault->{dir}, $main::ORACLE, $vault->{slot} ],
+		[
+			'enroll', $vault->{dir},
+			$opt{oracle} // $main::ORACLE,
+			$opt{slot}   // $vault->{slot}
+		],
 		$opt{pass} // ['right'] );
 }
 
@@ -756,9 +898,9 @@ sub _drive ( $self, $argv, $names )
 {
 	my @lines;
 	for my $name (@$names) {
-		die "the harness holds no passphrase $name\n"
-		    if !exists $main::PASSPHRASE{$name};
-		push @lines, $main::PASSPHRASE{$name};
+		die "the harness holds no answer $name\n"
+		    if !exists $main::ANSWER{$name};
+		push @lines, $main::ANSWER{$name};
 	}
 
 	# fuguvm gives the guest no standard input, so the shell of
@@ -821,6 +963,41 @@ sub remove_file ( $, $path )
 	return;
 }
 
+# $cp->make_dir($path):
+#	A directory of the guest at the path $path. A leg puts one
+#	where a file of a vault belongs, so the write of that file
+#	fails at the rename (VAULT-ATOMIC-2).
+sub make_dir ( $, $path )
+{
+	main::guest_ok( "the directory $path",
+		'mkdir -p ' . main::_shq($path) );
+	return;
+}
+
+# $cp->copy_file($from, $to):
+#	The file $from of the guest, at the path $to. A leg replaces
+#	one wrap of a slot with the wrap of an other slot, and the
+#	share of that oracle is then stale (ORC-QUORUM-4).
+sub copy_file ( $, $from, $to )
+{
+	main::guest_ok( "the copy of $from",
+		'cp ' . main::_shq($from) . ' ' . main::_shq($to) );
+	return;
+}
+
+# $cp->digest($path):
+#	The SHA-256 of the file $path of the guest, in lowercase hex,
+#	and undef for an absent file. A leg holds two states of a
+#	binary file apart with it, because read_file() carries text.
+sub digest ( $, $path )
+{
+	my $result = main::guest( 'sha256 -q ' . main::_shq($path) );
+	return undef if ( $result->{exit_code} // -1 ) != 0;
+	my $hex = $result->{stdout} // '';
+	chomp $hex;
+	return $hex;
+}
+
 # $cp->names($dir):
 #	The file names of the directory $dir of the guest, without
 #	the path. An absent directory gives the empty list.
@@ -874,39 +1051,130 @@ sub program ( $, @argv )
 #	byte of the run, and it writes the exit status to a file.
 sub create ( $self, $vault, %opt )
 {
-	my @pass = map { $main::PASSPHRASE{$_}
-		    // die "the harness holds no passphrase $_\n" }
-	    @{ $opt{pass} // [ 'right', 'right' ] };
+	my @pass = @{ $opt{pass} // [ 'right', 'right' ] };
 	die "a ceremony reads two passphrases\n" if @pass != 2;
 
-	my $base = "$main::RUN/$vault->{tag}";
-	my $path = main::guest_script(
-		"$vault->{tag}.sh",
-		"FUGUPASS_HELPERS=$main::HELPERS",
-		'export FUGUPASS_HELPERS',
-		"$main::PROGRAM -d $vault->{dir} create "
-		    . '-k ' . ( $opt{threshold} // 1 )
-		    . " -m $vault->{machine} -r $main::ROUNDS "
-		    . "'$self->{pubkey} $self->{url}' "
-		    . "> $base.out 2> $base.err",
-		"echo \$? > $base.status" );
+	my @argv = (
+		'create', '-k', $vault->{threshold},
+		'-m',     $vault->{machine},
+		'-r',     $main::ROUNDS );
+	push @argv, '-p', $vault->{pool} if defined $vault->{pool};
+	for my $oracle ( 1 .. $vault->{oracles} ) {
+		push @argv,
+		    $self->pubkey($oracle) . ' ' . $self->url($oracle);
+	}
 
+	my ($run) = $self->console( $vault,
+		{ argv => \@argv, answers => \@pass } );
+	return $run;
+}
+
+# $cp->console($vault, @step):
+#	The steps @step of the core process, in one console session
+#	of the guest (TEST-HARNESS-8). Each step is a hash with
+#	'argv', the arguments after the vault directory, and
+#	'answers', the names of the answers that the terminal reads
+#	of the step take.
+#
+#	The call gives one hash for each step. 'exit' is the exit
+#	status of the step, and 'out' and 'error' are the two streams
+#	of it. 'console' is the console text of the step, and a
+#	secret prints there (PROG-OUTPUT-1). 'counters' is the
+#	counters file after the step, by record name (ORC-COUNTER-2),
+#	and 'clock' is the guest time before the step and after it.
+sub console ( $self, $vault, @step )
+{
+	my $base = "$main::RUN/$vault->{tag}-" . ++$vault->{batch};
+	my @line = (
+		"FUGUPASS_HELPERS=$main::HELPERS",
+		'export FUGUPASS_HELPERS' );
+	my ( @answer, $count );
+
+	$count = 0;
+	for my $step (@step) {
+		$count++;
+		push @answer, map { $main::ANSWER{$_}
+			    // die "the harness holds no answer $_\n" }
+		    @{ $step->{answers} // [] };
+		push @line,
+		    "echo '$main::STEP_MARK $count'",
+		    "date +%s > $base.$count.clock",
+		    join( ' ',
+			map { main::_shq($_) }
+			    ( $main::PROGRAM, '-d', $vault->{dir},
+				@{ $step->{argv} } ) )
+			. " > $base.$count.out 2> $base.$count.err",
+		    "echo \$? > $base.$count.status",
+		    "date +%s >> $base.$count.clock",
+		    'cat ' . main::_shq( $self->counters($vault) )
+			. " > $base.$count.counters 2>/dev/null; :";
+	}
+	die "a console session holds one step at least\n" if $count == 0;
+	push @line, "echo '$main::STEP_MARK 0'";
+
+	my $path = main::guest_script( "$vault->{tag}-$vault->{batch}.sh",
+		@line );
 	my $console = main::host_ok(
-		"the ceremony $vault->{tag}",
+		"the console of $vault->{tag}",
 		[
-			$main::FUGUVM, 'expect', $main::EXPECT,
-			"sh $path", @pass, $main::CONSOLE_PASSWORD
+			$main::FUGUVM,           'expect',
+			$main::EXPECT,           "sh $path",
+			$main::CONSOLE_PASSWORD, "$main::STEP_MARK 0",
+			@answer
 		],
 		timeout => $main::CONSOLE_TIMEOUT );
 
-	my $status = $self->read_file("$base.status");
-	die "the ceremony $vault->{tag} wrote no exit status. The console "
-	    . "of it:\n$console"
-	    if !defined $status || $status !~ /\A([0-9]+)\s*\z/;
-	return {
-		exit  => $1 + 0,
-		out   => $self->read_file("$base.out")   // '',
-		error => $self->read_file("$base.err")   // '' };
+	my @chunk = split /\Q$main::STEP_MARK\E [0-9]+/, $console;
+	shift @chunk;
+	my %file = $self->_slurp($base);
+
+	my @run;
+	for my $i ( 1 .. $count ) {
+		my $status = $file{"$base.$i.status"};
+		die "the step $i of $vault->{tag} wrote no exit status. "
+		    . "The console of it:\n$console"
+		    if !defined $status || $status !~ /\A([0-9]+)\s*\z/;
+		push @run, {
+			exit     => $1 + 0,
+			out      => $file{"$base.$i.out"}   // '',
+			error    => $file{"$base.$i.err"}   // '',
+			console  => $chunk[ $i - 1 ]        // '',
+			counters => _counters( $file{"$base.$i.counters"} ),
+			clock    => [ split ' ',
+				$file{"$base.$i.clock"} // '' ] };
+	}
+	return @run;
+}
+
+# $cp->_slurp($base):
+#	Every file of the guest whose name starts with $base, by
+#	path. One command reads the whole set, because one call of
+#	fuguvm ssh costs a second.
+sub _slurp ( $, $base )
+{
+	my $text = main::guest_ok( "the files of $base",
+		"for f in $base.*; do echo \"=== fugupass-file \$f\"; "
+		    . 'cat "$f"; done' );
+	my %file;
+	my @part = split /=== fugupass-file (\S+)\n/, $text;
+	shift @part;
+	while ( @part >= 2 ) {
+		my ( $path, $body ) = splice @part, 0, 2;
+		$file{$path} = $body;
+	}
+	return %file;
+}
+
+# _counters($text):
+#	The counters file $text, by record name (ORC-COUNTER-2). An
+#	absent file gives the empty hash.
+sub _counters ($text)
+{
+	my %counter;
+	for my $line ( split /\n/, $text // '' ) {
+		$counter{$1} = $2 if $line =~ /\A(\S+): ([0-9]+)\z/;
+	}
+	return \%counter;
 }
 
 package main;
@@ -950,9 +1218,9 @@ for my $cp (@available) {
 	note( 'the counterparty '
 		. $cp->name
 		. ' answers at '
-		. $cp->{url}
-		. ', with the static key '
-		. $cp->{pubkey} );
+		. join( ', ',
+			map { $cp->url($_) . ' (' . $cp->pubkey($_) . ')' }
+			    1 .. $INSTANCES ) );
 
 	for my $leg (@legs) {
 		subtest $cp->name . ": $leg->{name}" => sub {
