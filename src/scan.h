@@ -36,7 +36,7 @@
  * caller erases the line (SEC-MEMORY-1). The residue of quirc is
  * outside this file: the decoder frees the grids and the capstones of
  * one frame without an erasure. The helper runs for one scan, and
- * RLIMIT_CORE is zero (SEC-MEMORY-3).
+ * the two limits of RLIMIT_CORE are zero (SEC-MEMORY-3).
  */
 
 #ifndef SCAN_H
@@ -104,9 +104,9 @@ struct scan_stream {
 
 /*
  * scan_nocore():
- *	Set RLIMIT_CORE to zero (SEC-MEMORY-3). main() of
- *	fugupass-scan.c makes this one call first, so the core limit
- *	is the first act of the program.
+ *	Hold the soft limit and the hard limit of RLIMIT_CORE at zero
+ *	(SEC-MEMORY-3). main() of fugupass-scan.c makes this one call
+ *	first, so the core limit is the first act of the program.
  *
  *	The call gives 0, and -1 on a failure. errno then names the
  *	failed call.

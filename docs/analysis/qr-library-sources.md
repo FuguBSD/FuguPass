@@ -134,10 +134,10 @@ it. `nm(1)` on `/usr/local/lib/libqrencode.a` of the package names no
 must keep. `fugupass-qr(1)` states the outcome for the operator.
 
 Four properties bound that residue. The helper renders one code, and it then
-exits. Its core limit is zero, so a crash of it writes no core file
-(SEC-MEMORY-3). OpenBSD encrypts swap by default. `qr_run()` erases each buffer
-that this tree owns, and the module bytes of `QRcode.data` are one of them
-(SEC-MEMORY-1).
+exits. The soft limit and the hard limit of `RLIMIT_CORE` are zero, so a crash
+of it writes no core file (SEC-MEMORY-3). OpenBSD encrypts swap by default.
+`qr_run()` erases each buffer that this tree owns, and the module bytes of
+`QRcode.data` are one of them (SEC-MEMORY-1).
 
 The decoder carries the same shape of residue. `quirc` frees the grids and the
 capstones of one frame without an erasure, and `src/scan.h` records that fact.

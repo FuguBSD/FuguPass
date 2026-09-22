@@ -49,8 +49,8 @@ Revocation from the plate rests on that property (see
   process inherits the two zero limits of that process. The execpromises of that
   process hold no `proc` promise, so `setrlimit(2)` kills such a child
   ([PROG-SPLIT](programs.md#prog-split)). `getrlimit(2)` needs the `stdio`
-  promise alone. The interface process inherits the zero limit from the core
-  process ([PROG-IFACE](programs.md#prog-iface)). A crash must not write a
+  promise alone. The interface process inherits the two zero limits from the
+  core process ([PROG-IFACE](programs.md#prog-iface)). A crash must not write a
   secret to a core file.
 - **SEC-MEMORY-4** — The passphrase must enter through `readpassphrase(3)`, in
   the core process ([PROG-IFACE](programs.md#prog-iface)).

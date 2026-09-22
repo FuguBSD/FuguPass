@@ -34,7 +34,7 @@
  * of libqrencode releases the digit buffer of the input without an
  * erasure, so the 48 digits of a mnemonic stay in the freed heap of
  * this process. The helper carries no other secret, it runs for one
- * render, and RLIMIT_CORE is zero (SEC-MEMORY-3).
+ * render, and the two limits of RLIMIT_CORE are zero (SEC-MEMORY-3).
  */
 
 #include <sys/types.h>

@@ -78,17 +78,19 @@ and that wait ends at the 60 seconds of the scan.
 A device that opens and gives no frame ends the scan at that bound,
 and the report names that cause.
 .Pp
-The stream of the read access of
-.Xr video 4
-starts at the first
-.Xr read 2 ,
-and the read filter of that driver starts it as well.
 .Xr poll 2
-of OpenBSD registers that filter through
+of OpenBSD registers the read filter of
+.Xr video 4
+through
 .Xr kqueue 2 ,
-so the first wait of
-.Nm
-starts the stream.
+and that filter starts the read stream.
+A read of that driver blocks without end, and
+.Dv O_NONBLOCK
+changes nothing there.
+.Pa docs/analysis/video-read-stream.md
+of the FuguPass source tree holds the kernel source of those two
+statements: the file, the revision and the guard of each, and what
+stays unproven.
 .Pp
 The
 .Va kern.video.record

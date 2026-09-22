@@ -57,12 +57,12 @@
  *
  * The child makes the first call of each helper as well:
  * scan_nocore() of scan.h, and qr_sandbox() of qr.h. Each one holds
- * RLIMIT_CORE at zero (SEC-MEMORY-3), and the execpromises hold no
- * proc promise. A setrlimit(2) call of such a child is a pledge
- * violation, and the kernel kills it with SIGABRT. The child of
- * probe_exec() therefore calls sandbox_nocore(), the call of main()
- * of fugupass.c, before the sandbox call, and each helper call then
- * reads two zero limits and writes none.
+ * the two limits of RLIMIT_CORE at zero (SEC-MEMORY-3), and the
+ * execpromises hold no proc promise. A setrlimit(2) call of such a
+ * child is a pledge violation, and the kernel kills it with SIGABRT.
+ * The child of probe_exec() therefore calls sandbox_nocore(), the
+ * call of main() of fugupass.c, before the sandbox call, and each
+ * helper call then reads two zero limits and writes none.
  *
  * probe_nocore() proves that call of the core process: it reads the
  * two limits of RLIMIT_CORE after the call, in a child of a run
@@ -345,9 +345,9 @@ probe_nocore(void)
  *	in a child of its own, and it reads the signal of that
  *	child.
  *
- *	The child sets RLIMIT_CORE to zero first, so the abort
- *	writes no core file. It exits 2 when the sandbox call
- *	itself fails, 3 when the socket call fails for another
+ *	The child sets the two limits of RLIMIT_CORE to zero first,
+ *	so the abort writes no core file. It exits 2 when the sandbox
+ *	call itself fails, 3 when the socket call fails for another
  *	reason, and 0 when the socket call gives a descriptor.
  *
  *	The call gives 0 for the signal, and -1 for every other

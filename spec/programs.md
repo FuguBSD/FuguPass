@@ -364,11 +364,12 @@ no keyboard.
   program must read frames for 60 seconds, and it must then report and exit 1.
   The core process reads the standard output of the helper to its end, so an
   endless read would hold a ceremony. `read(2)` on that driver takes no timeout,
-  so the program must wait for each frame with `poll(2)` first. The wait must
-  end at the bound of the scan, and `poll(2)` needs the `stdio` promise alone.
-  The stream of the read access starts at the first `read(2)`, and the read
-  filter of `video(4)` starts it as well. `poll(2)` registers that filter, so
-  the first wait starts the stream. A device that gives no frame is one cause.
+  and `O_NONBLOCK` reaches no read of it. The program must therefore wait for
+  each frame with `poll(2)` first. The wait must end at the bound of the scan,
+  and `poll(2)` needs the `stdio` promise alone. `poll(2)` registers the read
+  filter of `video(4)`, and that filter starts the read stream.
+  `docs/analysis/video-read-stream.md` holds the kernel source of the stream
+  start and of the blocking read. A device that gives no frame is one cause.
   Frames that hold no Standard SeedQR are another cause. The report must name
   the cause that ends the scan.
 - **PROG-SCAN-10** — The BIP39 English list holds 2048 words, so a group of four

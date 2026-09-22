@@ -26,9 +26,10 @@
 # unveils no path, so the unveil list of the core process carries the
 # device: a list without the device answers the open with "No such
 # file or directory". The execpromises of the core hold no proc
-# promise, so the helper reads the inherited core limit and writes
-# none: a setrlimit(2) call of such a child is a pledge violation,
-# and the kernel kills the helper before the report (SEC-MEMORY-3).
+# promise, so the helper reads the two inherited core limits and
+# writes none: a setrlimit(2) call of such a child is a pledge
+# violation, and the kernel kills the helper before the report
+# (SEC-MEMORY-3).
 #
 # The report proves no promise of the pledge call: the helper opens
 # the device before that call, and a machine with no camera stops at

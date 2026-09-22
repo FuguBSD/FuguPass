@@ -6,8 +6,10 @@ This directory holds `quirc`, the QR decoder of `fugupass-scan`
 `lib/` directory of the release, byte for byte. `LICENSE` is the license file of
 the same release.
 
-Do not edit a file of this directory. To move to another release, replace each
-file and write the new digests here.
+Do not edit a file of this directory that the table below pins. `Makefile` and
+this record are files of this repository, and the table holds no row of them. To
+move to another release, replace each pinned file and write the new digests
+here.
 
 ## The copy
 

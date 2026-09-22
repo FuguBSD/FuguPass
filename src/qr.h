@@ -63,10 +63,11 @@
 
 /*
  * qr_sandbox():
- *	The sandbox of the render helper. The call sets RLIMIT_CORE
- *	to zero, and it then pledges QR_PROMISES (SEC-MEMORY-3,
- *	PROG-SPLIT-5). main() of fugupass-qr.c makes this one call
- *	first, so the core limit is the first act of the program.
+ *	The sandbox of the render helper. The call holds the soft
+ *	limit and the hard limit of RLIMIT_CORE at zero, and it then
+ *	pledges QR_PROMISES (SEC-MEMORY-3, PROG-SPLIT-5). main() of
+ *	fugupass-qr.c makes this one call first, so the core limit is
+ *	the first act of the program.
  *
  *	The call gives 0, and -1 on a failure. errno then names the
  *	failed call.

@@ -43,20 +43,12 @@
  * of the driver.
  *
  * The wait stands before the first read, and it starts the stream of
- * the read access. A character device of OpenBSD carries no poll
- * entry point: poll(2) registers the read filter of the driver
- * through kqueue(2) (struct cdevsw of sys/conf.h, ppollregister() of
- * sys/kern/sys_generic.c). videokqfilter() of sys/dev/video.c starts
- * the stream in read mode when no read started it, and videoread()
- * starts it as well. The two entry points therefore start the same
- * stream, and the first wait of this loop reaches a started stream.
+ * the read access. O_NONBLOCK reaches no read of this driver, so the
+ * wait is the one bound of the loop.
  *
- * O_NONBLOCK reaches no read of this driver: videoread() takes the
- * ioflag argument of a read and reads no bit of it, so a read of a
- * device that gives no frame sleeps without a bound whatever the
- * flag of the descriptor holds. The wait above is the one bound of
- * the loop. The statements of this paragraph and the one above come
- * from the source of OpenBSD 7.8, the release of the test guest.
+ * docs/analysis/video-read-stream.md holds the kernel source of
+ * those two statements: the file, the revision and the guard of
+ * each, and what stays unproven.
  */
 
 #include <sys/types.h>

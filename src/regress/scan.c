@@ -529,10 +529,13 @@ test_nocore(void)
  *	gives up before the bound fails the scan of a slow camera.
  *
  *	The standard error of the child goes to a second pipe, and
- *	the probe reads the report of it. A stream that gives no
- *	frame and a stream that gives frames of no SeedQR take one
- *	report each, so the report must name the device and the
- *	cause that ends the scan (PROG-SCAN-9, PROG-SCAN-13).
+ *	the probe reads the report of it. The pipe of the frames
+ *	carries no byte, so the loop takes the branch of a stream
+ *	that gives no frame. That report must name the device and
+ *	the cause, and the probe reads both (PROG-SCAN-9,
+ *	PROG-SCAN-13). The report of a stream that gives frames of
+ *	no SeedQR names the cause alone, and this probe reaches no
+ *	such stream.
  */
 static int
 test_deadline(void)

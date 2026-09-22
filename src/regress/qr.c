@@ -626,8 +626,8 @@ out:
  *	of a file needs a promise outside it (PROG-SPLIT-5). The
  *	kernel kills a child of such a call with SIGABRT.
  *
- *	The child sets RLIMIT_CORE to zero inside qr_sandbox(), so
- *	the abort writes no core file.
+ *	The child sets the two limits of RLIMIT_CORE to zero inside
+ *	qr_sandbox(), so the abort writes no core file.
  */
 static int
 test_pledge(void)
