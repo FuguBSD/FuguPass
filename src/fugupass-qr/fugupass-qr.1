@@ -55,27 +55,101 @@ A vault file is ciphertext, so the paper copy of such a code is a
 safe backup.
 .Pp
 .Nm
-sets
+holds
 .Dv RLIMIT_CORE
-to zero, and it then pledges
+at zero, before every other act of the program.
+It reads the limit with
+.Xr getrlimit 2 ,
+and it calls
+.Xr setrlimit 2
+only when the limit is not zero.
+.Xr fugupass 1
+holds the limit at zero, and a child of it inherits that limit.
+The execpromises of that process hold no
+.Dq proc
+promise, so a
+.Xr setrlimit 2
+call of such a child is a pledge violation.
+A crash of
+.Nm
+writes no core file.
+.Pp
+.Nm
+then pledges
 .Dq stdio .
 It opens no file, it creates no process, and it reaches no network.
-A crash of it writes no core file.
 .Pp
 The words of a mnemonic are the master of the vault, so the input of
 .Nm
 can be a secret.
 The program clears each buffer of its own before it exits.
+.Sh THE ENCODER
+.Nm
+encodes each code with
+.Sy libqrencode ,
+by Kentaro Fukuchi.
+The library carries the GNU Lesser General Public License, version
+2.1 or later.
+The
+.Ox
+ports tree holds it as
+.Pa graphics/libqrencode ,
+and the package of
+.Ox 7.8
+is
+.Sy libqrencode-4.1.1 .
+That package declares one run dependency,
+.Pa graphics/png .
+.Nm
+links the shared library of the package, and it runs no program of
+that package.
+FuguPass holds no source of the library.
+.Pp
+The library picks the mask pattern of a code by penalty score.
+A mnemonic code must carry pattern 0, so
+.Nm
+re-masks such a code.
+It reads the pattern of the library from the format bits, it undoes
+that pattern, and it applies pattern 0.
+It then writes the format bits of level L and mask 0.
+.Pp
+The library frees the digit buffer of an input with
+.Xr free 3 ,
+and it erases no byte of that buffer.
+The digits of a mnemonic therefore stay in the freed heap of this
+process, and
+.Nm
+cannot reach that memory.
+The program renders one code, and it then exits.
 .Sh EXIT STATUS
 The
 .Nm
-utility exits 0 after it writes one code, and 1 on a failure.
-The failures are an empty input, an input above the one-code
-capacity, a failed encode, and a failed write.
+utility exits 0 after it writes one code.
+It exits 1 on each failure below.
+.Bl -bullet
+.It
+The sandbox call of the program fails.
+.It
+The command line holds an argument.
+.It
+The read of the standard input fails.
+.It
+The input holds no byte.
+.It
+The input is longer than the one-code capacity.
+.It
+The encode of the input fails.
+.It
+The code of a mnemonic carries another version than 2.
+.It
+The write of the code fails.
+.El
+.Pp
 Every report goes to the standard error.
 .Sh SEE ALSO
 .Xr fugupass 1 ,
 .Xr fugupass-scan 1 ,
+.Xr getrlimit 2 ,
 .Xr pledge 2
 .Sh AUTHORS
 .An Dick Olsson Aq Mt hi@senzilla.io

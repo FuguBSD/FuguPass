@@ -84,12 +84,59 @@ plate, and the report of
 .Nm
 names the device.
 A virtual machine needs host device passthrough for the camera.
+.Sh THE DECODER
+.Nm
+decodes each frame with
+.Sy quirc ,
+by Daniel Beer.
+The library carries the ISC license, the license of FuguPass.
+FuguPass holds a copy of the release
+.Sy v1.2
+in its own tree, and that copy records the origin, the license and
+the digest of each file.
+The source of the release is
+.Lk https://github.com/dlbeer/quirc .
+.Pp
+The
+.Ox
+ports tree holds the library as
+.Pa graphics/libquirc .
+That package declares
+.Pa graphics/sdl-gfx
+as a run dependency, for the demonstration programs of the release.
+.Pa sdl-gfx
+needs SDL, and SDL needs the X11 shared libraries.
+The library itself calls the standard C functions alone, so FuguPass
+takes the copy and pulls none of those packages onto a signing
+machine.
+.Pp
+.Nm
+gives the library one grey byte of each pixel.
+The library gives the version, the mode and the payload of each code
+that it reads, and the gates above read the mode and the payload.
 .Sh THE SANDBOX
 .Nm
-sets
+holds
 .Dv RLIMIT_CORE
-to zero first, so a crash of it writes no core file.
-It then opens the device, and it pledges
+at zero, before every other act of the program.
+It reads the limit with
+.Xr getrlimit 2 ,
+and it calls
+.Xr setrlimit 2
+only when the limit is not zero.
+.Xr fugupass 1
+holds the limit at zero, and a child of it inherits that limit.
+The execpromises of that process hold no
+.Dq proc
+promise, so a
+.Xr setrlimit 2
+call of such a child is a pledge violation.
+A crash of
+.Nm
+writes no core file.
+.Pp
+.Nm
+then opens the device, and it pledges
 .Dq stdio video .
 .Pp
 .Nm
@@ -109,22 +156,52 @@ The 12 words are the master of the vault, so the output of
 .Nm
 is a secret.
 The program clears each buffer of its own before it exits.
-.Sh EXIT STATUS
-The
+The decoder frees the grids and the capstones of one frame without
+an erasure, and
 .Nm
-utility exits 0 after it writes one mnemonic, and 1 on a failure.
-The failures are a device that it cannot open, a device that gives no
-YUYV frame of the read access, a failed read, and 60 seconds with no
-Standard SeedQR.
-Every report goes to the standard error, and it names the cause.
+cannot reach that memory.
 .Sh FILES
 .Bl -tag -width /dev/video
 .It Pa /dev/video
 The video device of a run with no argument.
 .El
+.Sh EXIT STATUS
+The
+.Nm
+utility exits 0 after it writes one mnemonic.
+It exits 1 on each failure below.
+.Bl -bullet
+.It
+The core limit call of the program fails.
+.It
+The command line holds more than one argument.
+.It
+The open of the device fails.
+.It
+The pledge call fails.
+.It
+The device captures no video frame of the read access.
+.It
+The format call of the device fails.
+.It
+The device gives another pixel format than YUYV.
+.It
+The frame of the device is outside the bounds of the program.
+.It
+The buffer of a frame takes no memory.
+.It
+A read of a frame fails, or it gives fewer bytes than one frame.
+.It
+No frame of 60 seconds holds a Standard SeedQR.
+.It
+The write of the words fails.
+.El
+.Pp
+Every report goes to the standard error, and it names the cause.
 .Sh SEE ALSO
 .Xr fugupass 1 ,
 .Xr fugupass-qr 1 ,
+.Xr getrlimit 2 ,
 .Xr pledge 2 ,
 .Xr sysctl 2 ,
 .Xr video 4
