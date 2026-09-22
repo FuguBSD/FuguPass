@@ -45,10 +45,13 @@ page in `mdoc(7)`: `fugupass(1)`, `fugupass-repl(1)`, `fugupass-scan(1)`, and
   `fugupass-scan` must unveil no path. It must pledge `stdio video` after it
   opens the device. The helper takes the unveil list of the core in its view.
   Its promise set holds no `rpath`, so it reads no file of the vault after that
-  pledge call. A child of `execve(2)` cannot unveil a path. The
-  `unveil(NULL, NULL)` call of the core reaches that child. An `unveil(2)` call
-  of the child then gives `EPERM`. The other two children pledge a set with no
-  `video` and no `rpath`, so they open no video device.
+  pledge call. A child of `execve(2)` cannot unveil a path, and the promise set
+  of the child decides the outcome of such a call. The execpromises hold no
+  `unveil` promise. An `unveil(2)` call of a child is therefore a pledge
+  violation, and the kernel kills that child with `SIGABRT`. A child of a
+  promise set that holds `unveil` gets `EPERM` instead, from the
+  `unveil(NULL, NULL)` call of the core. The other two children pledge a set
+  with no `video` and no `rpath`, so they open no video device.
 - **PROG-SPLIT-5** — `fugupass-qr` must pledge `stdio` only.
 - **PROG-SPLIT-6** — FuguPass must not implement an agent process and must not
   implement a network service. The oracle client inside `fugupass` is the only
@@ -149,9 +152,12 @@ modules.
   sink ([PROG-ONESHOT](programs.md#prog-oneshot)). A command of the session
   takes the reply pipe, and one reply line carries one record. A secret takes no
   sink, and it goes to the terminal ([PROG-OUTPUT](programs.md#prog-output)).
-  One record takes the line bound of the vault format
-  ([VAULT-FORMAT](vault.md#vault-format)). A record above that bound reaches no
-  sink, and the command must then fail.
+  Each record must carry one value of a vault line, behind a name that is no
+  longer than the name of that line. One record therefore takes the line bound
+  of the vault format, without the newline of it
+  ([VAULT-FORMAT](vault.md#vault-format)). One reply line adds the tag and the
+  newline around the record. A record above that bound reaches no sink, and the
+  command must then fail.
 
 Entry names and oracle error text carry external bytes, so the display filter
 guards the operator's terminal. `Fugu::REPL` holds the terminal in raw mode only

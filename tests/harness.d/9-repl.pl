@@ -37,23 +37,33 @@
 use v5.36;
 
 # The slots of the vault of this leg. One add consumes one slot, and
-# a ceremony of few slots costs few oracle rounds.
-my $POOL = 2;
+# a ceremony of few slots costs few oracle rounds. The session case
+# and the record case each add one entry.
+my $POOL = 3;
 
 # The seconds of the idle timeout that the leg writes into the
 # config, and the seconds that the standard input of the idle step
 # stays open (PROG-REPL-7). The second value is far above the first
 # one, so a session that never locks takes the whole hold.
-my $IDLE = 3;
-my $HOLD = 40;
+my $IDLE = 10;
+my $HOLD = 60;
+
+# The bytes of the text of one line of the two pipes, without the
+# line feed. The line of the vault format takes 4096 bytes, and that
+# count holds the line feed (PROG-IFACE-12, VAULT-FORMAT-5).
+my $TEXT_MAX = 4095;
 
 # The bytes of the entry name at the line bound, and the bytes one
-# byte above it. The line of the vault format takes 4096 bytes, and
-# that count holds the line feed, so the text of a request line takes
-# 4095 bytes (PROG-IFACE-12, VAULT-FORMAT-5). The command word 'show'
-# and the space after it take five of those bytes.
-my $AT_BOUND   = 4095 - length 'show ';
+# byte above it. The command word 'show' and the space after it take
+# five bytes of the request line.
+my $AT_BOUND   = $TEXT_MAX - length 'show ';
 my $OVER_BOUND = $AT_BOUND + 1;
+
+# The bytes of the metadata value that makes the longest output
+# record (PROG-IFACE-13). One record of show is one metadata line of
+# the entry file without its line feed, so the record takes
+# $TEXT_MAX bytes, and the field name and the ': ' of it take ten.
+my $VALUE_MAX = $TEXT_MAX - length 'username: ';
 
 # session_case($t, $vault):
 #	One session of the six commands (PROG-IFACE-2, PROG-REPL-3).
@@ -111,6 +121,65 @@ sub session_case ( $t, $vault )
 	return;
 }
 
+# record_case($t, $vault):
+#	The longest output record of a command, at the two sinks of
+#	PROG-IFACE-13. One metadata line of an entry file takes 4096
+#	bytes with its line feed, so the record of that line takes
+#	$TEXT_MAX bytes (VAULT-FORMAT-5). The value below makes one
+#	record of that length, and no command builds a longer one.
+#
+#	The add and the first show are one-shot subcommands, so that
+#	record reaches the standard output. The second show runs
+#	inside a session, so the same record reaches the reply pipe
+#	as one reply line of the tag, the record and the line feed
+#	(PROG-IFACE-11).
+#
+#	The add takes a subcommand, and not a request line: a request
+#	line of the value would cross the bound of PROG-IFACE-12.
+#
+#	A record buffer of commands.c that is one byte shorter drops
+#	that record and fails the command, so neither half of the
+#	case reads it back. The reply line buffer of iface.c holds
+#	the tag, the same record and the line feed, so a buffer one
+#	byte shorter there drops the record at the session sink.
+sub record_case ( $t, $vault )
+{
+	my $value = 'a' x $VALUE_MAX;
+
+	my ( $add, $oneshot ) = $t->console(
+		$vault,
+		{
+			argv => [
+				'add', '-T', 'password', '-f',
+				"username=$value", 'long1'
+			],
+			answers => [ 'right', 'secret' ] },
+		{ argv => [ 'show', 'long1' ], answers => ['right'] } );
+
+	is( $add->{exit}, 0,
+		'add writes the entry of the longest metadata line' )
+	    or diag( $add->{error} );
+	is( $oneshot->{exit}, 0, 'the one-shot show passes' )
+	    or diag( $oneshot->{error} );
+	like( $oneshot->{out}, qr/^username: a{$VALUE_MAX}$/m,
+		"the standard output takes the record of $TEXT_MAX bytes "
+		    . 'whole (PROG-IFACE-13, PROG-ONESHOT-3)' );
+
+	my ($run) = $t->console(
+		$vault,
+		{
+			argv    => [],
+			answers => ['right'],
+			input   => [ 'show long1', 'quit' ] } );
+
+	is( $run->{exit}, 0, 'the session of the same show ends on quit' )
+	    or diag( $run->{error} );
+	like( $run->{out}, qr/^username: a{$VALUE_MAX}$/m,
+		'one reply line carries that record whole (PROG-IFACE-13, '
+		    . 'PROG-IFACE-11)' );
+	return;
+}
+
 # idle_case($t, $vault):
 #	The idle lock of one session (PROG-REPL-7). The timeout is a
 #	tunable of the config file, and the config file is plaintext
@@ -164,11 +233,22 @@ sub idle_case ( $t, $vault )
 
 	# The bound below is the measure of the wait. A deadline that
 	# is wrong returns at once, and it prints the same lock line.
-	# Each clock reads whole seconds and loses up to one of them,
-	# so the bound takes the half of the timeout.
-	cmp_ok( $t->elapsed($run) - $t->elapsed($base), '>=', $IDLE / 2,
-		"the idle session ran the $IDLE seconds of the timeout "
-		    . 'longer than the baseline session (PROG-REPL-7)' );
+	#
+	# Each clock of a step reads a sub-second value, so the
+	# difference below loses under a millisecond of the wait. The
+	# rest of that difference is the start-up of the idle session
+	# less the start-up of the baseline session, and the two
+	# sessions unlock the same vault one after the other. The
+	# bound takes half of the timeout, so it leaves the other half
+	# to that difference of the two start-ups.
+	my $waited = $t->elapsed($run) - $t->elapsed($base);
+	note( sprintf 'the idle step ran %.3f seconds, the baseline step '
+		. '%.3f, and the difference is %.3f',
+		$t->elapsed($run), $t->elapsed($base), $waited );
+	cmp_ok( $waited, '>=', $IDLE / 2,
+		"the idle session ran half of the $IDLE seconds of the "
+		    . 'timeout longer than the baseline session, at least '
+		    . '(PROG-REPL-7)' );
 	return;
 }
 
@@ -275,6 +355,8 @@ return sub ($t)
 	    sub { session_case( $t, $vault ) };
 	subtest 'a request line above the line bound' =>
 	    sub { long_case( $t, $vault ) };
+	subtest 'the longest output record at each sink' =>
+	    sub { record_case( $t, $vault ) };
 	subtest 'the idle lock of a session' =>
 	    sub { idle_case( $t, $vault ) };
 	subtest 'the pledge of the interface process' =>

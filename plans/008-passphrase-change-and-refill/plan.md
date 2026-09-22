@@ -2,8 +2,7 @@
 
 ## Status
 
-Proposed. It waits on plan 007 for the session core. Plan 009 waits on it for
-the change marker.
+Proposed. It waits on no other plan. Plan 009 waits on it for the change marker.
 
 Implements: ORC-ENROLL, CER-REFILL, TEST-HARNESS. Implements: ORC-CANARY without
 ORC-CANARY-10. Defers: CER-PROVISION.

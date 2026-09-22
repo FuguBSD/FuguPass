@@ -444,10 +444,13 @@ subtest 'the operator listing refreshes the completion set' => sub {
 };
 
 # The prompt loop must read the interrupt flag of the manager
-# (PROG-IFACE-9). The fake editor counts each read of a command
-# line, so a loop that reads no flag counts one there. The fake
-# manager reports the interrupt of every read, so a loop that acts
-# on no flag never ends. _run_session bounds that loop.
+# (PROG-IFACE-9). The fake manager reports the interrupt of every
+# read, so a loop that acts on the flag reads no command line. The
+# fake editor counts each read, so a loop that ignores the flag
+# reads one line and leaves the count at 1. The count is the
+# measure of this case. That editor holds no line, so such a loop
+# then ends on the end of the input, and no case here needs the
+# deadline of _run_session.
 subtest 'the prompt loop reads the interrupt flag' => sub {
 	require $PROGRAM;
 

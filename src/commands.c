@@ -343,9 +343,19 @@ secret_print(const char *value)
  *	line feed, and the sink of the session takes the record in
  *	place of the standard output (PROG-IFACE-13).
  *
- *	One record holds one line of a vault file at most, so the
- *	buffer takes the line of VAULT-FORMAT-5. Each sink takes the
- *	record from that one buffer, so one bound holds for both.
+ *	Each record carries one value of a vault line, behind a name
+ *	that is no longer than the name of that line: show writes the
+ *	name of the line back, audit writes a date and one space
+ *	before an entry name of the index, and ls writes that name
+ *	alone. One record therefore takes the line of VAULT-FORMAT-5
+ *	without the line feed of it, and the buffer below holds that
+ *	record (PROG-IFACE-13).
+ *
+ *	The metadata line of show reaches that bound exactly. The
+ *	stale line of audit stays below it, because the index line
+ *	carries the entry file name, the type name and the slot list
+ *	before the entry name. The reply line of iface.c takes the
+ *	same record inside the frame of the reply pipe.
  *
  *	A record above that bound reaches no sink, because a
  *	truncated record is a wrong record. The report of it goes to

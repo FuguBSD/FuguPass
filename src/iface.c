@@ -81,11 +81,12 @@
 
 /*
  * The bytes of one request line and of one output record, without
- * the line feed. A record comes from one line of a vault file, and a
- * request line names an entry of such a line, so both take the line
- * of VAULT-FORMAT-5. That line counts the line feed inside its
+ * the line feed. A record carries one value of a vault line behind a
+ * name that is no longer than the name of that line, and a request
+ * line names an entry of such a line, so both take the line of
+ * VAULT-FORMAT-5. That line counts the line feed inside its
  * 4096 bytes, so the text of it takes one byte less
- * (PROG-IFACE-12).
+ * (PROG-IFACE-12, PROG-IFACE-13).
  */
 #define TEXT_MAX	(VAULT_LINE_MAX - 1)
 
@@ -167,11 +168,11 @@ write_all(int fd, const char *data, size_t len)
  *	commands.h takes this function for the session.
  *
  *	The line holds the tag, the record, and the line feed. A
- *	record holds no line feed of its own, because it comes from
- *	one line of a vault file (VAULT-FORMAT-5). record() of
- *	commands.c bounds the record at that same line, so the buffer
- *	below takes each record of this sink. The check of the
- *	snprintf(3) below guards that buffer alone.
+ *	record holds no line feed of its own, because a value of a
+ *	vault line holds none (VAULT-FORMAT-5). record() of
+ *	commands.c bounds the record at TEXT_MAX, so the buffer below
+ *	takes each record of this sink. The check of the snprintf(3)
+ *	below guards that buffer alone.
  *
  *	A failed write leaves the flag of this file, and the request
  *	loop then ends the session. The sink reports no failure to

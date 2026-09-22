@@ -231,6 +231,13 @@ our $INSTANCES = 3;
 # earlier line ends no run.
 our $STEP_MARK = '=== fugupass-console-step';
 
+# The clock of one step. console() reads it before the step and
+# after it, and elapsed() gives the difference of the two reads.
+# date(1) reads whole seconds, so each read of it loses up to one
+# second and a difference of two reads loses up to two. Time::HiRes
+# is a core module of the guest, and it loses under a millisecond.
+our $CLOCK = q{perl -MTime::HiRes=time -e 'printf "%.6f\n", time'};
+
 # The root password of the console login of the guest.
 our $CONSOLE_PASSWORD = $ENV{FUGUPASS_CONSOLE_PASSWORD} // 'openbsd';
 
@@ -1110,7 +1117,8 @@ sub program ( $, @argv )
 
 # $cp->elapsed($run):
 #	The seconds of one step of console(), from the guest clock
-#	before it and after it.
+#	before it and after it. The value holds a fraction, because
+#	$CLOCK reads a sub-second clock.
 sub elapsed ( $, $run )
 {
 	my ( $from, $to ) = @{ $run->{clock} };
@@ -1244,14 +1252,14 @@ sub console ( $self, $vault, @step )
 
 		push @line,
 		    "echo '$main::STEP_MARK $count'",
-		    "date +%s > $at.clock",
+		    "$main::CLOCK > $at.clock",
 		    join( ' ',
 			map { main::_shq($_) }
 			    ( $main::PROGRAM, '-d', $vault->{dir},
 				@{ $step->{argv} } ) )
 			. "$stdin > $at.out 2> $at.err",
 		    "echo \$? > $at.status",
-		    "date +%s >> $at.clock",
+		    "$main::CLOCK >> $at.clock",
 		    'cat ' . main::_shq( $self->counters($vault) )
 			. " > $at.counters 2>/dev/null; :";
 		push @line, "rm -f $at.fifo" if length $stdin;

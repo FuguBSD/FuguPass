@@ -5,11 +5,13 @@
 Proposed. It waits on no other plan.
 
 Implements: PROG-SCAN, PROG-QR, KEY-MASTER, TEST-KAT. Implements: PROG-SPLIT,
-PROG-OUTPUT, SEC-MEMORY. Implements: VAULT-BACKUP without VAULT-BACKUP-3.
+PROG-OUTPUT, SEC-MEMORY, PROG-BUILD. Implements: VAULT-BACKUP without
+VAULT-BACKUP-3.
 
 This plan completes KEY-MASTER-2, TEST-KAT-3, PROG-SPLIT-4 and PROG-SPLIT-5,
 PROG-OUTPUT-2, and SEC-MEMORY-3 for the two helpers. It adds VAULT-BACKUP-4, and
-VAULT-BACKUP stays `partial` on the statement of plan 013.
+VAULT-BACKUP stays `partial` on the statement of plan 013. Of PROG-BUILD, it
+lands the directories of the two helper programs, the one absent part.
 
 ## Purpose
 
@@ -81,11 +83,15 @@ boundary of `src/helper.h`.
 | `src/fugupass-scan/Makefile`, `src/fugupass-qr/Makefile` | The two programs                            |
 | `src/fugupass-scan/fugupass-scan.1`                      | The manual page, with the decoder record    |
 | `src/fugupass-qr/fugupass-qr.1`                          | The manual page, with the encoder record    |
+| `src/Makefile`                                           | `SUBDIR` for the two program directories    |
 | `src/commands.c`                                         | The QR default of a mnemonic                |
 | `src/sandbox.h`, `src/sandbox.c`                         | The video rows and the `video` promise      |
 | `src/regress/scan.c`, `src/regress/qr.c`                 | The tests below                             |
 | `src/regress/sandbox.c`                                  | The video test below                        |
+| `src/regress/Makefile`                                   | The two new test programs                   |
 | `tests/vectors/seedqr/`                                  | The picture, the PGM, the negative fixtures |
+| `tests/harness`, `tests/harness.d/`                      | The real scan helper, and the legs below    |
+| `tests/stubs/fugupass-scan.c`                            | The double, apart from the real helper      |
 | `docs/analysis/qr-library-sources.md`                    | The source evaluation of the two libraries  |
 | `spec/STATUS.md`                                         | The cited units                             |
 
@@ -98,6 +104,8 @@ boundary of `src/helper.h`.
 - A Compact SeedQR fixture in byte mode and a 24-word Standard SeedQR fixture of
   96 digits both fail (TEST-KAT-3, D-22).
 - The output is one line of 12 words and nothing else (PROG-SCAN-5).
+- `getrlimit(2)` after the core-limit call of the helper reads a `RLIMIT_CORE`
+  of zero (SEC-MEMORY-3).
 
 `src/regress/qr` holds:
 
@@ -107,6 +115,11 @@ boundary of `src/helper.h`.
 - The render carries a quiet zone of 4 light modules on each side.
 - A vault file of one sealed entry renders as one code, and a file above the
   capacity gives a report and no code (PROG-QR-3).
+- A child that makes the pledge call of the helper then opens a file, and the
+  kernel kills that child. The promise set is `stdio` alone, and a file open
+  needs a promise outside it (PROG-SPLIT-5).
+- `getrlimit(2)` after the core-limit call of the helper reads a `RLIMIT_CORE`
+  of zero (SEC-MEMORY-3).
 
 `src/regress/sandbox` gains, for the core process of PROG-SPLIT-4:
 
@@ -131,9 +144,9 @@ device. The manual page names it as the proof of a drawing.
 
 - `make check` passes on the host, and `make regress` and `make harness` pass in
   the guest.
-- PROG-SCAN, PROG-QR, KEY-MASTER, TEST-KAT, PROG-SPLIT, PROG-OUTPUT, and
-  SEC-MEMORY read `done`. VAULT-BACKUP reads `partial` with VAULT-BACKUP-3 as
-  the absent rule.
+- PROG-SCAN, PROG-QR, KEY-MASTER, TEST-KAT, PROG-SPLIT, PROG-OUTPUT, PROG-BUILD
+  and SEC-MEMORY read `done`. VAULT-BACKUP reads `partial` with VAULT-BACKUP-3
+  as the absent rule.
 - The change deletes this plan.
 
 ## What this plan does not do

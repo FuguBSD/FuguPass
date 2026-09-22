@@ -56,9 +56,14 @@
  *
  * The value holds no wpath and no cpath, so a child reads a file of
  * the list and writes none. It holds no proc and no exec, so a
- * child starts no process. The lock of sandbox_enter() reaches a
- * child as well: an unveil(2) call of a child gives EPERM, and no
- * child widens the list of this process (PROG-SPLIT-4).
+ * child starts no process.
+ *
+ * No child widens the list of this process, and the promise set of
+ * the child decides how such an attempt ends (PROG-SPLIT-4). This
+ * value holds no unveil promise, so an unveil(2) call of a child is
+ * a pledge violation, and the kernel kills that child with SIGABRT.
+ * A child of a promise set that holds unveil gets EPERM instead,
+ * from the unveil(NULL, NULL) call of sandbox_enter().
  */
 #define SANDBOX_EXEC_PROMISES \
 	"stdio rpath prot_exec tty"

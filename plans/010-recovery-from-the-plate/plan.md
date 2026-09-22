@@ -2,10 +2,8 @@
 
 ## Status
 
-Proposed. It waits on plan 006 for the program and the scan boundary. It also
-waits on plan 007, plan 008, and plan 009: they land the other subcommands of
-PROG-ONESHOT-4. Its harness legs need the vault of plan 007 and the second
-machine of plan 009.
+Proposed. It waits on plan 008 and plan 009: they land the other subcommands of
+PROG-ONESHOT-4. Its harness legs need the second machine of plan 009.
 
 Implements: REC-PLATE, REC-VAULT, REC-RESTORE, CER-VERIFY, PROG-ONESHOT.
 Implements: PROG-REPL. Defers: PROG-SCAN, ORC-ENROLL.
