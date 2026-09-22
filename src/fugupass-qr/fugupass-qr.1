@@ -1,0 +1,144 @@
+.\"	$OpenBSD$
+.\"
+.\" Copyright (c) 2026 Dick Olsson <hi@senzilla.io>
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate: September 22 2026 $
+.Dt FUGUPASS-QR 1
+.Os
+.Sh NAME
+.Nm fugupass-qr
+.Nd FuguPass QR render helper
+.Sh SYNOPSIS
+.Nm
+.Sh DESCRIPTION
+.Nm
+reads the standard input, and it writes one QR code to the standard
+output.
+.Xr fugupass 1
+runs it as a child, and it takes no option and no argument.
+.Pp
+The code reaches the terminal as UTF-8 half blocks.
+One character carries two module rows.
+A block half is a light module, and a space half is a dark module.
+Each code carries a quiet zone of 4 light modules on each side.
+.Pp
+The bytes of the input give the shape of the code.
+An input of 12 words of the BIP39 English list is a mnemonic, with
+one space between two words and at most one line feed at the end.
+.Nm
+renders such an input as a Standard SeedQR: version 2, level L,
+numeric mode, and mask pattern 0.
+The payload is the zero-based index of each word, in four decimal
+digits.
+A signer scans that one form from the screen.
+.Pp
+Every other input is a vault file, and
+.Nm
+renders it at level L in byte mode, at the lowest version that takes
+the file.
+The one-code capacity is 2953 bytes.
+.Nm
+reports a longer file, and it writes no code.
+A vault file is ciphertext, so the paper copy of such a code is a
+safe backup.
+.Pp
+.Nm
+holds the soft limit and the hard limit of
+.Dv RLIMIT_CORE
+at zero, before every other act of the program.
+It reads the two limits with
+.Xr getrlimit 2 ,
+and it calls
+.Xr setrlimit 2
+only when one of them is not zero.
+.Xr fugupass 1
+holds both limits at zero, and a child of it inherits them.
+The execpromises of that process hold no
+.Dq proc
+promise, so a
+.Xr setrlimit 2
+call of such a child is a pledge violation.
+A crash of
+.Nm
+writes no core file.
+.Pp
+.Nm
+then pledges
+.Dq stdio .
+It opens no file, it creates no process, and it reaches no network.
+.Pp
+The words of a mnemonic are the master of the vault, so the input of
+.Nm
+can be a secret.
+The program clears each buffer of its own before it exits.
+.Sh THE ENCODER
+.Nm
+encodes each code with
+.Sy libqrencode ,
+by Kentaro Fukuchi.
+FuguPass holds no source of that library, and the port of FuguPass
+declares the package of it as a library dependency.
+.Nm
+links the shared library, and it runs no program of that package.
+.Pa docs/analysis/qr-library-sources.md
+of the FuguPass source tree records the evaluation of each QR
+library: the provenance of it, the license of it, and the cost of
+it.
+.Pp
+The library picks the mask pattern of a code by penalty score, and a
+mnemonic code must carry pattern 0.
+.Nm
+therefore re-masks such a code.
+.Pp
+The library frees the digit buffer of an input with
+.Xr free 3 ,
+and it erases no byte of that buffer.
+The digits of a mnemonic therefore stay in the freed heap of this
+process, and
+.Nm
+cannot reach that memory.
+The program renders one code, and it then exits.
+.Sh EXIT STATUS
+The
+.Nm
+utility exits 0 after it writes one code.
+It exits 1 on each failure below.
+.Bl -bullet
+.It
+The sandbox call of the program fails.
+.It
+The command line holds an argument.
+.It
+The read of the standard input fails.
+.It
+The input holds no byte.
+.It
+The input is longer than the one-code capacity.
+.It
+The encode of the input fails.
+.It
+The code of a mnemonic carries another version than 2.
+.It
+The write of the code fails.
+.El
+.Pp
+Every report goes to the standard error.
+.Sh SEE ALSO
+.Xr fugupass 1 ,
+.Xr fugupass-scan 1 ,
+.Xr getrlimit 2 ,
+.Xr pledge 2
+.Sh AUTHORS
+.An Dick Olsson Aq Mt hi@senzilla.io

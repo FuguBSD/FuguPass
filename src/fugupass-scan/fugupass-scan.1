@@ -1,0 +1,235 @@
+.\"	$OpenBSD$
+.\"
+.\" Copyright (c) 2026 Dick Olsson <hi@senzilla.io>
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate: September 22 2026 $
+.Dt FUGUPASS-SCAN 1
+.Os
+.Sh NAME
+.Nm fugupass-scan
+.Nd FuguPass QR scan helper
+.Sh SYNOPSIS
+.Nm
+.Op Ar device
+.Sh DESCRIPTION
+.Nm
+reads frames of one video device, it decodes a QR code of them, and
+it writes the decoded mnemonic to the standard output.
+.Xr fugupass 1
+runs it as a child, with no argument.
+.Pp
+.Ar device
+names the video device.
+A run with no argument reads
+.Pa /dev/video .
+.Nm
+takes no option.
+.Pp
+.Nm
+accepts the Standard SeedQR form alone.
+That form holds 48 digits in QR numeric mode: the zero-based index of
+each of the 12 words of the BIP39 English list, in four decimal
+digits.
+.Nm
+writes those 12 words on one line, with one space between two words
+and one line feed at the end.
+It writes no other byte to the standard output.
+.Pp
+A QR code in byte mode is a failure, so
+.Nm
+reads no Compact SeedQR.
+A digit count other than 48 is a failure, so it reads no mnemonic of
+24 words.
+Four digits above 2047 name no word of the list, and that is a
+failure as well.
+.Nm
+computes no checksum of the words.
+.Xr fugupass 1
+holds that gate.
+.Sh THE CAMERA
+.Nm
+asks the device for frames of 640 by 480 pixels in the YUYV format,
+and it reads one frame at a time with
+.Xr read 2 .
+.Nm
+takes the luminance byte of each pixel as the grey value of it.
+It reads frames for 60 seconds, and it then reports and exits.
+.Pp
+.Xr read 2
+on
+.Xr video 4
+takes no timeout, and it blocks until the device gives a frame.
+.Nm
+therefore waits for each frame with
+.Xr poll 2 ,
+and that wait ends at the 60 seconds of the scan.
+A device that opens and gives no frame ends the scan at that bound,
+and the report names that cause.
+.Pp
+.Xr poll 2
+of OpenBSD registers the read filter of
+.Xr video 4
+through
+.Xr kqueue 2 ,
+and that filter starts the read stream.
+A read of that driver blocks without end, and
+.Dv O_NONBLOCK
+changes nothing there.
+.Pa docs/analysis/video-read-stream.md
+of the FuguPass source tree holds the kernel source of those two
+statements: the file, the revision and the guard of each, and what
+stays unproven.
+.Pp
+The
+.Va kern.video.record
+variable of
+.Xr sysctl 2
+is 0 on a fresh machine, and the driver then blanks the image data of
+every reader.
+The superuser must set that variable to 1 before a scan.
+.Pp
+A plate scan needs a video device on the machine.
+A machine with no such device cannot run a ceremony that scans the
+plate, and the report of
+.Nm
+names the device.
+A virtual machine needs host device passthrough for the camera.
+.Sh THE DECODER
+.Nm
+decodes each frame with
+.Sy quirc ,
+by Daniel Beer.
+FuguPass holds a copy of that library in its own tree, and it takes
+no package of the ports tree for the decode.
+.Pa src/quirc/SOURCE.md
+of the FuguPass source tree records the copy: the origin, the
+release, the license and the digest of each file.
+.Pa docs/analysis/qr-library-sources.md
+of that tree records the evaluation of each QR library, and the
+reason of each pick.
+.Pp
+.Nm
+gives the library one grey byte of each pixel.
+The library gives the version, the mode and the payload of each code
+that it reads, and the gates above read the mode and the payload.
+.Sh THE SANDBOX
+.Nm
+holds the soft limit and the hard limit of
+.Dv RLIMIT_CORE
+at zero, before every other act of the program.
+It reads the two limits with
+.Xr getrlimit 2 ,
+and it calls
+.Xr setrlimit 2
+only when one of them is not zero.
+.Xr fugupass 1
+holds both limits at zero, and a child of it inherits them.
+The execpromises of that process hold no
+.Dq proc
+promise, so a
+.Xr setrlimit 2
+call of such a child is a pledge violation.
+A crash of
+.Nm
+writes no core file.
+.Pp
+.Nm
+then opens the device, and it pledges
+.Dq stdio video .
+.Pp
+.Nm
+unveils no path.
+A child of
+.Xr execve 2
+cannot unveil, so
+.Xr fugupass 1
+carries the video devices in its own unveil list.
+The promise set of
+.Nm
+holds no
+.Dq rpath ,
+so it reads no file of the vault after the pledge call.
+.Pp
+The 12 words are the master of the vault, so the output of
+.Nm
+is a secret.
+The program clears each buffer of its own before it exits.
+The decoder frees the grids and the capstones of one frame without
+an erasure, and
+.Nm
+cannot reach that memory.
+.Sh FILES
+.Bl -tag -width /dev/video
+.It Pa /dev/video
+The video device of a run with no argument.
+.El
+.Sh EXIT STATUS
+The
+.Nm
+utility exits 0 after it writes one mnemonic.
+It exits 1 on each failure below.
+.Bl -bullet
+.It
+The core limit call of the program fails.
+.It
+The command line holds more than one argument.
+.It
+The open of the device fails.
+.It
+The pledge call fails.
+.It
+The device captures no video frame of the read access.
+.It
+The format call of the device fails.
+.It
+The device gives another pixel format than YUYV.
+.It
+The frame of the device is outside the bounds of the program.
+.It
+The buffer of a frame takes no memory.
+.It
+The wait for a frame fails.
+.It
+A read of a frame fails, or it gives fewer bytes than one frame.
+.It
+The device gives no frame in 60 seconds.
+.It
+No frame of 60 seconds holds a Standard SeedQR.
+.It
+The write of the words fails.
+.El
+.Pp
+Every report goes to the standard error, and it names the cause.
+.Sh SEE ALSO
+.Xr fugupass 1 ,
+.Xr fugupass-qr 1 ,
+.Xr getrlimit 2 ,
+.Xr kqueue 2 ,
+.Xr pledge 2 ,
+.Xr poll 2 ,
+.Xr read 2 ,
+.Xr sysctl 2 ,
+.Xr video 4
+.Sh AUTHORS
+.An Dick Olsson Aq Mt hi@senzilla.io
+.Sh CAVEATS
+A scan of a drawn code from a camera runs by hand.
+The regress tests feed the decoder from the fixtures of
+.Pa tests/vectors/seedqr ,
+and no test opens a camera.
+The probe of the 60 seconds gives the frame loop a pipe that carries
+no byte, in place of a device that gives no frame.
+That probe reads the report of the loop, and the report names the
+device and the cause.

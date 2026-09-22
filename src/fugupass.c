@@ -19,15 +19,17 @@
  * and the passphrase read (PROG-SPLIT-1). fugupass.h states the two
  * functions that a subcommand takes from this file.
  *
- * main() sets RLIMIT_CORE to zero first, so no crash of this
- * program writes a secret to a core file (SEC-MEMORY-3). It enters
- * the sandbox next, before the subcommand runs (PROG-SPLIT-3).
+ * main() calls sandbox_nocore() of sandbox.h first, so no crash of
+ * this program writes a secret to a core file (SEC-MEMORY-3). It
+ * enters the sandbox next, before the subcommand runs
+ * (PROG-SPLIT-3).
  *
- * sandbox.c holds the unveil list and the pledge call, and
- * src/regress/sandbox.c makes the same call as main(). The call
- * makes the vault directory, because unveil(2) refuses a path that
- * no file holds. The ceremony makes the machine subdirectory inside
- * the vault directory (VAULT-LAYOUT-4).
+ * sandbox.c holds the core limit, the unveil list and the pledge
+ * call, and src/regress/sandbox.c makes the same two calls as
+ * main(). The sandbox call makes the vault directory, because
+ * unveil(2) refuses a path that no file holds. The ceremony makes
+ * the machine subdirectory inside the vault directory
+ * (VAULT-LAYOUT-4).
  *
  * The frame dispatches on the first argument after the options,
  * over two tables (PROG-ONESHOT-4). The table below holds the
@@ -51,7 +53,6 @@
  */
 
 #include <sys/param.h>
-#include <sys/resource.h>
 
 #include <err.h>
 #include <limits.h>
@@ -351,7 +352,6 @@ fugupass_passphrase_new(char *buf, size_t bufsize)
 int
 main(int argc, char *argv[])
 {
-	struct rlimit			 nocore = { 0, 0 };
 	const struct commands_cmd	*c;
 	char				 vault[PATH_MAX];
 	const char			*dir = NULL;
@@ -361,10 +361,11 @@ main(int argc, char *argv[])
 	/*
 	 * The first call of main(), before every other one: no crash
 	 * of this program writes a secret to a core file
-	 * (SEC-MEMORY-3).
+	 * (SEC-MEMORY-3). sandbox.c holds the call, and
+	 * src/regress/sandbox.c probes the two limits that it leaves.
 	 */
-	if (setrlimit(RLIMIT_CORE, &nocore) == -1)
-		err(1, "setrlimit");
+	if (sandbox_nocore() != 0)
+		err(1, "the core limit of fugupass");
 
 	/*
 	 * A helper that exits early closes the pipe of its standard

@@ -15,13 +15,14 @@
  */
 
 /*
- * The sandbox of the core process: the unveil(2) list, and the
- * pledge(2) call after it (PROG-SPLIT-3).
+ * The sandbox of the core process: the core limit, the unveil(2)
+ * list, and the pledge(2) call after it (SEC-MEMORY-3,
+ * PROG-SPLIT-3).
  *
- * main() of fugupass.c makes one call of sandbox_enter(), and
- * src/regress/sandbox.c makes the same call. The list therefore has
- * one implementation, and the test reads the list that the program
- * runs under.
+ * main() of fugupass.c makes one call of sandbox_nocore() and one
+ * call of sandbox_enter(), and src/regress/sandbox.c makes the same
+ * two calls. Each rule therefore has one implementation, and the
+ * test reads the code that the program runs.
  */
 
 #ifndef SANDBOX_H
@@ -44,10 +45,15 @@
  * (PROG-SPLIT-7). rpath carries the runtime files of each child,
  * and the program text of the interface process.
  *
- * The value holds no video, and no row of the unveil list carries
- * /dev/video*. PROG-SPLIT-4 adds the promise and the rows together
- * with fugupass-scan. A promise with no path behind it grants
- * nothing, and it widens the set of every other child.
+ * The value holds video, and the unveil list carries the video
+ * devices of PROG-SPLIT-13. The promise and the rows belong
+ * together: fugupass-scan opens the device under rpath and it then
+ * pledges "stdio video", so the promise carries the ioctl calls and
+ * the frame reads of video(4) (PROG-SPLIT-4).
+ *
+ * A child reduces a promise set, and a pledge(2) call outside the
+ * set below gives EPERM. The pledge call of fugupass-scan therefore
+ * fails without the video promise here.
  *
  * prot_exec carries the XS modules of the interpreter of the
  * interface process: the loader of such a module maps it with
@@ -66,7 +72,26 @@
  * from the unveil(NULL, NULL) call of sandbox_enter().
  */
 #define SANDBOX_EXEC_PROMISES \
-	"stdio rpath prot_exec tty"
+	"stdio rpath prot_exec tty video"
+
+/*
+ * sandbox_nocore():
+ *	Hold the soft limit and the hard limit of RLIMIT_CORE at zero
+ *	(SEC-MEMORY-3). main() of fugupass.c makes this one call
+ *	first, so the core limit is the first act of the program.
+ *
+ *	The call reads the two limits first, and it calls setrlimit(2)
+ *	only when one of them is not zero. A child of the core process
+ *	inherits two zero limits, so the call of that child writes no
+ *	limit. The execpromises of the core process hold no proc
+ *	promise, and setrlimit(2) needs that promise (PROG-SPLIT-3).
+ *	scan_nocore() of scan.h and qr_sandbox() of qr.h hold the same
+ *	rule for the two helpers.
+ *
+ *	The call gives 0, and -1 on a failure. errno then names the
+ *	failed call.
+ */
+int	sandbox_nocore(void);
 
 /*
  * sandbox_enter(vault):
@@ -79,7 +104,9 @@
  *	/dev/tty with rw, the interface program with rx, the two
  *	other helper programs with x, and the runtime files, the
  *	resolver files and the trust anchors of libtls with r
- *	(PROG-SPLIT-12).
+ *	(PROG-SPLIT-12). It also holds each video device of
+ *	PROG-SPLIT-13 with r, because the scan helper opens one
+ *	device for a read and it unveils no path (PROG-SPLIT-4).
  *
  *	The pledge call names SANDBOX_PROMISES and
  *	SANDBOX_EXEC_PROMISES, so the list holds for each child of

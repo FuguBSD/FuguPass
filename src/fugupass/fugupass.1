@@ -235,14 +235,15 @@ it prints each metadata field to the standard output.
 A metadata line holds the field name, a colon, one space, and the
 value.
 .Pp
-The index holds the type of each entry, so a
-.Cm show
-of a mnemonic entry without the
-.Fl w
-option fails before the reveal.
+A mnemonic entry prints as one QR code, in the UTF-8 half blocks of
+.Xr fugupass-qr 1 .
+A signer scans that code from the screen.
+The index holds the type of each entry, so the shape of the secret
+stands before the reveal.
 .Bl -tag -width Ds
 .It Fl w
-Print the words of a mnemonic entry.
+Print the words of a mnemonic entry as text, in place of the QR
+code.
 .El
 .It Xo
 .Cm add

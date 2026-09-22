@@ -42,10 +42,16 @@ Revocation from the plate rests on that property (see
 - **SEC-MEMORY-1** — Every exit path that held a secret must clear the secret
   with `explicit_bzero(3)`.
 - **SEC-MEMORY-2** — Every secret comparison must use `timingsafe_bcmp(3)`.
-- **SEC-MEMORY-3** — Every FuguPass C program must set `RLIMIT_CORE` to zero
-  with `setrlimit(2)`, first in `main()`. The interface process inherits the
-  zero limit from the core process ([PROG-IFACE](programs.md#prog-iface)). A
-  crash must not write a secret to a core file.
+- **SEC-MEMORY-3** — Every FuguPass C program must hold the soft limit and the
+  hard limit of `RLIMIT_CORE` at zero, first in `main()`. The program must read
+  the two limits with `getrlimit(2)`, and it must call `setrlimit(2)` only when
+  one of them is not zero. That call must set both to zero. A child of the core
+  process inherits the two zero limits of that process. The execpromises of that
+  process hold no `proc` promise, so `setrlimit(2)` kills such a child
+  ([PROG-SPLIT](programs.md#prog-split)). `getrlimit(2)` needs the `stdio`
+  promise alone. The interface process inherits the two zero limits from the
+  core process ([PROG-IFACE](programs.md#prog-iface)). A crash must not write a
+  secret to a core file.
 - **SEC-MEMORY-4** — The passphrase must enter through `readpassphrase(3)`, in
   the core process ([PROG-IFACE](programs.md#prog-iface)).
 - **SEC-MEMORY-5** — The master must exist in memory only inside a ceremony

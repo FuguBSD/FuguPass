@@ -2,8 +2,8 @@
 
 ## Status
 
-Proposed. It waits on plan 009 and plan 012, so that every program and every
-procedure exists before the pages state their limits.
+Proposed. It waits on plan 009, so that every program and every procedure exists
+before the pages state their limits.
 
 Implements: SEC-FLOOR, SEC-DETECT, SEC-CLAIMS. Implements: VAULT-CONFIG,
 VAULT-BACKUP, ORC-PROVISION, ORC-RECORDS, ORC-COUNTER, ORC-CANARY, ORC-REVOKE,

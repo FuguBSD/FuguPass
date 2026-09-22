@@ -68,6 +68,13 @@
 # FUGUPASS_HELPERS in a regress build alone, so the guest build runs
 # 'make FUGUPASS_REGRESS=1' (PROG-SPLIT-11).
 #
+# The render helper takes no double: the guest build makes
+# fugupass-qr, and the helper directory holds that program. A
+# mnemonic entry prints as the QR code of it (PROG-OUTPUT-2). The
+# scan helper of the build stands in a directory of its own, and a
+# leg names that directory for a ceremony with the real camera path
+# (PROG-SCAN-7).
+#
 # The harness fails when no counterparty is available. A pass over
 # zero legs is no pass.
 #
@@ -152,12 +159,20 @@ our $TREE    = "$WORK/tree";
 our $DRIVER  = "$TREE/src/regress/obj/oracle-client";
 our $PROGRAM = "$TREE/src/fugupass/obj/fugupass";
 
-# The directory of the helper doubles, and the run directory of one
-# ceremony. FUGUPASS_HELPERS names the first one, and the three
-# helper paths are that directory and the three file names
-# (PROG-SPLIT-11).
+# The directory of the helper programs of a leg, and the run
+# directory of one ceremony. FUGUPASS_HELPERS names the first one,
+# and the three helper paths are that directory and the three file
+# names (PROG-SPLIT-11). That directory holds the scan double, the
+# render helper of the build and the interface program.
 our $HELPERS = "$WORK/helpers";
 our $RUN     = "$WORK/run";
+
+# The directory of the real scan helper. A leg names it in place of
+# $HELPERS, and a ceremony of that directory opens a video device
+# (PROG-SCAN-7). The two other helper paths of that directory hold
+# no file, and the unveil list of the core passes over an absent
+# path (PROG-SPLIT-3).
+our $REAL = "$WORK/real";
 
 # The fixed values of a test vault: the first slot index, the
 # 1-based position of the oracle list, the machine name of the
@@ -471,6 +486,21 @@ sub build_guest ($root)
 		'the interface program',
 		"cp $TREE/bin/fugupass-repl $HELPERS/fugupass-repl && "
 		    . "chmod 0755 $HELPERS/fugupass-repl" );
+
+	# The render helper of the build, beside the double above. A
+	# mnemonic entry takes the QR code of that program
+	# (PROG-OUTPUT-2), and the harness holds no double of it.
+	guest_ok( 'the render helper',
+		"cp $TREE/src/fugupass-qr/obj/fugupass-qr "
+		    . "$HELPERS/fugupass-qr" );
+
+	# The scan helper of the build, in a directory of its own.
+	# The double above stands in the helper directory of every
+	# leg, so a leg that needs the camera path names this one
+	# (PROG-SCAN-7).
+	guest_ok( 'the scan helper',
+		"mkdir -p $REAL && cp $TREE/src/fugupass-scan/obj/"
+		    . "fugupass-scan $REAL/fugupass-scan" );
 	return;
 }
 
@@ -524,15 +554,27 @@ sub fugu_library ()
 	return;
 }
 
+# leg_order($file):
+#	The number that the file name of one leg starts with. A
+#	string sort puts the leg 10 before the leg 2, so load_legs()
+#	sorts the files on this value.
+sub leg_order ($file)
+{
+	return basename($file) =~ /\A([0-9]+)-/ ? $1 + 0 : 0;
+}
+
 # load_legs():
-#	The legs of tests/harness.d, in the order of the file name.
+#	The legs of tests/harness.d, in the order of the leg number.
 #	Each file returns one code reference, and the harness calls
 #	it once for each counterparty. A directory without a leg is
 #	a failure: the harness must not pass over zero legs.
 sub load_legs ()
 {
 	my @legs;
-	for my $file ( sort glob "$RealBin/harness.d/*.pl" ) {
+	for my $file (
+		sort { leg_order($a) <=> leg_order($b) }
+		glob "$RealBin/harness.d/*.pl" )
+	{
 		my $run = do $file;
 		die "$file returns no leg: $@$!\n" if ref $run ne 'CODE';
 		my $name = basename( $file, '.pl' );
@@ -1099,16 +1141,31 @@ sub search ( $, $dir, $text )
 	return grep { length } split /\n/, $result->{stdout} // '';
 }
 
-# $cp->program(@argv):
+# $cp->program(@argv), $cp->real_program(@argv):
 #	One run of the core process in the guest, with no terminal.
 #	The hash of the call holds 'exit', 'out' and 'error'. A
 #	subcommand that reads the passphrase needs a terminal, so
 #	that one takes $cp->create().
-sub program ( $, @argv )
+#
+#	real_program() runs the real scan helper in place of the
+#	double (PROG-SPLIT-11). A ceremony of that call opens a video
+#	device, and a machine with no camera stops at that open
+#	(PROG-SCAN-7).
+sub program ( $self, @argv ) { return $self->_program( undef, @argv ) }
+
+sub real_program ( $self, @argv )
 {
-	my $result = main::guest(
-		join ' ',
-		map { main::_shq($_) } ( $main::PROGRAM, @argv ) );
+	return $self->_program( $main::REAL, @argv );
+}
+
+sub _program ( $, $helpers, @argv )
+{
+	my $cmd = join ' ',
+	    map { main::_shq($_) } ( $main::PROGRAM, @argv );
+	$cmd = 'FUGUPASS_HELPERS=' . main::_shq($helpers) . " $cmd"
+	    if defined $helpers;
+
+	my $result = main::guest($cmd);
 	return {
 		exit  => $result->{exit_code} // -1,
 		out   => $result->{stdout}    // '',

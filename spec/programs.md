@@ -22,24 +22,25 @@ page in `mdoc(7)`: `fugupass(1)`, `fugupass-repl(1)`, `fugupass-scan(1)`, and
   helper programs only.
 - **PROG-SPLIT-3** — `fugupass` must make its unveil calls before its pledge
   call and must pledge `stdio rpath wpath cpath flock proc exec inet dns tty`.
-  The pledge call must also name the execpromises `stdio rpath prot_exec tty`. A
-  child of `execve(2)` takes the unveil list through that argument alone. A
-  child of a NULL argument takes the whole file system, and the list below then
-  restricts no child program. The execpromises must hold each promise that a
-  child pledges, because a child can only make its promise set smaller. `tty` is
-  the promise of `fugupass-repl`, and PROG-SPLIT-4 adds the promise of
-  `fugupass-scan`. `prot_exec` is the promise of the interpreter of the
-  interface process, which maps each XS module with `PROT_EXEC`. The
-  execpromises hold no `wpath` and no `cpath`, so a child reads a file of the
-  list and writes none. It must unveil only these paths and the video devices of
-  PROG-SPLIT-4. They are the vault directory (`rwc`), `/dev/tty` (`rw`), and the
-  three child programs (`x`). `fugupass-repl` takes the `r` permission as well,
-  because the interpreter reads the program text of it. The other paths are the
-  runtime files that the child programs load (`r`), and the resolver files that
-  name lookup needs (`r`). The list also holds the trust anchors of
-  PROG-SPLIT-12 (`r`). The derived list of PROG-SPLIT-10 carries the random
-  device, the resolver files, the service tables and the time zone file. It also
-  carries the library tree of the interpreter of the interface process.
+  The pledge call must also name the execpromises
+  `stdio rpath prot_exec tty video`. A child of `execve(2)` takes the unveil
+  list through that argument alone. A child of a NULL argument takes the whole
+  file system, and the list below then restricts no child program. The
+  execpromises must hold each promise that a child pledges, because a child can
+  only make its promise set smaller. `tty` is the promise of `fugupass-repl`,
+  and `video` is the promise of `fugupass-scan` (PROG-SPLIT-4). `prot_exec` is
+  the promise of the interpreter of the interface process, which maps each XS
+  module with `PROT_EXEC`. The execpromises hold no `wpath` and no `cpath`, so a
+  child reads a file of the list and writes none. It must unveil only these
+  paths and the video devices of PROG-SPLIT-4. They are the vault directory
+  (`rwc`), `/dev/tty` (`rw`), and the three child programs (`x`).
+  `fugupass-repl` takes the `r` permission as well, because the interpreter
+  reads the program text of it. The other paths are the runtime files that the
+  child programs load (`r`), and the resolver files that name lookup needs
+  (`r`). The list also holds the trust anchors of PROG-SPLIT-12 (`r`). The
+  derived list of PROG-SPLIT-10 carries the random device, the resolver files,
+  the service tables and the time zone file. It also carries the library tree of
+  the interpreter of the interface process.
 - **PROG-SPLIT-4** — `fugupass` must carry the video devices (`/dev/video*`) in
   its unveil list, and the execpromises must hold `video` as well.
   `fugupass-scan` must unveil no path. It must pledge `stdio video` after it
@@ -79,6 +80,13 @@ page in `mdoc(7)`: `fugupass(1)`, `fugupass-repl(1)`, `fugupass-scan(1)`, and
 - **PROG-SPLIT-12** — The unveil list of the core process must hold
   `/etc/ssl/cert.pem` with the `r` permission. `libtls` reads the trust anchors
   of that file for an `https` oracle.
+- **PROG-SPLIT-13** — `unveil(2)` takes no glob, so the list must name each
+  video device of PROG-SPLIT-4 with the path of it. The paths are `/dev/video`
+  and the ten devices `/dev/video0` to `/dev/video9`. `MAKEDEV(8)` makes the
+  first four of them on each machine, and `/dev/video` is the link of the first
+  device. Each path takes the `r` permission, because the scan helper opens one
+  device for a read. A device above that bound stays outside the list, and the
+  helper opens no such device.
 
 `fugupass` runs the interface program and the helpers as child processes and
 exchanges text over pipes. Text crosses the process boundary, never image data
@@ -345,6 +353,36 @@ no keyboard.
 - **PROG-SCAN-7** — A plate scan needs a video device on the machine. A machine
   with no video device cannot run a ceremony that scans the plate. A virtual
   machine needs host device passthrough for that device.
+- **PROG-SCAN-8** — The program must take one optional argument, the path of the
+  video device, and it must take no option. A run with no argument must read
+  `/dev/video`. The core process runs the helper with no argument, so that path
+  is the device of a ceremony.
+- **PROG-SCAN-9** — The program must read frames through the `read(2)` access of
+  `video(4)`. It must ask the device for frames of 640 by 480 pixels, in the
+  `YUYV` pixel format. It must take the luminance byte of each pixel as the grey
+  value of it. A device that gives another pixel format is a failure. The
+  program must read frames for 60 seconds, and it must then report and exit 1.
+  The core process reads the standard output of the helper to its end, so an
+  endless read would hold a ceremony. `read(2)` on that driver takes no timeout,
+  and `O_NONBLOCK` reaches no read of it. The program must therefore wait for
+  each frame with `poll(2)` first. The wait must end at the bound of the scan,
+  and `poll(2)` needs the `stdio` promise alone. `poll(2)` registers the read
+  filter of `video(4)`, and that filter starts the read stream.
+  `docs/analysis/video-read-stream.md` holds the kernel source of the stream
+  start and of the blocking read. A device that gives no frame is one cause.
+  Frames that hold no Standard SeedQR are another cause. The report must name
+  the cause that ends the scan.
+- **PROG-SCAN-10** — The BIP39 English list holds 2048 words, so a group of four
+  digits above 2047 names no word. The program must report such a code as a
+  failure.
+- **PROG-SCAN-11** — A scan needs the `kern.video.record` variable of
+  `sysctl(2)` at 1. The `video(4)` driver blanks the image data of every reader
+  at the value 0, and 0 is the default of a machine. The superuser must set that
+  variable before a scan.
+- **PROG-SCAN-12** — The output line must hold one space between two words, and
+  one line feed must end it. The line must hold no other byte.
+- **PROG-SCAN-13** — Each failure must write one report line to the standard
+  error, and that line must name the cause.
 
 <a id="prog-qr"></a>
 
@@ -363,9 +401,39 @@ no keyboard.
   [PROG-SPLIT](programs.md#prog-split).
 - **PROG-QR-5** — The documentation must record the chosen QR decode and render
   libraries, with their ports provenance and their licenses.
+- **PROG-QR-6** — A mnemonic code must be version 2, level L, numeric mode, and
+  mask pattern 0. FuguSeed pins that mask pattern, and the picture of test
+  vector 4 holds it ([TEST-KAT](testing.md#test-kat)). A render library picks a
+  mask pattern by penalty score, so the program must re-mask a mnemonic code.
+  The program must read the mask number from the format bits of the library
+  output. It must undo that pattern over each module of the encoding region, and
+  it must apply pattern 0 there. It must then write the format bits
+  `111011111000100` to both copies of that field.
+- **PROG-QR-7** — The program must take the shape from the bytes on its standard
+  input. An input of 12 words of the BIP39 English list is a mnemonic. One space
+  stands between two words, and at most one line feed ends the input. Every
+  other input is a vault file. The core process sends the words of a mnemonic
+  entry and the bytes of a vault file on the same pipe
+  ([PROG-OUTPUT](programs.md#prog-output),
+  [PROG-SPLIT](programs.md#prog-split)).
+- **PROG-QR-8** — A vault-file code must be level L in byte mode, at the lowest
+  version that takes the file. The one-code capacity is 2953 bytes, the byte
+  capacity of version 40 at level L. The program must write the report of
+  PROG-QR-3 to its standard error, and it must then write no code. The report
+  must name that count, so the operator reads the bound from the tool.
+- **PROG-QR-9** — The render must write one character for two module rows. A
+  block half of a character is a light module, and a space half of it is a dark
+  module. The render must use four characters. `U+2588` is two light modules.
+  `U+2580` is a light module above a dark one. `U+2584` is a dark module above a
+  light one. The space is two dark modules. One line feed must end each line.
+  Each code must carry a quiet zone of 4 light modules on each side. An odd
+  module count must take one more light module row at the end.
 
 A vault file is ciphertext, so its paper QR is a safe backup object
-([VAULT-BACKUP](vault.md#vault-backup)).
+([VAULT-BACKUP](vault.md#vault-backup)). A signer scans a mnemonic code from the
+screen, and the terminal of the operator gives the light modules of it. The
+scanners of the signer flow read that one form. The mask pattern and the quiet
+zone of a mnemonic code are therefore fixed values.
 
 <a id="prog-port"></a>
 
@@ -413,9 +481,22 @@ ports tree must hold it before this port builds.
   `GNUmakefile`, because the org pack of FuguBSD/Tooling owns it.
 - **PROG-BUILD-4** — The build must take libsecp256k1 from `LOCALBASE`, the
   ports tree of the machine (D-15, [PROG-PORT](programs.md#prog-port)).
+- **PROG-BUILD-5** — The QR decoder of the scan helper must sit in `src/quirc`
+  as a vendored source. That directory must hold the license of the library and
+  the record of its origin ([PROG-QR](programs.md#prog-qr)). The directory must
+  build the archive `libfuguquirc.a`, and `SUBDIR` of `src/Makefile` must name
+  it. `src/fugupass-scan` and `src/regress` must link that archive. The archive
+  name must differ from the name of the package of the ports tree, so no link
+  line takes the wrong file. The directory must build with `-Wall -Werror`,
+  because the vendored source does not take `-Wextra`. Every other C source of
+  this repository must keep `-Wextra`.
 
 The layout follows `usr.bin/ssh` of the OpenBSD tree. The archive sources sit
 flat, and each program directory holds the manual page of its program. A program
 with a C source adds a Makefile to that directory. The archive keeps one object
 of each archive source. The C build needs an OpenBSD machine, and the gates of
 the repository root need none.
+
+The tree holds the QR decoder, and the ports tree holds the encoder.
+`docs/analysis/qr-library-sources.md` records the evaluation of each library and
+the reason of each pick (PROG-QR-5).
