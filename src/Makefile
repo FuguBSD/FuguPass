@@ -21,8 +21,11 @@
 # builds the core process from that archive, and regress builds the
 # tests of it. The layout follows usr.bin/ssh of the OpenBSD tree.
 #
-# Each program gets a directory of its own, and that directory reads
-# bsd.prog.mk (PROG-BUILD-2). fugupass is the first one.
+# Each program gets a directory of its own, and a program with a C
+# source builds there through bsd.prog.mk (PROG-BUILD-2). fugupass is
+# the first one. fugupass-repl is Perl, so its directory holds the
+# manual page of it alone, and SUBDIR below does not name that
+# directory.
 #
 # The regress loop links the archive of lib, so it must run after the
 # build loop. bsd.subdir.mk declares regress with the double-colon

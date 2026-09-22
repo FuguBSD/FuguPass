@@ -25,11 +25,32 @@
 
 LIB=		fugupass
 SRCS=		bip85.c ceremony.c commands.c derive.c entry.c envelope.c \
-		helper.c http.c oracle.c pin.c sandbox.c seal.c session.c \
-		share.c vault.c wordlist.c
+		helper.c http.c iface.c oracle.c pin.c sandbox.c seal.c \
+		session.c share.c vault.c wordlist.c
 
 CFLAGS+=	-Wall -Wextra -Werror
 CFLAGS+=	-I${.CURDIR}/..
+
+# The unveil list of the interface process (PROG-SPLIT-10).
+# unveil-paths runs Fugu::Sandbox of the perl of this machine and
+# writes unveil_paths.h, and sandbox.c reads that header. The port
+# takes devel/p5-Fugu as a build dependency (PROG-PORT-3).
+#
+# The header is no source of the repository: a checkout holds none,
+# and each build writes one, so the list can never drift from the
+# perl that runs the interface program. The build writes it into the
+# object directory, so a build leaves the source directory as the
+# checkout holds it.
+UNVEIL_GEN=	${.CURDIR}/../unveil-paths
+
+CFLAGS+=	-I${.OBJDIR}
+
+unveil_paths.h: ${UNVEIL_GEN}
+	${UNVEIL_GEN} > ${.TARGET}
+
+sandbox.o: unveil_paths.h
+
+CLEANFILES+=	unveil_paths.h
 
 # libsecp256k1 comes from the ports tree, under LOCALBASE.
 # bip85.c and envelope.c read its header, and each directory that

@@ -25,10 +25,11 @@
  * PROG-ONESHOT-2). A command takes the open session of session.h,
  * and it sends no oracle request of its own.
  *
- * Each command writes its records to the standard output, one
- * record per line, with no decoration (PROG-ONESHOT-3,
- * PROG-ONESHOT-9). A secret goes to the terminal, and no record of
- * the standard output holds one (PROG-OUTPUT-1, PROG-OUTPUT-4).
+ * Each command writes its records to one sink, one record per line,
+ * with no decoration (PROG-ONESHOT-3, PROG-ONESHOT-9). The sink is
+ * the standard output, and commands_sink() gives the reply pipe of
+ * a session in place of it (PROG-IFACE-13). A secret goes to the
+ * terminal, and no record holds one (PROG-OUTPUT-1, PROG-OUTPUT-4).
  * Every report of a failure goes to the standard error.
  *
  * ls reads the open index alone, and it sends no request. show and
@@ -59,10 +60,28 @@ struct commands_cmd {
 extern const struct commands_cmd	commands_table[];
 
 /*
+ * commands_sink(fn):
+ *	Send each output record of a command to fn, one call per
+ *	record, and with no line feed in a record (PROG-IFACE-13).
+ *	iface.c gives the sink of a session, and that sink writes one
+ *	reply line of the interface protocol (PROG-IFACE-11).
+ *
+ *	A NULL argument gives the records back to the standard
+ *	output, and a one-shot subcommand takes them there
+ *	(PROG-ONESHOT-3).
+ *
+ *	A secret takes no sink: it goes to the terminal
+ *	(PROG-OUTPUT-1).
+ */
+void	commands_sink(void (*)(const char *));
+
+/*
  * commands_run(s, argc, argv):
  *	Run the command of argv[0] on the open session s. The call
  *	gives 0 for a command that passes, and -1 for a command that
- *	fails and for a name that the table does not hold.
+ *	fails and for a name that the table does not hold. A record
+ *	that one line does not take fails the command as well, at
+ *	each sink alike (PROG-IFACE-13).
  *
  *	This call is the one path of a command, and a one-shot
  *	subcommand and a command of the interactive session both

@@ -19,12 +19,15 @@ jobs:
       - name: Setup bun
         uses: FuguBSD/Tooling/actions/setup-bun@main
 
-      # The gitleaks gate scans the full git history, so the
-      # checkout above stays at fetch-depth 0 (WFL-GITLEAKS-2).
-      - name: Install dependencies
-        run: |
-          make deps
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # make check runs the Perl gates over bin/ and t/, so the job
+      # takes the test environment. The action installs it, and the
+      # chain also brings the gitleaks of the secret gate. That gate
+      # scans the full git history, so the checkout above stays at
+      # fetch-depth 0 (WFL-GITLEAKS-2).
+      - name: Setup Perl
+        uses: FuguBSD/Tooling/perl/actions/setup-perl@main
+        with:
+          dependencies: test
 
       - name: Check
         run: make check

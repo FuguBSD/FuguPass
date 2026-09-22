@@ -22,9 +22,10 @@
  * no camera frame and no QR image (PROG-SPLIT-1, PROG-SPLIT-2).
  *
  * helper_path() gives the path of one helper program. The core
- * process unveils each of the three paths with the x permission
- * (PROG-SPLIT-3), so the list of the sandbox and the list of the
- * child runs come from this one function.
+ * process unveils each of the three paths with the x permission,
+ * and the path of the interface process with the r permission as
+ * well (PROG-SPLIT-3). The list of the sandbox and the list of the
+ * child runs therefore come from this one function.
  *
  * HELPER_DIR names the directory of the three programs, and the
  * build gives that value. The port installs the programs there

@@ -2,21 +2,17 @@
 
 ## Status
 
-Proposed. It waits on plan 006 for the program and the scan boundary. It also
-waits on plan 007, plan 008, and plan 009: they land the other subcommands of
-PROG-ONESHOT-4. Its harness legs need the vault of plan 007 and the second
-machine of plan 009.
+Proposed. It waits on plan 008 and plan 009: they land the other subcommands of
+PROG-ONESHOT-4. Its harness legs need the second machine of plan 009.
 
 Implements: REC-PLATE, REC-VAULT, REC-RESTORE, CER-VERIFY, PROG-ONESHOT.
-Implements: PROG-REPL without PROG-REPL-7 to PROG-REPL-9. Defers: PROG-SCAN,
-ORC-ENROLL.
+Implements: PROG-REPL. Defers: PROG-SCAN, ORC-ENROLL.
 
-Of PROG-REPL, this plan lands PROG-REPL-6, and plan 011 lands PROG-REPL-7 to
-PROG-REPL-9. Of PROG-ONESHOT, it lands the recovery and the verification
-subcommands of PROG-ONESHOT-4. Plan 006 to plan 009 land every other subcommand
-of that rule, so PROG-ONESHOT then reads `done`. REC-VAULT-4 names the
-re-enrollment of plan 009 as its second step, and this plan lands the restore
-half.
+Of PROG-REPL, this plan lands PROG-REPL-6, the one absent rule. Of PROG-ONESHOT,
+it lands the recovery and the verification subcommands of PROG-ONESHOT-4. Plan
+006 to plan 009 land every other subcommand of that rule, so PROG-ONESHOT then
+reads `done`. REC-VAULT-4 names the re-enrollment of plan 009 as its second
+step, and this plan lands the restore half.
 
 ## Purpose
 
@@ -90,9 +86,7 @@ The harness holds, with the stub master and no oracle running:
 
 - `make check` passes on the host, and `make harness` passes.
 - REC-PLATE, REC-VAULT, REC-RESTORE, CER-VERIFY, and PROG-ONESHOT read `done`.
-- PROG-REPL reads `partial` with PROG-REPL-7 to PROG-REPL-9 as the absent rules.
-  It reads `done` after plan 011 lands them, and the later of the two plans sets
-  the row.
+- PROG-REPL reads `done`.
 - The change deletes this plan.
 
 ## What this plan does not do

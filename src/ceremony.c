@@ -70,6 +70,7 @@
 #include "envelope.h"
 #include "fugupass.h"
 #include "helper.h"
+#include "iface.h"
 #include "oracle.h"
 #include "seal.h"
 #include "vault.h"
@@ -272,9 +273,10 @@ step_factor(struct state *st)
  * step_config(st):
  *	CER-CREATE-3. The config file holds the ordered oracle set,
  *	the threshold, the machine name, the round count, the plate
- *	check value, the pool tunables and the audit age
- *	(VAULT-CONFIG-1, KEY-MASTER-5, ENTRY-POOL-2, ENTRY-POOL-6,
- *	ENTRY-SHADOW-6).
+ *	check value, the pool tunables, the audit age and the lock
+ *	timeout (VAULT-CONFIG-1, KEY-MASTER-5, ENTRY-POOL-2,
+ *	ENTRY-POOL-6, ENTRY-SHADOW-6, PROG-REPL-11). The two tunables
+ *	take their default value, and the operator edits the file.
  *
  *	The reader of vault.c holds each rule of the file, so this
  *	step parses the text before it writes the file. A wrong
@@ -322,10 +324,11 @@ step_config(struct state *st)
 	    "plate-check: %s\n"
 	    "pool-size: %u\n"
 	    "pool-watermark: %u\n"
-	    "audit-age: %u\n",
+	    "audit-age: %u\n"
+	    "lock-timeout: %u\n",
 	    st->arg->threshold, st->arg->machine, st->arg->rounds, plate,
 	    st->arg->pool, CEREMONY_POOL_WATERMARK,
-	    ENTRY_AUDIT_AGE_DEFAULT);
+	    ENTRY_AUDIT_AGE_DEFAULT, IFACE_LOCK_TIMEOUT_DEFAULT);
 	if (n < 0 || (size_t)n >= CONFIG_MAX - len) {
 		warnx("the config: the text does not fit");
 		goto out;

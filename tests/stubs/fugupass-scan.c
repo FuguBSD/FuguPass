@@ -24,11 +24,13 @@
  * of the standard output of that child (PROG-SPLIT-2). This program
  * writes that one line, and it exits 0.
  *
- * The unveil list of the core process holds the three helper paths
- * with the x permission, and no interpreter (PROG-SPLIT-3). A
- * shell script therefore cannot stand here, and this double is a
- * program. tests/harness builds it in the guest, into the directory
- * that FUGUPASS_HELPERS names (PROG-SPLIT-11).
+ * The unveil list of the core process holds the path of this double
+ * with the x permission, and with no r permission (PROG-SPLIT-3).
+ * The list reaches this child, and an interpreter reads the program
+ * text of a script. A shell script therefore cannot stand here, and
+ * this double is a compiled program. tests/harness builds it in the
+ * guest, into the directory that FUGUPASS_HELPERS names
+ * (PROG-SPLIT-11).
  *
  * The test master is a public constant of the tests, so this file
  * holds no secret and clears nothing.

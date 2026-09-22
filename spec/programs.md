@@ -22,12 +22,36 @@ page in `mdoc(7)`: `fugupass(1)`, `fugupass-repl(1)`, `fugupass-scan(1)`, and
   helper programs only.
 - **PROG-SPLIT-3** — `fugupass` must make its unveil calls before its pledge
   call and must pledge `stdio rpath wpath cpath flock proc exec inet dns tty`.
-  It must unveil only these paths. They are the vault directory (`rwc`),
-  `/dev/tty` (`rw`), and the three child programs (`x`). The other paths are the
+  The pledge call must also name the execpromises `stdio rpath prot_exec tty`. A
+  child of `execve(2)` takes the unveil list through that argument alone. A
+  child of a NULL argument takes the whole file system, and the list below then
+  restricts no child program. The execpromises must hold each promise that a
+  child pledges, because a child can only make its promise set smaller. `tty` is
+  the promise of `fugupass-repl`, and PROG-SPLIT-4 adds the promise of
+  `fugupass-scan`. `prot_exec` is the promise of the interpreter of the
+  interface process, which maps each XS module with `PROT_EXEC`. The
+  execpromises hold no `wpath` and no `cpath`, so a child reads a file of the
+  list and writes none. It must unveil only these paths and the video devices of
+  PROG-SPLIT-4. They are the vault directory (`rwc`), `/dev/tty` (`rw`), and the
+  three child programs (`x`). `fugupass-repl` takes the `r` permission as well,
+  because the interpreter reads the program text of it. The other paths are the
   runtime files that the child programs load (`r`), and the resolver files that
-  name lookup needs (`r`).
-- **PROG-SPLIT-4** — `fugupass-scan` must unveil the video devices
-  (`/dev/video*`) only and must pledge `stdio video` after it opens the device.
+  name lookup needs (`r`). The list also holds the trust anchors of
+  PROG-SPLIT-12 (`r`). The derived list of PROG-SPLIT-10 carries the random
+  device, the resolver files, the service tables and the time zone file. It also
+  carries the library tree of the interpreter of the interface process.
+- **PROG-SPLIT-4** — `fugupass` must carry the video devices (`/dev/video*`) in
+  its unveil list, and the execpromises must hold `video` as well.
+  `fugupass-scan` must unveil no path. It must pledge `stdio video` after it
+  opens the device. The helper takes the unveil list of the core in its view.
+  Its promise set holds no `rpath`, so it reads no file of the vault after that
+  pledge call. A child of `execve(2)` cannot unveil a path, and the promise set
+  of the child decides the outcome of such a call. The execpromises hold no
+  `unveil` promise. An `unveil(2)` call of a child is therefore a pledge
+  violation, and the kernel kills that child with `SIGABRT`. A child of a
+  promise set that holds `unveil` gets `EPERM` instead, from the
+  `unveil(NULL, NULL)` call of the core. The other two children pledge a set
+  with no `video` and no `rpath`, so they open no video device.
 - **PROG-SPLIT-5** — `fugupass-qr` must pledge `stdio` only.
 - **PROG-SPLIT-6** — FuguPass must not implement an agent process and must not
   implement a network service. The oracle client inside `fugupass` is the only
@@ -106,6 +130,34 @@ modules.
   with one `Fugu::Signal` manager. It must build the manager, and it must then
   call `setup_interrupt_flag` on it. The signal path is one exit path, so the
   process must restore the terminal state.
+- **PROG-IFACE-10** — The core process must spawn `fugupass-repl` with the
+  request pipe on file descriptor 3, and the reply pipe on file descriptor 4.
+  The interface process must take no argument. It must report the absent
+  descriptor and must stop, because the core process is its only parent.
+- **PROG-IFACE-11** — Each line of the two pipes ends with one newline. A
+  request line holds the operator command line, without the space at each end.
+  An empty command line sends no request. The first byte of a reply line is the
+  tag. A reply line starts with `>`, and the rest of that line is one line of
+  the command output. The end line starts with `=`, and the rest of that line is
+  `ok` or `fail`. The tag keeps the frame apart from the text, so an entry name
+  cannot forge an end line. A line with another tag is a protocol failure, and
+  the interface process must stop.
+- **PROG-IFACE-12** — The core process must split a request line at each space
+  and at each tab. The words are the argument list of one command, and the first
+  word is the command name. The core process must reject a request line of more
+  than 4096 bytes ([VAULT-FORMAT](vault.md#vault-format)). It must answer that
+  line with a `fail` end line.
+- **PROG-IFACE-13** — The core process must write each output record of a
+  command to one sink. A one-shot subcommand takes the standard output as that
+  sink ([PROG-ONESHOT](programs.md#prog-oneshot)). A command of the session
+  takes the reply pipe, and one reply line carries one record. A secret takes no
+  sink, and it goes to the terminal ([PROG-OUTPUT](programs.md#prog-output)).
+  Each record must carry one value of a vault line, behind a name that is no
+  longer than the name of that line. One record therefore takes the line bound
+  of the vault format, without the newline of it
+  ([VAULT-FORMAT](vault.md#vault-format)). One reply line adds the tag and the
+  newline around the record. A record above that bound reaches no sink, and the
+  command must then fail.
 
 Entry names and oracle error text carry external bytes, so the display filter
 guards the operator's terminal. `Fugu::REPL` holds the terminal in raw mode only
@@ -168,21 +220,37 @@ through Fugu.
   file ([VAULT-CONFIG](vault.md#vault-config)).
 - **PROG-REPL-8** — The interface process must read each command line with the
   `Fugu::REPL` line editor. The editor gives emacs-style line editing, and tab
-  completion of command names and entry names from the open index listing. It
-  also gives a session history in memory. The interface process must not write a
-  history file, because a history file leaks entry names (D-14).
+  completion of command names and entry names from the open index listing. The
+  editor also gives a session history in memory. PROG-REPL-12 bounds those entry
+  names. The interface process must not write a history file, because a history
+  file leaks entry names (D-14).
 - **PROG-REPL-9** — `Fugu::REPL` must take each completion candidate from a
   caller callback. The interface process gives the command names and the entry
-  names of the open index listing, as PROG-REPL-8 states.
+  names of the open index listing, as PROG-REPL-8 and PROG-REPL-12 state.
+- **PROG-REPL-10** — The command names of the completion come from the command
+  table of `Fugu::REPL`, and the entry names come from the completion callback.
+  The interface process must take the entry names from the reply of each `ls`
+  request, and PROG-REPL-12 bounds that set. It must send one `ls` request
+  before the first prompt, and it must show no line of that reply. It must send
+  no other request of its own, so each operator command is one request line.
+- **PROG-REPL-11** — The default lock timeout is 300 seconds. The config file
+  holds the tunable value ([VAULT-CONFIG](vault.md#vault-config)).
+- **PROG-REPL-12** — The interface process must offer no entry name that the
+  display filter of `Fugu::REPL` changes ([PROG-IFACE](programs.md#prog-iface)).
+  The editor writes each candidate to the terminal, and it filters no byte
+  there. A filtered name is not the name of the entry, and the core process
+  finds no entry of it. The interface process must keep such a name out of the
+  completion set. The operator can still type that name.
 
 `ls` reads the open index and sends no entry request. The unlock reads the
 passphrase once and verifies it at the canary record of each quorum oracle. Each
 reveal in the session computes one `pin_ei` per quorum oracle
 ([KEY-PIN](keys.md#key-pin)). A session that reveals many entries pays the KDF
-cost `k` times per entry. An HTTP error is not an attempt and is retryable. A
-transport failure is ambiguous, and a junk answer can burn a strike
-([ORC-REVEAL](oracle.md#orc-reveal)). The reports therefore name different user
-actions.
+cost `k` times per entry. The default lock timeout of 300 seconds bounds an
+unattended session, and a shorter timeout repeats that unlock cost. An HTTP
+error is not an attempt and is retryable. A transport failure is ambiguous, and
+a junk answer can burn a strike ([ORC-REVEAL](oracle.md#orc-reveal)). The
+reports therefore name different user actions.
 
 <a id="prog-oneshot"></a>
 
@@ -331,8 +399,12 @@ ports tree must hold it before this port builds.
   flat in `src/`.
 - **PROG-BUILD-2** — `src/Makefile` is the build entry point of the C code, and
   the OpenBSD `make` reads it. Each program must have a directory of its own
-  under `src/`, and that directory must read `bsd.prog.mk`. `src/regress` holds
-  the tests, and it must read `bsd.regress.mk`.
+  under `src/`, and that directory must hold the manual page of the program. A
+  program with a C source must build in that directory, and that directory must
+  read `bsd.prog.mk`. `SUBDIR` of `src/Makefile` must name each directory that
+  builds. A program with no C source gives `bsd.prog.mk` no `PROG`, so its
+  directory holds the manual page alone and `SUBDIR` must not name it.
+  `src/regress` holds the tests, and it must read `bsd.regress.mk`.
 - **PROG-BUILD-3** — The C build and the gates of the repository root must stay
   apart. The OpenBSD `make` reads `src/Makefile`, and it builds the C code. GNU
   `make` reads `GNUmakefile` of the repository root, and it runs the gates. The
@@ -343,6 +415,7 @@ ports tree must hold it before this port builds.
   ports tree of the machine (D-15, [PROG-PORT](programs.md#prog-port)).
 
 The layout follows `usr.bin/ssh` of the OpenBSD tree. The archive sources sit
-flat, and each program directory holds a Makefile only. The archive keeps one
-object of each archive source. The C build needs an OpenBSD machine, and the
-gates of the repository root need none.
+flat, and each program directory holds the manual page of its program. A program
+with a C source adds a Makefile to that directory. The archive keeps one object
+of each archive source. The C build needs an OpenBSD machine, and the gates of
+the repository root need none.

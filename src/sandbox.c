@@ -21,13 +21,22 @@
  * the pledge call. main() of fugupass.c sets RLIMIT_CORE to zero
  * before it calls this file (SEC-MEMORY-3).
  *
+ * The pledge call names SANDBOX_EXEC_PROMISES as its execpromises
+ * argument, and that argument carries the list below to each child
+ * of this process. A child of a NULL argument holds the whole file
+ * system, and the list below then restricts no child. sandbox.h
+ * states the promises of a child.
+ *
  * The path of the vault comes from the command line, and the path
  * of a helper comes from helper.h, so those paths stand outside the
  * table below. helper.h gives the path of each helper program, so
  * the list of the sandbox and the list of the child runs agree.
  *
- * PROG-SPLIT-10 derives the paths of the Perl runtime of the
- * interface process, and this file carries no derived path yet.
+ * unveil_paths.h holds the paths of the Perl runtime of the
+ * interface process, and the build step of src/lib/Makefile writes
+ * that header (PROG-SPLIT-10). The resolver files and the service
+ * tables of PROG-SPLIT-3 come from that list as well, because
+ * Fugu::Sandbox->system_paths names them.
  */
 
 #include <sys/param.h>
@@ -40,6 +49,7 @@
 #include "helper.h"
 #include "http.h"
 #include "sandbox.h"
+#include "unveil_paths.h"
 
 /* One path of the unveil list, with the permissions of that path. */
 struct unveil_path {
@@ -61,19 +71,21 @@ static const struct unveil_path unveil_list[] = {
 	{ "/usr/lib",			"r" },
 	{ "/usr/local/lib",		"r" },
 
-	/* The resolver files of a name lookup. */
-	{ "/etc/resolv.conf",		"r" },
-	{ "/etc/hosts",			"r" },
-	{ "/etc/services",		"r" },
-
 	/* The trust anchors of a https oracle (PROG-SPLIT-12). */
-	{ HTTP_CA_FILE,			"r" }
+	{ HTTP_CA_FILE,			"r" },
+
+	/*
+	 * The library tree of the perl of the interface process, and
+	 * the read-only system paths that the resolver files and the
+	 * service tables of PROG-SPLIT-3 belong to (PROG-SPLIT-10).
+	 */
+	UNVEIL_PATHS_DERIVED
 };
 
 int
 sandbox_enter(const char *vault)
 {
-	const char	*path;
+	const char	*path, *perm;
 	size_t		 i;
 	int		 which;
 
@@ -95,12 +107,20 @@ sandbox_enter(const char *vault)
 			errno = EINVAL;
 			return -1;
 		}
-		if (unveil(path, "x") == -1 && errno != ENOENT)
+		/*
+		 * The interface process is Perl, and the kernel gives
+		 * the path of the program to the interpreter. The
+		 * interpreter reads the program text, so that one path
+		 * takes the r permission as well (PROG-SPLIT-7). A
+		 * compiled helper runs with the x permission alone.
+		 */
+		perm = (enum helper)which == HELPER_REPL ? "rx" : "x";
+		if (unveil(path, perm) == -1 && errno != ENOENT)
 			return -1;
 	}
 	if (unveil(NULL, NULL) == -1)
 		return -1;
-	if (pledge(SANDBOX_PROMISES, NULL) == -1)
+	if (pledge(SANDBOX_PROMISES, SANDBOX_EXEC_PROMISES) == -1)
 		return -1;
 	return 0;
 }

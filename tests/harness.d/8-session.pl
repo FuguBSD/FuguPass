@@ -38,8 +38,8 @@
 #
 # A secret prints to the terminal, so the console text of a step
 # carries it and the standard output of the step carries none
-# (PROG-OUTPUT-1, PROG-OUTPUT-4). terminal() gives the lines of the
-# terminal without the prompts.
+# (PROG-OUTPUT-1, PROG-OUTPUT-4). The terminal method of the
+# counterparty gives the lines of the terminal without the prompts.
 
 use v5.36;
 
@@ -68,19 +68,6 @@ my $STALE_DATE = '2020-01-01';
 # the stored value plus one at least, so a record of this value in
 # the counters file takes no later request.
 my $MAX_COUNTER = 4_294_967_295;
-
-# terminal($run):
-#	The lines that one step wrote to the terminal, without the
-#	prompts of it (PROG-OUTPUT-1). A secret takes one line, and a
-#	step that writes no secret gives the empty list.
-sub terminal ($run)
-{
-	return grep {
-		length
-		    && !/\A(?:Passphrase|Passphrase again|Secret): \z/
-	}
-	    map { s/\r//gr } split /\n/, $run->{console} // '';
-}
 
 # entry_counters($run):
 #	The counters of the entry records after one step, by record
@@ -183,10 +170,10 @@ sub entry_case ( $t, $topology )
 	unlike( $show->{out}, qr/\Q$secret\E/,
 		'the standard output of show holds no secret '
 		    . '(PROG-OUTPUT-4)' );
-	is_deeply( [ terminal($show) ], [$secret],
+	is_deeply( [ $t->terminal($show) ], [$secret],
 		'show reveals the secret on the terminal (ORC-QUORUM-4, '
 		    . 'PROG-OUTPUT-1)' );
-	is( scalar( terminal($list) ),
+	is( scalar( $t->terminal($list) ),
 		0, 'ls writes no secret to the terminal' );
 
 	#
@@ -210,7 +197,7 @@ sub entry_case ( $t, $topology )
 		'the report states that no entry record takes a request' );
 	is_deeply( entry_counters($typo), entry_counters($derived),
 		'a wrong passphrase sends no entry request (ORC-CANARY-1)' );
-	is( scalar( terminal($typo) ),
+	is( scalar( $t->terminal($typo) ),
 		0, 'the stopped session writes no secret to the terminal' );
 	if ( $topology->{oracles} > 1 ) {
 		is( $typo->{counters}{'canary-2'},
@@ -226,8 +213,8 @@ sub entry_case ( $t, $topology )
 		    . 'list (ENTRY-ROTATION-1, ENTRY-ROTATION-2)' );
 	like( $after->{out}, qr/^version: 2$/m,
 		'the rotation increments the version (ENTRY-ROTATION-1)' );
-	isnt( ( terminal($after) )[0],
-		( terminal($derived) )[0],
+	isnt( ( $t->terminal($after) )[0],
+		( $t->terminal($derived) )[0],
 		'the new version holds the candidate of the new slot '
 		    . '(KEY-BIP85-6)' );
 
@@ -261,7 +248,7 @@ sub entry_case ( $t, $topology )
 	like( $stored->{out}, qr/^username: u1$/m,
 		'the rotation of add carries the metadata of the old '
 		    . 'version into the new file (ENTRY-ROTATION-6)' );
-	is_deeply( [ terminal($stored) ], [$second],
+	is_deeply( [ $t->terminal($stored) ], [$second],
 		'the rotation of add seals the new secret in the slot of '
 		    . 'the entry (ENTRY-ROTATION-4)' );
 
@@ -313,7 +300,7 @@ sub entry_case ( $t, $topology )
 	is( $recent->{exit}, 0, 'add writes the fresh shadow entry' );
 
 	my @want = codes( $t, $code );
-	my ($got) = terminal($code);
+	my ($got) = $t->terminal($code);
 	ok( ( grep { $_ eq ( $got // '' ) } @want ),
 		'totp prints the code of the RFC 6238 vector '
 		    . '(ENTRY-TYPES-3)' )
@@ -382,7 +369,7 @@ sub entry_case ( $t, $topology )
 			"the refusal names the state of oracle $oracle "
 			    . '(ORC-QUORUM-6)' );
 	}
-	is( scalar( terminal($few) ),
+	is( scalar( $t->terminal($few) ),
 		0, 'the refusal writes no secret to the terminal' );
 
 	#
@@ -532,7 +519,7 @@ sub quorum_case ($t)
 			"the quorum of oracle $quorum[0] and oracle "
 			    . "$quorum[1] reveals the entry" )
 		    or diag( $show->{error} );
-		is_deeply( [ terminal($show) ], [$secret],
+		is_deeply( [ $t->terminal($show) ], [$secret],
 			"the quorum of oracle $quorum[0] and oracle "
 			    . "$quorum[1] gives the secret (ORC-QUORUM-3)" );
 	}
@@ -552,7 +539,7 @@ sub quorum_case ($t)
 
 	isnt( $alone->{exit}, 0,
 		'one good mask of two fails the decrypt (ORC-QUORUM-4)' );
-	is( scalar( terminal($alone) ),
+	is( scalar( $t->terminal($alone) ),
 		0, 'the failed decrypt writes no secret to the terminal' );
 	for my $oracle ( 1, 2 ) {
 		my $url = $t->url($oracle);
@@ -570,7 +557,7 @@ sub quorum_case ($t)
 		'the session substitutes the third oracle after the decrypt '
 		    . 'failure (ORC-QUORUM-5)' )
 	    or diag( $substitute->{error} );
-	is_deeply( [ terminal($substitute) ], [$secret],
+	is_deeply( [ $t->terminal($substitute) ], [$secret],
 		'the substituted quorum reveals the entry (ORC-QUORUM-5)' );
 	like( $substitute->{error}, qr/the attempt holds oracle 1 /,
 		'the report of the failed attempt names its quorum '
@@ -602,7 +589,7 @@ sub quorum_case ($t)
 		'the session substitutes an oracle after a request that '
 		    . 'fails at this machine (ORC-QUORUM-5, ORC-COUNTER-5)' )
 	    or diag( $moved->{error} );
-	is_deeply( [ terminal($moved) ], [$secret],
+	is_deeply( [ $t->terminal($moved) ], [$secret],
 		'the quorum of the substitution reveals the entry '
 		    . '(ORC-QUORUM-5)' );
 
@@ -708,7 +695,7 @@ sub strike_case ($t)
 	is_deeply( [ sort $t->records(3) ], \@before,
 		'the session sent no third request, so the record of slot 0 '
 		    . 'at oracle 3 stays (ORC-REVEAL-5)' );
-	is( scalar( terminal($show) ),
+	is( scalar( $t->terminal($show) ),
 		0, 'the stopped reveal writes no secret to the terminal' );
 	return;
 }

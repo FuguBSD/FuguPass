@@ -1,0 +1,155 @@
+.\"	$OpenBSD$
+.\"
+.\" Copyright (c) 2026 Dick Olsson <hi@senzilla.io>
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate: September 22 2026 $
+.Dt FUGUPASS-REPL 1
+.Os
+.Sh NAME
+.Nm fugupass-repl
+.Nd FuguPass interface process
+.Sh SYNOPSIS
+.Nm
+.Sh DESCRIPTION
+.Nm
+is the interface process of a FuguPass interactive session.
+.Xr fugupass 1
+spawns it, and no other run of it works.
+It takes no option and no argument.
+.Pp
+The core process holds the vault, and
+.Nm
+holds the prompt.
+It reads one operator command line, it sends that line to the core
+process, and it shows each reply line of the core.
+It holds no secret.
+The core process reads the passphrase from the terminal, and it
+prints each secret to the terminal.
+.Pp
+The core process spawns
+.Nm
+with two pipes: the request pipe on file descriptor 3, and the reply
+pipe on file descriptor 4.
+An absent descriptor gives a report on the standard error and the
+exit status 1.
+.Pp
+Each line of the two pipes ends with one newline.
+A request line holds one operator command line, without the space at
+each end, and an empty command line sends no request.
+The first byte of a reply line is the tag.
+The tag
+.Sq >
+leads one line of the command output, and the tag
+.Sq =
+leads the end line of one reply.
+The rest of the end line is
+.Dq ok
+or
+.Dq fail .
+The tag keeps the frame apart from the text, so an entry name cannot
+forge an end line.
+A line with another tag is a protocol failure, and
+.Nm
+stops.
+.Pp
+One process owns the terminal at a time:
+.Nm
+at the prompt, and the core process while a command runs.
+.Nm
+gives the terminal settings back before each request, and on every
+exit path.
+.Pp
+The prompt takes the six session commands of
+.Xr fugupass 1 ,
+and the core process runs each one.
+The prompt also takes the two commands below, and they reach no core
+path:
+.Bl -tag -width Ds
+.It Cm help
+Show one line of each command, with the summary of that command.
+.It Cm quit
+End the session.
+The core process then locks the vault, and it erases every session
+secret.
+.El
+.Pp
+The line editor gives an emacs-style key subset.
+.Ic Tab
+completes the word before the cursor, and it cycles through the
+candidates.
+The candidates of the first word are the command names, and the
+candidates of every later word are the entry names of the open index,
+with the limit of the display filter below.
+.Nm
+takes those names from the reply of one
+.Cm ls
+request.
+It sends that request before the first prompt, and it shows no line
+of that reply.
+Each
+.Cm ls
+of the operator refreshes the same set.
+.Pp
+The history holds the command lines of this session, in memory alone.
+.Nm
+writes no history file, because a history file names the entries of
+the vault.
+.Pp
+Each line of the core process passes the display filter before it
+reaches the terminal.
+The filter keeps printable ASCII, the newline and the tab.
+It replaces every other byte with a question mark, and it removes
+.Dv DEL
+and the C1 range.
+It breaks no UTF-8 sequence.
+The completion holds no entry name that the filter changes, because
+the editor writes a candidate to the terminal with no filter of its
+own.
+The operator can still type such a name.
+An entry name and the error text of an oracle carry external bytes,
+and an escape sequence of such bytes can rewrite what the operator
+sees.
+.Pp
+Without a terminal on the standard input,
+.Nm
+reads plain lines.
+It then gives no line editing, no history recall, and no escape
+output, so a scripted test drives a session in that mode.
+.Pp
+.Nm
+pledges
+.Dq stdio tty
+after it loads its modules, so it opens no file, it creates no
+process, and it reaches no network.
+On a system that is not
+.Ox ,
+the pledge restricts nothing.
+.Pp
+The session ends on
+.Cm quit ,
+at the end of the operator input, on an interrupt, and at the closed
+reply pipe of a core process that locked the vault.
+.Sh EXIT STATUS
+The
+.Nm
+utility exits 0 at the end of a session, and 1 on a failure.
+The failures are an absent pipe, an argument on the command line, and
+a reply line with an unknown tag.
+Every report goes to the standard error.
+.Sh SEE ALSO
+.Xr fugupass 1 ,
+.Xr pledge 2
+.Sh AUTHORS
+.An Dick Olsson Aq Mt hi@senzilla.io

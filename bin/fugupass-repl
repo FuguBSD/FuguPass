@@ -1,0 +1,357 @@
+#!/usr/bin/perl
+# ex:ts=8 sw=4:
+# $OpenBSD$
+#
+# Copyright (c) 2026 Dick Olsson <hi@senzilla.io>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+# fugupass-repl - the interface process of an interactive session.
+#
+# The core process fugupass spawns this program with a request pipe
+# and a reply pipe (PROG-IFACE-1). The program reads one operator
+# command line, writes it to the request pipe, and shows the reply
+# lines of the core (PROG-IFACE-2). It holds no secret: a secret
+# prints from the core to the terminal (PROG-IFACE-3).
+#
+# The program pledges "stdio tty" and then opens nothing
+# (PROG-SPLIT-7). It reports a failure through Fugu::Log in stderr
+# mode, never through syslog (PROG-SPLIT-9).
+#
+# The file is a modulino: the session runs when the program is the
+# main program, and a test loads the file and calls one function.
+
+use v5.34;
+use warnings;
+use experimental 'signatures';
+no feature qw(indirect multidimensional bareword_filehandles);
+
+use POSIX qw(EINTR);
+
+use Fugu::Log;
+use Fugu::REPL;
+use Fugu::Sandbox;
+use Fugu::Signal;
+
+use constant {
+
+	# The core spawns the program with the request pipe on file
+	# descriptor 3 and the reply pipe on file descriptor 4
+	# (PROG-IFACE-10).
+	REQUEST_FD => 3,
+	REPLY_FD   => 4,
+
+	# The frame of the reply pipe (PROG-IFACE-11). A reply line
+	# starts with LINE_TAG, and the end line starts with END_TAG.
+	# The tag keeps the frame apart from the text, so an entry
+	# name cannot forge an end line.
+	LINE_TAG => q{>},
+	END_TAG  => q{=},
+
+	PROMPT    => 'fugupass> ',
+	READ_SIZE => 4096,
+};
+
+# The command table of the prompt. The first six commands go to the
+# core, and help and quit stay in the interface (PROG-REPL-3). The
+# table gives the help text and the completion of the first word.
+my %COMMAND = (
+	ls    => 'list the entries of the open index',
+	show  => 'reveal one entry',
+	add   => 'import a stored secret into a pool slot',
+	gen   => 'create a derived entry from a pool slot',
+	totp  => 'reveal a totp entry and compute the code',
+	audit => 'report the stale shadow entries',
+	help  => 'show this command list',
+	quit  => 'end the session',
+);
+
+# main(@argv):
+#	Run one session and return the exit status. The core gives no
+#	argument, so an argument is a usage failure.
+sub main (@argv)
+{
+	# The promises come first, and the rest of the program runs
+	# inside them (PROG-SPLIT-7, PROG-SPLIT-8).
+	Fugu::Sandbox->pledge( promises => 'stdio tty' );
+
+	# stderr mode, never syslog mode: syslog mode opens a socket,
+	# and the promise set holds none (PROG-SPLIT-9).
+	my $log = Fugu::Log->new(
+		mode  => Fugu::Log::MODE_STDERR,
+		ident => 'fugupass-repl'
+	);
+
+	if (@argv) {
+		$log->error('fugupass spawns this program with no argument');
+		return 1;
+	}
+
+	# A write to a closed request pipe must give an error, and it
+	# must not kill the process. A signal death leaves the
+	# terminal raw (PROG-IFACE-8).
+	$SIG{PIPE} = 'IGNORE';
+
+	# One manager owns the interrupt flag, and the prompt loop
+	# reads it (PROG-IFACE-9).
+	my $signals = Fugu::Signal->new;
+	$signals->setup_interrupt_flag(qw(INT HUP TERM));
+
+	my $session = open_session($log);
+	return 1 unless $session;
+
+	my $editor = build_editor($session);
+	my $status = eval { run_session( $editor, $session, $signals ) };
+	my $error  = $@;
+
+	# Every exit path gives the terminal state back
+	# (PROG-IFACE-4, PROG-IFACE-8).
+	$editor->restore;
+	$signals->restore;
+
+	if ($error) {
+		chomp $error;
+		$log->error( '%s', $error );
+		return 1;
+	}
+	return $status;
+}
+
+# new_session($request, $reply):
+#	The session state: the two pipe handles, the buffer of the
+#	reply pipe, and the completion set of the last listing.
+sub new_session ( $request, $reply )
+{
+	return {
+		request => $request,
+		reply   => $reply,
+		pending => q{},
+		entries => [],
+	};
+}
+
+# open_session($log):
+#	Open the two pipes of the core (PROG-IFACE-10). Return
+#	nothing when a descriptor is absent, because the core process
+#	spawns this program.
+sub open_session ($log)
+{
+	open my $request, '>&=', REQUEST_FD or do {
+		$log->error( 'no request pipe on file descriptor %d',
+			REQUEST_FD );
+		return;
+	};
+
+	open my $reply, '<&=', REPLY_FD or do {
+		$log->error( 'no reply pipe on file descriptor %d', REPLY_FD );
+		return;
+	};
+
+	return new_session( $request, $reply );
+}
+
+# completion_callback($session):
+#	The completion callback of the editor. It answers with the
+#	entry names of the last listing (PROG-REPL-9, PROG-REPL-12).
+#	The editor keeps the candidates that the word starts, so the
+#	callback filters nothing.
+sub completion_callback ($session)
+{
+	return sub ( $, $ ) {
+		return @{ $session->{entries} };
+	};
+}
+
+# entry_names($lines):
+#	The completion set of one listing reply. The editor writes a
+#	candidate to the terminal on a Tab press, and it filters
+#	nothing there (PROG-IFACE-5). A name that the display filter
+#	changes is no longer that entry, so the set drops it
+#	(PROG-REPL-12). The operator can still type such a name.
+sub entry_names ($lines)
+{
+	return [ grep { Fugu::REPL::display_filter($_) eq $_ } @$lines ];
+}
+
+# build_editor($session):
+#	The line editor of the prompt (PROG-REPL-8). The command
+#	table gives the help text and the first word, and the
+#	callback gives the entry names (PROG-REPL-9). The editor
+#	watches the reply pipe, so a closed pipe ends the read
+#	(PROG-IFACE-6). The editor writes no history file.
+sub build_editor ($session)
+{
+	return Fugu::REPL->new(
+		prompt   => PROMPT,
+		commands => \%COMMAND,
+		complete => completion_callback($session),
+		watch    => [ $session->{reply} ],
+	);
+}
+
+# send_request($session, $command):
+#	Write one request line whole (PROG-IFACE-11). syswrite can
+#	write a part, so the loop continues with the rest. Return
+#	nothing when the write fails, because the core then closed
+#	the pipe.
+sub send_request ( $session, $command )
+{
+	my $bytes = "$command\n";
+
+	while ( length $bytes ) {
+		my $wrote = syswrite $session->{request}, $bytes;
+		if ( !defined $wrote ) {
+			next if $! == EINTR;
+			return;
+		}
+		substr $bytes, 0, $wrote, q{};
+	}
+
+	return 1;
+}
+
+# reply_line($session):
+#	One line of the reply pipe, without the terminator. The
+#	function keeps its own buffer and reads with sysread, because
+#	the line editor watches the same handle with select(2)
+#	(PROG-IFACE-6). A buffered read would hide bytes from that
+#	watch. Return nothing at the end of the pipe.
+sub reply_line ($session)
+{
+	while (1) {
+		if ( $session->{pending} =~ s/\A([^\n]*)\n// ) {
+			return $1;
+		}
+
+		my $count = sysread $session->{reply}, my $chunk, READ_SIZE;
+		if ( !defined $count ) {
+			next if $! == EINTR;
+			return;
+		}
+		return if $count == 0;
+
+		$session->{pending} .= $chunk;
+	}
+}
+
+# exchange($editor, $session, $command, $show):
+#	Send one request and read the reply of it (PROG-IFACE-2).
+#	Show each reply line through the display filter when show is
+#	true (PROG-IFACE-5). Return the outcome and the reply lines.
+#	Return nothing when a pipe closed, because the core then
+#	ended the session. Die on a line with an unknown tag: the
+#	core and the interface disagree, and a guess is worse than a
+#	stop.
+sub exchange ( $editor, $session, $command, $show )
+{
+	return unless send_request( $session, $command );
+
+	my @lines;
+	while (1) {
+		my $line = reply_line($session);
+		return unless defined $line;
+
+		my $tag  = substr $line, 0, 1;
+		my $text = substr $line, 1;
+
+		if ( $tag eq END_TAG ) {
+			return { outcome => $text, lines => \@lines };
+		}
+
+		die "the core sent the reply tag '$tag'\n"
+		    unless $tag eq LINE_TAG;
+
+		push @lines, $text;
+		$editor->show("$text\n") if $show;
+	}
+}
+
+# request_listing($editor, $session):
+#	Send one ls request and keep its reply as the completion set
+#	(PROG-REPL-10). The reply lines are the entry names, one on
+#	each line. The operator asked for no listing, so the function
+#	shows none of them. Return nothing when the core ended the
+#	session.
+sub request_listing ( $editor, $session )
+{
+	my $reply = exchange( $editor, $session, 'ls', 0 );
+	return unless $reply;
+
+	$session->{entries} = entry_names( $reply->{lines} )
+	    if $reply->{outcome} eq 'ok';
+
+	return 1;
+}
+
+# run_session($editor, $session, $signals):
+#	The prompt loop. Return the exit status. The session ends on
+#	quit, at the end of the operator input, on a signal, and at
+#	the closed reply pipe of a core that locked (PROG-REPL-7).
+sub run_session ( $editor, $session, $signals )
+{
+	# One listing fills the completion set before the first
+	# prompt (PROG-REPL-10).
+	return 0 unless request_listing( $editor, $session );
+
+	while (1) {
+
+		# A signal reached the process, so the session ends.
+		# The caller of this function gives the terminal state
+		# back on that path too (PROG-IFACE-9).
+		return 0 if $signals->interrupted;
+
+		my $line  = $editor->read_line;
+		my $event = $editor->event // q{};
+
+		# The core owns the terminal from here, so the
+		# interface gives the settings back first
+		# (PROG-IFACE-4).
+		$editor->restore;
+
+		# The raw prompt turns ISIG off, so a Ctrl-C there
+		# raises no signal. It clears the line, and the loop
+		# reads again. A signal that ended the wait sets the
+		# flag, and the test above then ends the session.
+		next if $event eq 'interrupt';
+
+		# The end of the operator input and the closed reply
+		# pipe both end the session (PROG-IFACE-6).
+		return 0 unless defined $line;
+
+		my $command = $line;
+		$command =~ s/\A\s+//;
+		$command =~ s/\s+\z//;
+		next unless length $command;
+
+		my ($name) = split q{ }, $command;
+
+		# help and quit reach no core path (PROG-REPL-3).
+		if ( $name eq 'help' ) {
+			$editor->show( $editor->help_text );
+			next;
+		}
+		return 0 if $name eq 'quit';
+
+		my $reply = exchange( $editor, $session, $command, 1 );
+		return 0 unless $reply;
+
+		# The listing of the operator refreshes the completion
+		# set, so no second request follows it (PROG-REPL-10).
+		$session->{entries} = entry_names( $reply->{lines} )
+		    if $name eq 'ls' && $reply->{outcome} eq 'ok';
+	}
+}
+
+exit main(@ARGV) unless caller;
+
+1;

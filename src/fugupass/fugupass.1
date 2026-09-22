@@ -14,13 +14,15 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: September 21 2026 $
+.Dd $Mdocdate: September 22 2026 $
 .Dt FUGUPASS 1
 .Os
 .Sh NAME
 .Nm fugupass
 .Nd FuguPass vault core
 .Sh SYNOPSIS
+.Nm
+.Op Fl d Ar directory
 .Nm
 .Op Fl d Ar directory
 .Cm create
@@ -71,6 +73,27 @@ One vault is one directory of files.
 reads each passphrase from the terminal.
 It runs each helper program as a child process, and text alone
 crosses that boundary.
+.Pp
+A run with no subcommand starts an interactive session.
+.Nm
+opens the session, and it then spawns
+.Xr fugupass-repl 1
+as a child process, with a request pipe and a reply pipe.
+That child reads each operator command line and shows the non-secret
+output, and
+.Nm
+runs each command.
+No secret crosses the two pipes.
+.Pp
+The session locks on the command
+.Cm quit ,
+at the end of the request pipe, and after an idle time with no
+request.
+The lock erases every session secret, and the closed reply pipe ends
+the child.
+The config file holds the idle time as
+.Ic lock-timeout ,
+and the default is 300 seconds.
 .Pp
 Every subcommand but
 .Cm create
@@ -362,8 +385,10 @@ A listing of the vault directory therefore names no entry.
 The
 .Nm
 utility exits 0 on success, and 1 when a subcommand fails.
-An absent subcommand, an unknown subcommand, and a wrong command line
-give the usage on the standard error and the exit status 2.
+A session exits 0 when the interface process exited 0, and 1 on every
+other end of it.
+An unknown subcommand and a wrong command line give the usage on the
+standard error and the exit status 2.
 .Sh DIAGNOSTICS
 Every report goes to the standard error.
 A report of a failed request names the oracle and one of the four

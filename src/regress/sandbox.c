@@ -29,6 +29,12 @@
  * A violation of the pledge kills the process, so the probe of the
  * pledge takes a second child of its own.
  *
+ * A program that the core execs takes a probe of its own. The list
+ * reaches such a program through the execpromises argument of
+ * pledge(2), and the child of a NULL argument holds the whole file
+ * system. The probe execs this program again with the argument
+ * EXEC_ARG, so the test needs no second program.
+ *
  * OpenBSD answers a hidden path with ENOENT, and an unveiled path
  * of another permission with EACCES. The probes below read those
  * two values.
@@ -70,10 +76,33 @@
 /* The file of the vault directory that the child writes. */
 #define INSIDE_FILE	"inside"
 
+/* The argument that makes this program the probe of a child. */
+#define EXEC_ARG	"exec-probe"
+
+/*
+ * The runtime file of the unveil list that the probe of a child
+ * reads. Every OpenBSD machine holds it, and the list of
+ * sandbox.c carries it with the r permission.
+ */
+#define RUNTIME_FILE	"/usr/libexec/ld.so"
+
+/*
+ * The exit status of the probe of a child. 0 is a pass, and each
+ * other value names one outcome of a run.
+ */
+#define EXEC_SANDBOX	2	/* the sandbox call fails */
+#define EXEC_EXECV	3	/* the exec of this program fails */
+#define EXEC_OPEN	4	/* the child opens the hidden path */
+#define EXEC_ERRNO	5	/* the open gives another errno */
+#define EXEC_RUNTIME	6	/* the child reads no runtime file */
+
 static int	 probe_hidden(const char *);
 static int	 probe_readonly(const char *);
 static int	 probe_vault(const char *);
 static int	 probe_pledge(const char *);
+static int	 probe_exec(const char *, const char *, const char *);
+static int	 exec_probe(const char *);
+static int	 selfpath(const char *, const char *, char *, size_t);
 static int	 child(const char *, const char *, int);
 static int	 writefile(const char *);
 static void	 rmtree(const char *);
@@ -236,6 +265,155 @@ probe_pledge(const char *vault)
 }
 
 /*
+ * probe_exec(vault, outside, self):
+ *	A program that the core execs must not reach a path outside
+ *	the unveil list (PROG-SPLIT-3). The list reaches such a
+ *	program through the execpromises argument of pledge(2), and
+ *	the child of a NULL argument holds the whole file system.
+ *	This probe therefore fails when sandbox_enter() drops
+ *	SANDBOX_EXEC_PROMISES.
+ *
+ *	The program of the probe is this program. The child unveils
+ *	self with the x permission, as the sandbox unveils a compiled
+ *	helper, and it then calls sandbox_enter() and execs self with
+ *	the argument EXEC_ARG. main() reads that argument and runs
+ *	exec_probe().
+ *
+ *	sandbox_enter() makes the vault directory before its first
+ *	unveil call, and the first unveil call of a process hides
+ *	every other path. This child therefore makes that directory
+ *	and unveils it before it unveils self. The view of the child
+ *	is then the list of sandbox_enter() and the path of self.
+ *
+ *	The call gives 0 for the exit status 0 of that run, and -1
+ *	for every other outcome. exec_probe() reports each outcome of
+ *	its own, so no failure reads as a list that reaches the
+ *	child.
+ */
+static int
+probe_exec(const char *vault, const char *outside, const char *self)
+{
+	char	*argv[4];
+	pid_t	 pid, done;
+	int	 status;
+
+	argv[0] = (char *)self;
+	argv[1] = (char *)EXEC_ARG;
+	argv[2] = (char *)outside;
+	argv[3] = NULL;
+
+	if ((pid = fork()) == -1) {
+		warn("fork");
+		return -1;
+	}
+	if (pid == 0) {
+		if (mkdir(vault, S_IRWXU) == -1 && errno != EEXIST)
+			_exit(EXEC_SANDBOX);
+		if (unveil(vault, "rwc") == -1)
+			_exit(EXEC_SANDBOX);
+		if (unveil(self, "x") == -1)
+			_exit(EXEC_SANDBOX);
+		if (sandbox_enter(vault) != 0)
+			_exit(EXEC_SANDBOX);
+		execv(self, argv);
+		_exit(EXEC_EXECV);
+	}
+
+	while ((done = waitpid(pid, &status, 0)) == -1 && errno == EINTR)
+		;
+	if (done != pid) {
+		warn("waitpid");
+		return -1;
+	}
+	if (WIFSIGNALED(status)) {
+		warnx("the probe of the child: the signal %d stops it, and "
+		    "the promises of a child are \"%s\"", WTERMSIG(status),
+		    SANDBOX_EXEC_PROMISES);
+		return -1;
+	}
+	if (!WIFEXITED(status)) {
+		warnx("the probe of the child: the status of it is %d",
+		    status);
+		return -1;
+	}
+	switch (WEXITSTATUS(status)) {
+	case 0:
+		return 0;
+	case EXEC_SANDBOX:
+		warnx("the probe of the child: the sandbox call fails");
+		break;
+	case EXEC_EXECV:
+		warnx("the probe of the child: the exec of %s fails", self);
+		break;
+	default:
+		break;
+	}
+	return -1;
+}
+
+/*
+ * exec_probe(hidden):
+ *	The probes of a child of the core. This program runs them
+ *	after the exec of probe_exec(), and the exit status carries
+ *	the outcome.
+ *
+ *	The file at hidden must exist, and the unveil list must hide
+ *	it from this process. RUNTIME_FILE must open for a read,
+ *	because the list carries it: a child of an empty view fails
+ *	that probe, so the pass reports the list of the core and not
+ *	the absence of one.
+ */
+static int
+exec_probe(const char *hidden)
+{
+	int	 fd;
+
+	errno = 0;
+	if ((fd = open(hidden, O_RDONLY)) != -1) {
+		close(fd);
+		warnx("%s: a child of the core reads a path outside the "
+		    "unveil list", hidden);
+		return EXEC_OPEN;
+	}
+	if (errno != ENOENT) {
+		warnx("%s: the open of the child gives errno %d, and ENOENT "
+		    "is the value of a hidden path", hidden, errno);
+		return EXEC_ERRNO;
+	}
+	errno = 0;
+	if ((fd = open(RUNTIME_FILE, O_RDONLY)) == -1) {
+		warnx("%s: the child reads no runtime file of the unveil "
+		    "list: errno %d", RUNTIME_FILE, errno);
+		return EXEC_RUNTIME;
+	}
+	close(fd);
+	return 0;
+}
+
+/*
+ * selfpath(argv0, cwd, buf, size):
+ *	The absolute path of this program, from argv0 and the working
+ *	directory cwd. unveil(2) and execv(3) each read a relative
+ *	path against the working directory of the moment, and the
+ *	absolute path holds in every case.
+ *
+ *	The call gives 0, and -1 for a path that size does not take.
+ */
+static int
+selfpath(const char *argv0, const char *cwd, char *buf, size_t size)
+{
+	int	 n;
+
+	if (argv0[0] == '/')
+		n = snprintf(buf, size, "%s", argv0);
+	else
+		n = snprintf(buf, size, "%s/%s", cwd, argv0);
+	if (n < 0 || (size_t)n >= size)
+		return -1;
+	return 0;
+}
+
+/*
  * child(vault, outside, ca):
  *	The sandbox call, and the probes of it. The call gives 0 when
  *	every probe passes, and -1 when one probe fails. Every probe
@@ -305,17 +483,25 @@ rmtree(const char *dir)
 }
 
 int
-main(void)
+main(int argc, char *argv[])
 {
 	struct stat	 sb;
 	char		 work[] = "sandbox.XXXXXXXXXX";
 	char		 cwd[PATH_MAX], dir[PATH_MAX], vault[PATH_MAX];
-	char		 outside[PATH_MAX];
+	char		 outside[PATH_MAX], self[PATH_MAX];
 	pid_t		 pid, done;
 	int		 ca, n, status, rv = 1;
 
+	/* The exec of probe_exec() reaches this program here. */
+	if (argc == 3 && strcmp(argv[1], EXEC_ARG) == 0)
+		return exec_probe(argv[2]);
+	if (argc != 1)
+		errx(1, "usage: sandbox");
+
 	if (getcwd(cwd, sizeof(cwd)) == NULL)
 		err(1, "getcwd");
+	if (selfpath(argv[0], cwd, self, sizeof(self)) != 0)
+		errx(1, "the path of this program does not fit");
 	if (mkdtemp(work) == NULL)
 		err(1, "mkdtemp");
 
@@ -368,6 +554,10 @@ main(void)
 
 	/* The pledge, after the list: the child of it dies. */
 	if (probe_pledge(vault) != 0)
+		goto out;
+
+	/* The list of a child, after the pledge of this process. */
+	if (probe_exec(vault, outside, self) != 0)
 		goto out;
 	rv = 0;
 out:
