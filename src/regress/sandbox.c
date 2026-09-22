@@ -39,6 +39,31 @@
  * of another permission with EACCES. The probes below read those
  * two values.
  *
+ * The probe of a child holds the two halves of PROG-SPLIT-4: the
+ * video devices of the unveil list, and the video promise of the
+ * execpromises. An absent file gives ENOENT as a hidden path does,
+ * so the parent opens each device before the sandbox, and it gives
+ * the path of each device that it reaches to the child. That open
+ * is the positive control of the probe: a device with no camera
+ * gives ENXIO, and each value but ENOENT reports a file that the
+ * machine holds. The child then opens each of those paths, and
+ * ENOENT there reports a list without the device.
+ *
+ * The promise takes a probe of its own, because the open above runs
+ * under the rpath promise of a child. The child makes the pledge
+ * call of the scan helper, with SCAN_PROMISES of scan.h. A promise
+ * outside the execpromises gives EPERM, and the kernel kills no
+ * process of such a call.
+ *
+ * The child makes the first call of each helper as well:
+ * scan_nocore() of scan.h, and qr_sandbox() of qr.h. Each one holds
+ * RLIMIT_CORE at zero (SEC-MEMORY-3), and the execpromises hold no
+ * proc promise. A setrlimit(2) call of such a child is a pledge
+ * violation, and the kernel kills it with SIGABRT. The child of
+ * probe_exec() therefore sets the core limit to zero before the
+ * sandbox call, as main() of fugupass.c does, and each helper call
+ * reads that limit and writes none.
+ *
  * The test needs a file outside the vault directory, so the work
  * directory of the run holds the vault directory and that file. The
  * program makes the work directory with mkdtemp(3) in the working
@@ -57,6 +82,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 
+#include <dirent.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -68,7 +94,9 @@
 #include <unistd.h>
 
 #include "http.h"
+#include "qr.h"
 #include "sandbox.h"
+#include "scan.h"
 
 /* The file of the work directory that the unveil list must hide. */
 #define OUTSIDE_FILE	"outside"
@@ -87,6 +115,16 @@
 #define RUNTIME_FILE	"/usr/libexec/ld.so"
 
 /*
+ * The video devices of the machine (PROG-SPLIT-13). The directory
+ * holds one entry of each device, and the name of each one starts
+ * with the prefix. VIDEO_MAX bounds the count of the paths that the
+ * probe of a child takes on its command line.
+ */
+#define VIDEO_DIR	"/dev"
+#define VIDEO_PREFIX	"video"
+#define VIDEO_MAX	16
+
+/*
  * The exit status of the probe of a child. 0 is a pass, and each
  * other value names one outcome of a run.
  */
@@ -95,13 +133,18 @@
 #define EXEC_OPEN	4	/* the child opens the hidden path */
 #define EXEC_ERRNO	5	/* the open gives another errno */
 #define EXEC_RUNTIME	6	/* the child reads no runtime file */
+#define EXEC_VIDEO	7	/* the list hides a video device */
+#define EXEC_PROMISE	8	/* the pledge of the scan helper fails */
+#define EXEC_NOCORE	9	/* the core limit call of a helper fails */
 
 static int	 probe_hidden(const char *);
 static int	 probe_readonly(const char *);
 static int	 probe_vault(const char *);
 static int	 probe_pledge(const char *);
-static int	 probe_exec(const char *, const char *, const char *);
-static int	 exec_probe(const char *);
+static int	 probe_exec(const char *, const char *, const char *,
+		     char [][PATH_MAX], int);
+static int	 exec_probe(const char *, char *[], int);
+static int	 video_devices(char [][PATH_MAX], int);
 static int	 selfpath(const char *, const char *, char *, size_t);
 static int	 child(const char *, const char *, int);
 static int	 writefile(const char *);
@@ -285,28 +328,46 @@ probe_pledge(const char *vault)
  *	and unveils it before it unveils self. The view of the child
  *	is then the list of sandbox_enter() and the path of self.
  *
+ *	device holds the count video devices of this machine, and the
+ *	command line of the child carries them after the hidden path.
+ *	video_devices() reads that list, and the probe of the child
+ *	opens each path of it (PROG-SPLIT-4).
+ *
  *	The call gives 0 for the exit status 0 of that run, and -1
  *	for every other outcome. exec_probe() reports each outcome of
  *	its own, so no failure reads as a list that reaches the
  *	child.
  */
 static int
-probe_exec(const char *vault, const char *outside, const char *self)
+probe_exec(const char *vault, const char *outside, const char *self,
+    char device[][PATH_MAX], int count)
 {
-	char	*argv[4];
+	char	*argv[4 + VIDEO_MAX];
 	pid_t	 pid, done;
-	int	 status;
+	int	 i, status;
 
 	argv[0] = (char *)self;
 	argv[1] = (char *)EXEC_ARG;
 	argv[2] = (char *)outside;
-	argv[3] = NULL;
+	for (i = 0; i < count; i++)
+		argv[3 + i] = device[i];
+	argv[3 + count] = NULL;
 
 	if ((pid = fork()) == -1) {
 		warn("fork");
 		return -1;
 	}
 	if (pid == 0) {
+		struct rlimit	 nocore = { 0, 0 };
+
+		/*
+		 * The core limit of main() of fugupass.c, before the
+		 * sandbox call (SEC-MEMORY-3). A child of this child
+		 * inherits the zero limit, and the first call of each
+		 * helper reads it.
+		 */
+		if (setrlimit(RLIMIT_CORE, &nocore) == -1)
+			_exit(EXEC_SANDBOX);
 		if (mkdir(vault, S_IRWXU) == -1 && errno != EEXIST)
 			_exit(EXEC_SANDBOX);
 		if (unveil(vault, "rwc") == -1)
@@ -352,7 +413,7 @@ probe_exec(const char *vault, const char *outside, const char *self)
 }
 
 /*
- * exec_probe(hidden):
+ * exec_probe(hidden, device, count):
  *	The probes of a child of the core. This program runs them
  *	after the exec of probe_exec(), and the exit status carries
  *	the outcome.
@@ -362,11 +423,23 @@ probe_exec(const char *vault, const char *outside, const char *self)
  *	because the list carries it: a child of an empty view fails
  *	that probe, so the pass reports the list of the core and not
  *	the absence of one.
+ *
+ *	device holds the count video devices of the machine, and the
+ *	parent proved each path of it before the sandbox. Each one
+ *	must open here, or must fail with another errno than ENOENT:
+ *	a machine with no camera answers the open with ENXIO, and the
+ *	unveil list of the core carries the device (PROG-SPLIT-13).
+ *	This probe runs before the pledge call below, because the
+ *	open takes the rpath promise of a child.
+ *
+ *	The pledge call of the scan helper comes last. The promise
+ *	set of that helper is SCAN_PROMISES, and a promise outside
+ *	SANDBOX_EXEC_PROMISES gives EPERM there (PROG-SPLIT-4).
  */
 static int
-exec_probe(const char *hidden)
+exec_probe(const char *hidden, char *device[], int count)
 {
-	int	 fd;
+	int	 fd, i;
 
 	errno = 0;
 	if ((fd = open(hidden, O_RDONLY)) != -1) {
@@ -387,7 +460,98 @@ exec_probe(const char *hidden)
 		return EXEC_RUNTIME;
 	}
 	close(fd);
+
+	for (i = 0; i < count; i++) {
+		errno = 0;
+		if ((fd = open(device[i], O_RDONLY)) != -1) {
+			close(fd);
+			continue;
+		}
+		if (errno == ENOENT) {
+			warnx("%s: the unveil list of the core hides a video "
+			    "device of this machine, and the parent of this "
+			    "child reached that device", device[i]);
+			return EXEC_VIDEO;
+		}
+	}
+
+	/*
+	 * The first call of the scan helper, before the pledge call
+	 * of it (SEC-MEMORY-3). The kernel kills this child of a
+	 * setrlimit(2) call, so a pass reports the call that reads
+	 * the inherited limit.
+	 */
+	if (scan_nocore() != 0) {
+		warnx("the core limit of the scan helper fails: errno %d",
+		    errno);
+		return EXEC_NOCORE;
+	}
+
+	if (pledge(SCAN_PROMISES, NULL) == -1) {
+		warnx("the promises \"%s\" of the scan helper give errno %d, "
+		    "and the execpromises are \"%s\"", SCAN_PROMISES, errno,
+		    SANDBOX_EXEC_PROMISES);
+		return EXEC_PROMISE;
+	}
+
+	/*
+	 * The sandbox of the render helper, last: it holds the core
+	 * limit and the pledge call of QR_PROMISES, and that set
+	 * takes no open of a path (PROG-SPLIT-5). The set stands
+	 * inside the promises above, so the call reduces them.
+	 */
+	if (qr_sandbox() != 0) {
+		warnx("the sandbox of the render helper fails: errno %d",
+		    errno);
+		return EXEC_NOCORE;
+	}
 	return 0;
+}
+
+/*
+ * video_devices(list, size):
+ *	The video devices of this machine, to the size paths at list.
+ *	The call reads VIDEO_DIR, and it takes each entry of the name
+ *	prefix VIDEO_PREFIX that this process opens.
+ *
+ *	That open is the positive control of the video probe of
+ *	exec_probe(). A hidden path and an absent file each give
+ *	ENOENT, so a probe of ENOENT alone proves nothing. This
+ *	process holds no sandbox, so an open of another outcome than
+ *	ENOENT reports a device that the machine holds: a device with
+ *	no camera gives ENXIO, and a device of another owner gives
+ *	EACCES.
+ *
+ *	The call gives the count of the paths, and 0 for a machine
+ *	with no video device. The probe of the child then reads the
+ *	promise of PROG-SPLIT-4 alone.
+ */
+static int
+video_devices(char list[][PATH_MAX], int size)
+{
+	struct dirent	*ent;
+	DIR		*dir;
+	int		 fd, n, count = 0;
+
+	if ((dir = opendir(VIDEO_DIR)) == NULL)
+		return 0;
+	while (count < size && (ent = readdir(dir)) != NULL) {
+		if (strncmp(ent->d_name, VIDEO_PREFIX,
+		    sizeof(VIDEO_PREFIX) - 1) != 0)
+			continue;
+		n = snprintf(list[count], PATH_MAX, "%s/%s", VIDEO_DIR,
+		    ent->d_name);
+		if (n < 0 || n >= PATH_MAX)
+			continue;
+		errno = 0;
+		if ((fd = open(list[count], O_RDONLY)) != -1)
+			close(fd);
+		else if (errno == ENOENT)
+			continue;
+		count++;
+	}
+	closedir(dir);
+	return count;
 }
 
 /*
@@ -489,12 +653,13 @@ main(int argc, char *argv[])
 	char		 work[] = "sandbox.XXXXXXXXXX";
 	char		 cwd[PATH_MAX], dir[PATH_MAX], vault[PATH_MAX];
 	char		 outside[PATH_MAX], self[PATH_MAX];
+	char		 device[VIDEO_MAX][PATH_MAX];
 	pid_t		 pid, done;
-	int		 ca, n, status, rv = 1;
+	int		 ca, count, n, status, rv = 1;
 
 	/* The exec of probe_exec() reaches this program here. */
-	if (argc == 3 && strcmp(argv[1], EXEC_ARG) == 0)
-		return exec_probe(argv[2]);
+	if (argc >= 3 && strcmp(argv[1], EXEC_ARG) == 0)
+		return exec_probe(argv[2], argv + 3, argc - 3);
 	if (argc != 1)
 		errx(1, "usage: sandbox");
 
@@ -527,9 +692,12 @@ main(int argc, char *argv[])
 
 	/*
 	 * The parent reads the trust anchors before the sandbox, so
-	 * the child holds a hidden path and an absent file apart.
+	 * the child holds a hidden path and an absent file apart. The
+	 * video devices of the machine take the same control, and
+	 * video_devices() opens each one here (PROG-SPLIT-13).
 	 */
 	ca = stat(HTTP_CA_FILE, &sb) == 0;
+	count = video_devices(device, VIDEO_MAX);
 
 	if ((pid = fork()) == -1) {
 		warn("fork");
@@ -557,7 +725,7 @@ main(int argc, char *argv[])
 		goto out;
 
 	/* The list of a child, after the pledge of this process. */
-	if (probe_exec(vault, outside, self) != 0)
+	if (probe_exec(vault, outside, self, device, count) != 0)
 		goto out;
 	rv = 0;
 out:

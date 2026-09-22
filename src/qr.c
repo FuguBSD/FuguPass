@@ -98,14 +98,24 @@ static int	 mnemonic_digits(const unsigned char *, size_t, char *);
 int
 qr_sandbox(void)
 {
-	struct rlimit	 nocore = { 0, 0 };
+	struct rlimit	 limit, nocore = { 0, 0 };
 
 	/*
 	 * The core limit comes first, before every other act of the
 	 * program: no crash of it writes a secret to a core file
 	 * (SEC-MEMORY-3).
+	 *
+	 * A child of the core process inherits the zero limit of that
+	 * process, and the execpromises of it hold no proc promise
+	 * (PROG-SPLIT-3). setrlimit(2) needs that promise, and the
+	 * kernel kills a child that calls it. The call below therefore
+	 * reads the limit first, and it writes the limit of a run
+	 * outside the core process alone. getrlimit(2) needs the stdio
+	 * promise alone (SEC-MEMORY-3).
 	 */
-	if (setrlimit(RLIMIT_CORE, &nocore) == -1)
+	if (getrlimit(RLIMIT_CORE, &limit) == -1)
+		return -1;
+	if (limit.rlim_cur != 0 && setrlimit(RLIMIT_CORE, &nocore) == -1)
 		return -1;
 	if (pledge(QR_PROMISES, NULL) == -1)
 		return -1;

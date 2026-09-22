@@ -44,10 +44,15 @@
  * (PROG-SPLIT-7). rpath carries the runtime files of each child,
  * and the program text of the interface process.
  *
- * The value holds no video, and no row of the unveil list carries
- * /dev/video*. PROG-SPLIT-4 adds the promise and the rows together
- * with fugupass-scan. A promise with no path behind it grants
- * nothing, and it widens the set of every other child.
+ * The value holds video, and the unveil list carries the video
+ * devices of PROG-SPLIT-13. The promise and the rows belong
+ * together: fugupass-scan opens the device under rpath and it then
+ * pledges "stdio video", so the promise carries the ioctl calls and
+ * the frame reads of video(4) (PROG-SPLIT-4).
+ *
+ * A child reduces a promise set, and a pledge(2) call outside the
+ * set below gives EPERM. The pledge call of fugupass-scan therefore
+ * fails without the video promise here.
  *
  * prot_exec carries the XS modules of the interpreter of the
  * interface process: the loader of such a module maps it with
@@ -66,7 +71,7 @@
  * from the unveil(NULL, NULL) call of sandbox_enter().
  */
 #define SANDBOX_EXEC_PROMISES \
-	"stdio rpath prot_exec tty"
+	"stdio rpath prot_exec tty video"
 
 /*
  * sandbox_enter(vault):
@@ -79,7 +84,9 @@
  *	/dev/tty with rw, the interface program with rx, the two
  *	other helper programs with x, and the runtime files, the
  *	resolver files and the trust anchors of libtls with r
- *	(PROG-SPLIT-12).
+ *	(PROG-SPLIT-12). It also holds each video device of
+ *	PROG-SPLIT-13 with r, because the scan helper opens one
+ *	device for a read and it unveils no path (PROG-SPLIT-4).
  *
  *	The pledge call names SANDBOX_PROMISES and
  *	SANDBOX_EXEC_PROMISES, so the list holds for each child of

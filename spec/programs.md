@@ -22,24 +22,25 @@ page in `mdoc(7)`: `fugupass(1)`, `fugupass-repl(1)`, `fugupass-scan(1)`, and
   helper programs only.
 - **PROG-SPLIT-3** — `fugupass` must make its unveil calls before its pledge
   call and must pledge `stdio rpath wpath cpath flock proc exec inet dns tty`.
-  The pledge call must also name the execpromises `stdio rpath prot_exec tty`. A
-  child of `execve(2)` takes the unveil list through that argument alone. A
-  child of a NULL argument takes the whole file system, and the list below then
-  restricts no child program. The execpromises must hold each promise that a
-  child pledges, because a child can only make its promise set smaller. `tty` is
-  the promise of `fugupass-repl`, and PROG-SPLIT-4 adds the promise of
-  `fugupass-scan`. `prot_exec` is the promise of the interpreter of the
-  interface process, which maps each XS module with `PROT_EXEC`. The
-  execpromises hold no `wpath` and no `cpath`, so a child reads a file of the
-  list and writes none. It must unveil only these paths and the video devices of
-  PROG-SPLIT-4. They are the vault directory (`rwc`), `/dev/tty` (`rw`), and the
-  three child programs (`x`). `fugupass-repl` takes the `r` permission as well,
-  because the interpreter reads the program text of it. The other paths are the
-  runtime files that the child programs load (`r`), and the resolver files that
-  name lookup needs (`r`). The list also holds the trust anchors of
-  PROG-SPLIT-12 (`r`). The derived list of PROG-SPLIT-10 carries the random
-  device, the resolver files, the service tables and the time zone file. It also
-  carries the library tree of the interpreter of the interface process.
+  The pledge call must also name the execpromises
+  `stdio rpath prot_exec tty video`. A child of `execve(2)` takes the unveil
+  list through that argument alone. A child of a NULL argument takes the whole
+  file system, and the list below then restricts no child program. The
+  execpromises must hold each promise that a child pledges, because a child can
+  only make its promise set smaller. `tty` is the promise of `fugupass-repl`,
+  and `video` is the promise of `fugupass-scan` (PROG-SPLIT-4). `prot_exec` is
+  the promise of the interpreter of the interface process, which maps each XS
+  module with `PROT_EXEC`. The execpromises hold no `wpath` and no `cpath`, so a
+  child reads a file of the list and writes none. It must unveil only these
+  paths and the video devices of PROG-SPLIT-4. They are the vault directory
+  (`rwc`), `/dev/tty` (`rw`), and the three child programs (`x`).
+  `fugupass-repl` takes the `r` permission as well, because the interpreter
+  reads the program text of it. The other paths are the runtime files that the
+  child programs load (`r`), and the resolver files that name lookup needs
+  (`r`). The list also holds the trust anchors of PROG-SPLIT-12 (`r`). The
+  derived list of PROG-SPLIT-10 carries the random device, the resolver files,
+  the service tables and the time zone file. It also carries the library tree of
+  the interpreter of the interface process.
 - **PROG-SPLIT-4** — `fugupass` must carry the video devices (`/dev/video*`) in
   its unveil list, and the execpromises must hold `video` as well.
   `fugupass-scan` must unveil no path. It must pledge `stdio video` after it
@@ -79,6 +80,13 @@ page in `mdoc(7)`: `fugupass(1)`, `fugupass-repl(1)`, `fugupass-scan(1)`, and
 - **PROG-SPLIT-12** — The unveil list of the core process must hold
   `/etc/ssl/cert.pem` with the `r` permission. `libtls` reads the trust anchors
   of that file for an `https` oracle.
+- **PROG-SPLIT-13** — `unveil(2)` takes no glob, so the list must name each
+  video device of PROG-SPLIT-4 with the path of it. The paths are `/dev/video`
+  and the ten devices `/dev/video0` to `/dev/video9`. `MAKEDEV(8)` makes the
+  first four of them on each machine, and `/dev/video` is the link of the first
+  device. Each path takes the `r` permission, because the scan helper opens one
+  device for a read. A device above that bound stays outside the list, and the
+  helper opens no such device.
 
 `fugupass` runs the interface program and the helpers as child processes and
 exchanges text over pipes. Text crosses the process boundary, never image data

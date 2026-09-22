@@ -56,6 +56,11 @@
  * entry of another type (ENTRY-SHADOW-4, ENTRY-SHADOW-5,
  * PROG-REPL-4).
  *
+ * A mnemonic entry takes the QR code of the render helper, and the
+ * -w option of show takes the words as text (PROG-OUTPUT-2). The
+ * helper runs as a child of helper.h, so this file renders no code
+ * of its own (PROG-SPLIT-2).
+ *
  * Every record goes through record(), and every report goes to the
  * standard error (PROG-ONESHOT-3). A one-shot subcommand takes its
  * records from the standard output, and the session of iface.c takes
@@ -88,6 +93,8 @@
 #include "derive.h"
 #include "entry.h"
 #include "fugupass.h"
+#include "helper.h"
+#include "qr.h"
 #include "session.h"
 #include "vault.h"
 
@@ -96,6 +103,17 @@
 
 /* The bytes of one value of the line format, with the terminator. */
 #define VALUE_MAX	(VAULT_VALUE_MAX + 1)
+
+/*
+ * The bytes of the rendered QR code of a mnemonic (PROG-QR-6,
+ * PROG-QR-9). The code holds QR_MNEMONIC_WIDTH modules on each
+ * side, and a quiet zone of QR_QUIET light modules stands on each
+ * side of it. One character carries two module rows, one half block
+ * takes three bytes of UTF-8, and one line feed ends each line. The
+ * terminator of helper_run() takes the last byte.
+ */
+#define CODE_SIDE	(QR_MNEMONIC_WIDTH + 2 * QR_QUIET)
+#define CODE_MAX	(((CODE_SIDE + 1) / 2) * (CODE_SIDE * 3 + 1) + 1)
 
 /* One text buffer of the line format, and the length of it. */
 struct text {
@@ -150,7 +168,9 @@ static void	 text_add(struct text *, const char *, const char *);
 static void	 text_cat(struct text *, const struct text *);
 static int	 gate(const struct vault_line *, void *);
 static int	 write_all(int, const char *, size_t);
+static int	 tty_write(const char *, size_t, int);
 static int	 secret_print(const char *);
+static int	 secret_qr(const char *);
 static void	 record(const char *, ...);
 static const struct commands_cmd *find(const char *);
 static int	 usage_cmd(const char *);
@@ -309,9 +329,10 @@ write_all(int fd, const char *data, size_t len)
 }
 
 /*
- * secret_print(value):
- *	One secret to the terminal, on one line (PROG-OUTPUT-1). The
- *	standard output carries no secret, so a pipe of it takes none
+ * tty_write(data, len, feed):
+ *	The len bytes at data to the terminal, and one line feed
+ *	after them when feed holds one (PROG-OUTPUT-1). The standard
+ *	output carries no secret, so a pipe of it takes none
  *	(PROG-OUTPUT-4).
  *
  *	The call writes the bytes of the caller, and stdio holds no
@@ -319,7 +340,7 @@ write_all(int fd, const char *data, size_t len)
  *	no terminal, and the terminal takes no secret then.
  */
 static int
-secret_print(const char *value)
+tty_write(const char *data, size_t len, int feed)
 {
 	int	 fd, rv = -1;
 
@@ -327,12 +348,63 @@ secret_print(const char *value)
 		warn("/dev/tty");
 		return -1;
 	}
-	if (write_all(fd, value, strlen(value)) == 0 &&
-	    write_all(fd, "\n", 1) == 0)
+	if (write_all(fd, data, len) == 0 &&
+	    (feed == 0 || write_all(fd, "\n", 1) == 0))
 		rv = 0;
 	else
 		warn("/dev/tty");
 	close(fd);
+	return rv;
+}
+
+/*
+ * secret_print(value):
+ *	One secret to the terminal, on one line (PROG-OUTPUT-1).
+ */
+static int
+secret_print(const char *value)
+{
+	return tty_write(value, strlen(value), 1);
+}
+
+/*
+ * secret_qr(value):
+ *	The QR code of one secret to the terminal, in UTF-8 half
+ *	blocks (PROG-OUTPUT-2). The render helper reads the bytes of
+ *	the secret on its standard input, and it writes the code back
+ *	(PROG-QR-1). This process renders no code of its own
+ *	(PROG-SPLIT-2).
+ *
+ *	The value of a mnemonic entry is 12 words with one space
+ *	between two words, and the helper reads that form as a
+ *	Standard SeedQR (PROG-QR-7). One line feed ends each line of
+ *	the answer, so the terminal takes the bytes of the helper and
+ *	no other byte (PROG-QR-9).
+ *
+ *	The call gives 0, and -1 for a failed run of the helper and
+ *	for a failed write. A failed run leaves the terminal without
+ *	a code, because the helper writes the whole code or no code
+ *	(PROG-QR-3). The buffer takes the code of a mnemonic, and a
+ *	value of another form takes the code of a vault file: such a
+ *	code is longer, and the run of it fails here. The report
+ *	therefore names the -w option. The call clears the code of
+ *	the buffer (SEC-MEMORY-1).
+ */
+static int
+secret_qr(const char *value)
+{
+	char	 code[CODE_MAX];
+	size_t	 len = 0;
+	int	 rv;
+
+	if (helper_run(HELPER_QR, value, strlen(value), code, sizeof(code),
+	    &len) != 0) {
+		warnx("the mnemonic: the render of the QR code fails, and "
+		    "the -w option prints the words of the entry");
+		rv = -1;
+	} else
+		rv = tty_write(code, len, 0);
+	explicit_bzero(code, sizeof(code));
 	return rv;
 }
 
@@ -1076,14 +1148,19 @@ out:
  *	Print one line of an entry file. The secret of the file goes
  *	to the terminal, and each other field goes to the sink of the
  *	records (PROG-OUTPUT-1, PROG-ONESHOT-9).
+ *
+ *	arg names one int: the QR code of the secret, in place of the
+ *	text of it (PROG-OUTPUT-2). cmd_show() sets that flag for a
+ *	mnemonic entry without the -w option.
  */
 static int
 show_line(const struct vault_line *line, void *arg)
 {
-	(void)arg;
+	const int	*code = arg;
 
 	if ((line->field->flags & VAULT_FIELD_SECRET) != 0)
-		return secret_print(line->value);
+		return *code != 0 ? secret_qr(line->value) :
+		    secret_print(line->value);
 	record("%s: %s", line->field->name, line->value);
 	return 0;
 }
@@ -1221,9 +1298,10 @@ cmd_ls(struct session *s, int argc, char *argv[])
  *	each metadata field to the sink of the records (PROG-REPL-3,
  *	PROG-OUTPUT-1). The reveal is one quorum event (PROG-REPL-4).
  *
- *	The words of a mnemonic take the -w option (PROG-OUTPUT-2,
- *	PROG-ONESHOT-9). The index names the type of the entry, so a
- *	mnemonic without that option refuses before the reveal
+ *	A mnemonic takes the QR code of the render helper, and the -w
+ *	option takes the words as text (PROG-OUTPUT-2,
+ *	PROG-ONESHOT-9). The index names the type of the entry, so
+ *	the shape of the secret stands before the reveal
  *	(VAULT-INDEX-2).
  */
 static int
@@ -1233,7 +1311,7 @@ cmd_show(struct session *s, int argc, char *argv[])
 	const char			*plain;
 	enum entry_type			 type;
 	size_t				 plainlen = 0;
-	int				 ch, words = 0;
+	int				 ch, code, words = 0;
 
 	optreset = 1;
 	optind = 1;
@@ -1258,17 +1336,13 @@ cmd_show(struct session *s, int argc, char *argv[])
 	}
 	if (index_type(e, &type) != 0)
 		return -1;
-	if (type == ENTRY_TYPE_MNEMONIC && !words) {
-		warnx("the entry %s holds a mnemonic, and the -w option "
-		    "prints the words of it", argv[0]);
-		return -1;
-	}
+	code = type == ENTRY_TYPE_MNEMONIC && words == 0;
 	if (session_reveal(s, e->slot, &plain, &plainlen) != 0)
 		return -1;
 	if (file_type(e, type, plain, plainlen) != 0)
 		return -1;
 	return vault_scan(plain, plainlen, entry_types[type].fields,
-	    show_line, NULL);
+	    show_line, &code);
 }
 
 static int
