@@ -129,7 +129,7 @@ sub main (@argv)
 
 # new_session($request, $reply):
 #	The session state: the two pipe handles, the buffer of the
-#	reply pipe, and the entry names of the last listing.
+#	reply pipe, and the completion set of the last listing.
 sub new_session ( $request, $reply )
 {
 	return {
@@ -162,9 +162,9 @@ sub open_session ($log)
 
 # completion_callback($session):
 #	The completion callback of the editor. It answers with the
-#	entry names of the last listing (PROG-REPL-9). The editor
-#	keeps the candidates that the word starts, so the callback
-#	filters nothing.
+#	entry names of the last listing (PROG-REPL-9, PROG-REPL-12).
+#	The editor keeps the candidates that the word starts, so the
+#	callback filters nothing.
 sub completion_callback ($session)
 {
 	return sub ( $, $ ) {
@@ -175,11 +175,12 @@ sub completion_callback ($session)
 # entry_names($lines):
 #	The completion set of one listing reply. The editor writes a
 #	candidate to the terminal on a Tab press, and it filters
-#	nothing there, so the names take the display filter here
-#	(PROG-IFACE-5).
+#	nothing there (PROG-IFACE-5). A name that the display filter
+#	changes is no longer that entry, so the set drops it
+#	(PROG-REPL-12). The operator can still type such a name.
 sub entry_names ($lines)
 {
-	return [ map { Fugu::REPL::display_filter($_) } @$lines ];
+	return [ grep { Fugu::REPL::display_filter($_) eq $_ } @$lines ];
 }
 
 # build_editor($session):

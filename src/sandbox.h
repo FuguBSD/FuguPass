@@ -56,9 +56,9 @@
  *
  * The value holds no wpath and no cpath, so a child reads a file of
  * the list and writes none. It holds no proc and no exec, so a
- * child starts no process. It holds no unveil, so a child that
- * calls unveil(2) dies. The lock of sandbox_enter() reaches a child
- * as well, so no child widens the list of this process.
+ * child starts no process. The lock of sandbox_enter() reaches a
+ * child as well: an unveil(2) call of a child gives EPERM, and no
+ * child widens the list of this process (PROG-SPLIT-4).
  */
 #define SANDBOX_EXEC_PROMISES \
 	"stdio rpath prot_exec tty"

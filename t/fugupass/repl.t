@@ -299,8 +299,9 @@ subtest 'a closed reply pipe ends the interface' => sub {
 # One Fugu::Signal manager installs the interrupt handler, and that
 # handler keeps the process alive (PROG-IFACE-9). Without it the
 # default action of SIGINT kills the process, and _reap then reports
-# nothing. The case below proves that the prompt loop reads the flag
-# of the manager.
+# nothing. This case proves the handler alone, and the case 'the
+# prompt loop reads the interrupt flag' below proves the read of the
+# flag.
 subtest 'a signal ends the session' => sub {
 	my $core = _spawn();
 
@@ -349,9 +350,10 @@ subtest 'the interface needs the core' => sub {
 	);
 };
 
-# The completion offers the command names and the entry names of the
-# listing (PROG-REPL-9, PROG-REPL-10). The test loads the program as
-# a module and drives the listing path with a real reply.
+# The completion offers the command names, and the entry names of the
+# listing that PROG-REPL-12 allows (PROG-REPL-9, PROG-REPL-10). The
+# test loads the program as a module and drives the listing path with
+# a real reply.
 subtest 'the completion offers the commands and the entry names' => sub {
 	require $PROGRAM;
 
@@ -375,9 +377,10 @@ subtest 'the completion offers the commands and the entry names' => sub {
 	#
 	# The last entry carries a BEL and an escape sequence. The
 	# editor writes a candidate to the terminal on a Tab press, and
-	# it filters nothing there, so the listing takes the display
-	# filter (PROG-IFACE-5). The expected bytes are literal here: a
-	# filter that the test computes would pass against itself.
+	# it filters nothing there (PROG-IFACE-5). The display filter
+	# changes that name, so the set leaves it out (PROG-REPL-12).
+	# The three other names pass the filter whole, and the set
+	# holds each one.
 	syswrite $rep_write, ">alpha\n>=ok\n>beta\n>ga\x07mma\x1B[31m\n=ok\n"
 	    or die "write: $!\n";
 	ok( main::request_listing( $editor, $session ),
@@ -390,8 +393,9 @@ subtest 'the completion offers the commands and the entry names' => sub {
 	my @offered  = $callback->( 'a', 'show a' );
 	is_deeply(
 		[ sort @offered ],
-		[ '=ok', 'alpha', 'beta', 'ga?mma?[31m' ],
-		'the callback offers the filtered entry names of the listing'
+		[ '=ok', 'alpha', 'beta' ],
+		'the callback offers each entry name that the display '
+		    . 'filter keeps whole (PROG-REPL-12)'
 	);
 
 	# Fugu::REPL keeps the callback under the constructor key, and
@@ -400,14 +404,50 @@ subtest 'the completion offers the commands and the entry names' => sub {
 	my @wired = $editor->{complete}->( 'a', 'show a' );
 	is_deeply(
 		[ sort @wired ],
-		[ '=ok', 'alpha', 'beta', 'ga?mma?[31m' ],
+		[ '=ok', 'alpha', 'beta' ],
 		'the editor holds that callback'
+	);
+};
+
+# Each ls of the operator refreshes the completion set, and that set
+# takes the same bound (PROG-REPL-10, PROG-REPL-12). The fake editor
+# types one ls, so the second filter site of the program runs.
+subtest 'the operator listing refreshes the completion set' => sub {
+	require $PROGRAM;
+
+	pipe my $req_read, my $req_write or die "pipe: $!\n";
+	pipe my $rep_read, my $rep_write or die "pipe: $!\n";
+
+	# The reply of the start-up listing, and then the reply of the
+	# listing of the operator. The second reply holds one name that
+	# the display filter changes.
+	syswrite $rep_write, ">alpha\n=ok\n>beta\n>ga\x07mma\n=ok\n"
+	    or die "write: $!\n";
+
+	my $session = main::new_session( $req_write, $rep_read );
+	my $editor  = FakeEditor->new( lines => ['ls'] );
+	my $signals = FakeSignals->new( flags => [ 0, 0 ] );
+
+	is( _run_session( $editor, $session, $signals ),
+		0, 'the prompt loop ends at the end of the operator input' );
+	is_deeply( $session->{entries}, ['beta'],
+		'the listing of the operator replaced the completion set, '
+		    . 'and it left the filtered name out' );
+
+	my @asked = ( scalar readline $req_read, scalar readline $req_read );
+	is_deeply(
+		\@asked,
+		[ "ls\n", "ls\n" ],
+		'the start-up listing and the listing of the operator are '
+		    . 'the two requests of the loop'
 	);
 };
 
 # The prompt loop must read the interrupt flag of the manager
 # (PROG-IFACE-9). The fake editor counts each read of a command
-# line, so a loop that reads no flag counts one there.
+# line, so a loop that reads no flag counts one there. The fake
+# manager reports the interrupt of every read, so a loop that acts
+# on no flag never ends. _run_session bounds that loop.
 subtest 'the prompt loop reads the interrupt flag' => sub {
 	require $PROGRAM;
 
@@ -422,7 +462,7 @@ subtest 'the prompt loop reads the interrupt flag' => sub {
 	my $editor  = FakeEditor->new;
 	my $signals = FakeSignals->new;
 
-	is( main::run_session( $editor, $session, $signals ),
+	is( _run_session( $editor, $session, $signals ),
 		0, 'the interrupt ends the prompt loop with no failure' );
 	is( $signals->{asked}, 1, 'the loop asked the manager for the flag' );
 	is( $editor->{reads},  0, 'and it read no command line after it' );
@@ -513,18 +553,20 @@ sub _generate ()
 }
 
 # The fake editor of the prompt loop. run_session calls read_line at
-# the prompt, and event and restore after it.
+# the prompt, and event, restore and show after it. The lines of the
+# constructor are the operator input, and read_line gives the end of
+# that input after the last line.
 package FakeEditor;
 
-sub new ($class)
+sub new ( $class, %args )
 {
-	return bless { reads => 0 }, $class;
+	return bless { reads => 0, lines => $args{lines} // [] }, $class;
 }
 
 sub read_line ($self)
 {
 	$self->{reads}++;
-	return;
+	return shift @{ $self->{lines} };
 }
 
 sub event ($)
@@ -537,22 +579,49 @@ sub restore ($self)
 	return $self;
 }
 
-# The fake signal manager of the prompt loop. It reports an
-# interrupt, and it counts each read of the flag.
+sub show ( $self, $ )
+{
+	return $self;
+}
+
+# The fake signal manager of the prompt loop. It counts each read of
+# the flag. The flags of the constructor answer the first reads, and
+# each read after them reports an interrupt.
 package FakeSignals;
 
-sub new ($class)
+sub new ( $class, %args )
 {
-	return bless { asked => 0 }, $class;
+	return bless { asked => 0, flags => $args{flags} // [] }, $class;
 }
 
 sub interrupted ($self)
 {
 	$self->{asked}++;
-	return 1;
+	return @{ $self->{flags} } ? shift @{ $self->{flags} } : 1;
 }
 
 package main;
+
+# _run_session($editor, $session, $signals):
+#	run_session of the program, inside the deadline of this test.
+#	A prompt loop that never ends fails one assertion here, and it
+#	stalls no gate.
+sub _run_session ( $editor, $session, $signals )
+{
+	my $status = eval {
+		local $SIG{ALRM} =
+		    sub { die "the prompt loop ran past the deadline\n" };
+		alarm DEADLINE;
+		my $rv = main::run_session( $editor, $session, $signals );
+		alarm 0;
+		return $rv;
+	};
+	my $error = $@;
+	alarm 0;
+
+	is( $error, q{}, 'the prompt loop ends inside the deadline' );
+	return $status;
+}
 
 # _read($path):
 #	Every byte of the file at $path.

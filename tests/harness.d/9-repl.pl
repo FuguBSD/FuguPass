@@ -47,10 +47,13 @@ my $POOL = 2;
 my $IDLE = 3;
 my $HOLD = 40;
 
-# The bytes of the entry name of the long request line. The line of
-# the vault format takes 4096 bytes, and that count holds the line
-# feed (PROG-IFACE-12, VAULT-FORMAT-5).
-my $LONG = 5000;
+# The bytes of the entry name at the line bound, and the bytes one
+# byte above it. The line of the vault format takes 4096 bytes, and
+# that count holds the line feed, so the text of a request line takes
+# 4095 bytes (PROG-IFACE-12, VAULT-FORMAT-5). The command word 'show'
+# and the space after it take five of those bytes.
+my $AT_BOUND   = 4095 - length 'show ';
+my $OVER_BOUND = $AT_BOUND + 1;
 
 # session_case($t, $vault):
 #	One session of the six commands (PROG-IFACE-2, PROG-REPL-3).
@@ -120,6 +123,12 @@ sub session_case ( $t, $vault )
 #	value of the config file: a core that took the default of
 #	IFACE_LOCK_TIMEOUT_DEFAULT would name 300 seconds and would
 #	run for the whole hold.
+#
+#	The clock of a step holds the start-up of the session as well:
+#	the spawn of the interpreter, the passphrase read and the
+#	canary rounds. The baseline step below runs that start-up and
+#	ends at once, so the difference of the two steps holds the
+#	wait alone.
 sub idle_case ( $t, $vault )
 {
 	my $path = "$vault->{dir}/machine/config";
@@ -133,9 +142,13 @@ sub idle_case ( $t, $vault )
 		map { s/\Alock-timeout: .*\z/lock-timeout: $IDLE/r }
 		    split /\n/, $text );
 
-	my ($run) = $t->console( $vault,
-		{ argv => [], answers => ['right'], hold => $HOLD } );
+	my ( $base, $run ) = $t->console(
+		$vault,
+		{ argv => [], answers => ['right'], input => ['quit'] },
+		{ argv => [], answers => ['right'], hold  => $HOLD } );
 
+	is( $base->{exit}, 0, 'the baseline session ends on quit' )
+	    or diag( $base->{error} );
 	is( $run->{exit}, 0, 'the idle lock ends the session with no failure '
 		    . '(PROG-REPL-7)' )
 	    or diag( $run->{error} );
@@ -151,21 +164,31 @@ sub idle_case ( $t, $vault )
 
 	# The bound below is the measure of the wait. A deadline that
 	# is wrong returns at once, and it prints the same lock line.
-	cmp_ok( $t->elapsed($run), '>=', $IDLE,
-		"the session waited the $IDLE seconds of the timeout before "
-		    . 'the lock (PROG-REPL-7)' );
+	# Each clock reads whole seconds and loses up to one of them,
+	# so the bound takes the half of the timeout.
+	cmp_ok( $t->elapsed($run) - $t->elapsed($base), '>=', $IDLE / 2,
+		"the idle session ran the $IDLE seconds of the timeout "
+		    . 'longer than the baseline session (PROG-REPL-7)' );
 	return;
 }
 
 # long_case($t, $vault):
-#	A request line above the line bound of the vault format
-#	(PROG-IFACE-12). The core must answer that line with a fail end
-#	line, and the session must go on.
+#	The line bound of a request line (PROG-IFACE-12,
+#	VAULT-FORMAT-5). The core must read the line at the bound, and
+#	it must refuse the line one byte above it with a fail end
+#	line. The session must go on after that refusal.
 #
-#	The step types the long line, one ls, and quit. The listing
-#	after the long line proves the end line: the interface waits
-#	for the reply of one request, and it sends the next request
-#	after that reply alone.
+#	The step types the two lines, a third command, and quit. The
+#	index holds no entry of the three names, so the report of the
+#	core names the name that it read. That report is the measure
+#	of each line.
+#
+#	The third command proves the end line of the refusal: the
+#	interface waits for the reply of one request, and it sends the
+#	next request after that reply alone.
+#
+#	The case reads no entry of another case, so the order of the
+#	cases of this leg does not reach it.
 sub long_case ( $t, $vault )
 {
 	my ($run) = $t->console(
@@ -173,20 +196,29 @@ sub long_case ( $t, $vault )
 		{
 			argv    => [],
 			answers => ['right'],
-			input   => [ 'show ' . ( 'a' x $LONG ), 'ls', 'quit' ]
-		} );
+			input   => [
+				'show ' . ( 'a' x $AT_BOUND ),
+				'show ' . ( 'b' x $OVER_BOUND ),
+				'show zz', 'quit'
+			] } );
 
 	is( $run->{exit}, 0,
 		'the long request line ends no session (PROG-IFACE-12)' )
 	    or diag( $run->{error} );
+
+	like( $run->{error}, qr/holds no entry of the name a{$AT_BOUND}$/m,
+		'the core reads the request line at the line bound whole '
+		    . '(PROG-IFACE-12, VAULT-FORMAT-5)' );
 	like(
 		$run->{error},
 		qr/the request line holds more than 4096 bytes/,
-		'the core refuses a request line above the line bound '
-		    . '(PROG-IFACE-12, VAULT-FORMAT-5)' );
-	like( $run->{out}, qr/^a1$/m,
-		'the ls after the long line reaches the core, so that line '
-		    . 'took an end line (PROG-IFACE-12)' );
+		'the core refuses the request line one byte above that '
+		    . 'bound (PROG-IFACE-12, VAULT-FORMAT-5)' );
+	unlike( $run->{error}, qr/holds no entry of the name b/,
+		'and the refused line reaches no command (PROG-IFACE-12)' );
+	like( $run->{error}, qr/holds no entry of the name zz$/m,
+		'the command after the refused line reaches the core, so '
+		    . 'that line took an end line (PROG-IFACE-12)' );
 	return;
 }
 
@@ -230,8 +262,10 @@ sub pledge_case ($t)
 
 return sub ($t)
 {
-	# One ceremony serves the three session cases. The idle case
-	# runs last, because it rewrites the config of the vault.
+	# One ceremony serves the three session cases. Each case names
+	# its own entries, so no case reads an entry of another one.
+	# The idle case runs last, because it rewrites the config of
+	# the vault.
 	my $vault = $t->ceremony_vault( 'repl', pool => $POOL );
 	my $made  = $t->create($vault);
 	is( $made->{exit}, 0, 'the creation of the interface vault passes' )

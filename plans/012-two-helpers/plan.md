@@ -2,8 +2,7 @@
 
 ## Status
 
-Proposed. It waits on plan 006 for the helper boundary, and on plan 007 for the
-six commands.
+Proposed. It waits on no other plan.
 
 Implements: PROG-SCAN, PROG-QR, KEY-MASTER, TEST-KAT. Implements: PROG-SPLIT,
 PROG-OUTPUT, SEC-MEMORY. Implements: VAULT-BACKUP without VAULT-BACKUP-3.
@@ -71,7 +70,7 @@ the handoff on one public vector: FuguSeed draws it, and FuguPass reads it.
 **The default of a mnemonic is the code.** `show` on a mnemonic entry pipes the
 words to `fugupass-qr`, and an explicit flag prints them as text
 (PROG-OUTPUT-2). The core process runs the helper as a child through the
-boundary of plan 006.
+boundary of `src/helper.h`.
 
 ## Files
 
@@ -83,7 +82,9 @@ boundary of plan 006.
 | `src/fugupass-scan/fugupass-scan.1`                      | The manual page, with the decoder record    |
 | `src/fugupass-qr/fugupass-qr.1`                          | The manual page, with the encoder record    |
 | `src/commands.c`                                         | The QR default of a mnemonic                |
+| `src/sandbox.h`, `src/sandbox.c`                         | The video rows and the `video` promise      |
 | `src/regress/scan.c`, `src/regress/qr.c`                 | The tests below                             |
+| `src/regress/sandbox.c`                                  | The video test below                        |
 | `tests/vectors/seedqr/`                                  | The picture, the PGM, the negative fixtures |
 | `docs/analysis/qr-library-sources.md`                    | The source evaluation of the two libraries  |
 | `spec/STATUS.md`                                         | The cited units                             |
@@ -106,6 +107,15 @@ boundary of plan 006.
 - The render carries a quiet zone of 4 light modules on each side.
 - A vault file of one sealed entry renders as one code, and a file above the
   capacity gives a report and no code (PROG-QR-3).
+
+`src/regress/sandbox` gains, for the core process of PROG-SPLIT-4:
+
+- `SANDBOX_EXEC_PROMISES` holds `video`, so a child of the exec probe pledges
+  `stdio video` and survives. That call dies without the promise.
+- The unveil list of `sandbox_enter()` holds each `/dev/video*` device of the
+  machine, and a child of the exec probe opens one of them. A hidden path and an
+  absent file both give `ENOENT`, so this probe needs the machine of the manual
+  scan below.
 
 The harness holds, in the guest:
 

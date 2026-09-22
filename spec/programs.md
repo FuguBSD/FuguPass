@@ -36,7 +36,8 @@ page in `mdoc(7)`: `fugupass(1)`, `fugupass-repl(1)`, `fugupass-scan(1)`, and
   three child programs (`x`). `fugupass-repl` takes the `r` permission as well,
   because the interpreter reads the program text of it. The other paths are the
   runtime files that the child programs load (`r`), and the resolver files that
-  name lookup needs (`r`). The derived list of PROG-SPLIT-10 carries the random
+  name lookup needs (`r`). The list also holds the trust anchors of
+  PROG-SPLIT-12 (`r`). The derived list of PROG-SPLIT-10 carries the random
   device, the resolver files, the service tables and the time zone file. It also
   carries the library tree of the interpreter of the interface process.
 - **PROG-SPLIT-4** — `fugupass` must carry the video devices (`/dev/video*`) in
@@ -148,6 +149,9 @@ modules.
   sink ([PROG-ONESHOT](programs.md#prog-oneshot)). A command of the session
   takes the reply pipe, and one reply line carries one record. A secret takes no
   sink, and it goes to the terminal ([PROG-OUTPUT](programs.md#prog-output)).
+  One record takes the line bound of the vault format
+  ([VAULT-FORMAT](vault.md#vault-format)). A record above that bound reaches no
+  sink, and the command must then fail.
 
 Entry names and oracle error text carry external bytes, so the display filter
 guards the operator's terminal. `Fugu::REPL` holds the terminal in raw mode only
@@ -210,20 +214,27 @@ through Fugu.
   file ([VAULT-CONFIG](vault.md#vault-config)).
 - **PROG-REPL-8** — The interface process must read each command line with the
   `Fugu::REPL` line editor. The editor gives emacs-style line editing, and tab
-  completion of command names and entry names from the open index listing. It
-  also gives a session history in memory. The interface process must not write a
-  history file, because a history file leaks entry names (D-14).
+  completion of command names and entry names from the open index listing. The
+  editor also gives a session history in memory. PROG-REPL-12 bounds those entry
+  names. The interface process must not write a history file, because a history
+  file leaks entry names (D-14).
 - **PROG-REPL-9** — `Fugu::REPL` must take each completion candidate from a
   caller callback. The interface process gives the command names and the entry
-  names of the open index listing, as PROG-REPL-8 states.
+  names of the open index listing, as PROG-REPL-8 and PROG-REPL-12 state.
 - **PROG-REPL-10** — The command names of the completion come from the command
   table of `Fugu::REPL`, and the entry names come from the completion callback.
   The interface process must take the entry names from the reply of each `ls`
-  request. It must send one `ls` request before the first prompt, and it must
-  show no line of that reply. It must send no other request of its own, so each
-  operator command is one request line.
+  request, and PROG-REPL-12 bounds that set. It must send one `ls` request
+  before the first prompt, and it must show no line of that reply. It must send
+  no other request of its own, so each operator command is one request line.
 - **PROG-REPL-11** — The default lock timeout is 300 seconds. The config file
   holds the tunable value ([VAULT-CONFIG](vault.md#vault-config)).
+- **PROG-REPL-12** — The interface process must offer no entry name that the
+  display filter of `Fugu::REPL` changes ([PROG-IFACE](programs.md#prog-iface)).
+  The editor writes each candidate to the terminal, and it filters no byte
+  there. A filtered name is not the name of the entry, and the core process
+  finds no entry of it. The interface process must keep such a name out of the
+  completion set. The operator can still type that name.
 
 `ls` reads the open index and sends no entry request. The unlock reads the
 passphrase once and verifies it at the canary record of each quorum oracle. Each
@@ -398,6 +409,7 @@ ports tree must hold it before this port builds.
   ports tree of the machine (D-15, [PROG-PORT](programs.md#prog-port)).
 
 The layout follows `usr.bin/ssh` of the OpenBSD tree. The archive sources sit
-flat, and each program directory holds a Makefile only. The archive keeps one
-object of each archive source. The C build needs an OpenBSD machine, and the
-gates of the repository root need none.
+flat, and each program directory holds the manual page of its program. A program
+with a C source adds a Makefile to that directory. The archive keeps one object
+of each archive source. The C build needs an OpenBSD machine, and the gates of
+the repository root need none.

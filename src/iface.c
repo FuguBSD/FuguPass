@@ -168,7 +168,10 @@ write_all(int fd, const char *data, size_t len)
  *
  *	The line holds the tag, the record, and the line feed. A
  *	record holds no line feed of its own, because it comes from
- *	one line of a vault file (VAULT-FORMAT-5).
+ *	one line of a vault file (VAULT-FORMAT-5). record() of
+ *	commands.c bounds the record at that same line, so the buffer
+ *	below takes each record of this sink. The check of the
+ *	snprintf(3) below guards that buffer alone.
  *
  *	A failed write leaves the flag of this file, and the request
  *	loop then ends the session. The sink reports no failure to

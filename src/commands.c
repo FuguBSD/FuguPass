@@ -193,6 +193,13 @@ static int	 cmd_audit(struct session *, int, char *[]);
 static void	(*sink)(const char *);
 
 /*
+ * A record that one line does not take (PROG-IFACE-13).
+ * commands_run() clears the flag before each command, and it fails
+ * a command that left the flag.
+ */
+static int	 record_fail;
+
+/*
  * The six commands of the session (PROG-REPL-3). The interface
  * process adds help and quit, and neither one reaches this table
  * (PROG-IFACE-1).
@@ -337,9 +344,14 @@ secret_print(const char *value)
  *	place of the standard output (PROG-IFACE-13).
  *
  *	One record holds one line of a vault file at most, so the
- *	buffer takes the line of VAULT-FORMAT-5. A record above that
- *	bound reaches no sink, because a truncated record is a wrong
- *	record. The report of it goes to the standard error.
+ *	buffer takes the line of VAULT-FORMAT-5. Each sink takes the
+ *	record from that one buffer, so one bound holds for both.
+ *
+ *	A record above that bound reaches no sink, because a
+ *	truncated record is a wrong record. The report of it goes to
+ *	the standard error, and the flag fails the command. A dropped
+ *	record is a missing output line, so the command must not
+ *	report success (PROG-IFACE-13).
  */
 static void
 record(const char *fmt, ...)
@@ -349,18 +361,18 @@ record(const char *fmt, ...)
 	int	 n;
 
 	va_start(ap, fmt);
-	if (sink == NULL) {
-		vprintf(fmt, ap);
-		putchar('\n');
-	} else {
-		n = vsnprintf(line, sizeof(line), fmt, ap);
-		if (n < 0 || (size_t)n >= sizeof(line))
-			warnx("the record of the command does not fit one "
-			    "line");
-		else
-			sink(line);
-	}
+	n = vsnprintf(line, sizeof(line), fmt, ap);
 	va_end(ap);
+
+	if (n < 0 || (size_t)n >= sizeof(line)) {
+		warnx("the record of the command does not fit one line");
+		record_fail = 1;
+		return;
+	}
+	if (sink == NULL)
+		printf("%s\n", line);
+	else
+		sink(line);
 }
 
 /*
@@ -1415,6 +1427,7 @@ int
 commands_run(struct session *s, int argc, char *argv[])
 {
 	const struct commands_cmd	*c;
+	int				 rv;
 
 	if (s == NULL || argc < 1 || argv == NULL || argv[0] == NULL)
 		return -1;
@@ -1422,7 +1435,9 @@ commands_run(struct session *s, int argc, char *argv[])
 		warnx("%s: no command of that name", argv[0]);
 		return -1;
 	}
-	return c->run(s, argc, argv);
+	record_fail = 0;
+	rv = c->run(s, argc, argv);
+	return record_fail != 0 ? -1 : rv;
 }
 
 int
