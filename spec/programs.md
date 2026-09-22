@@ -22,12 +22,23 @@ page in `mdoc(7)`: `fugupass(1)`, `fugupass-repl(1)`, `fugupass-scan(1)`, and
   helper programs only.
 - **PROG-SPLIT-3** — `fugupass` must make its unveil calls before its pledge
   call and must pledge `stdio rpath wpath cpath flock proc exec inet dns tty`.
-  It must unveil only these paths. They are the vault directory (`rwc`),
-  `/dev/tty` (`rw`), and the three child programs (`x`). The other paths are the
-  runtime files that the child programs load (`r`), and the resolver files that
-  name lookup needs (`r`). The derived list of PROG-SPLIT-10 carries the
-  resolver files, the service tables and the library tree of the interpreter of
-  the interface process.
+  The pledge call must also name the execpromises
+  `stdio rpath prot_exec tty video`. A child of `execve(2)` takes the unveil
+  list through that argument alone. A child of a NULL argument takes the whole
+  file system, and the list below then restricts no child program. The
+  execpromises must hold each promise that a child pledges, because a child can
+  only make its promise set smaller. `tty` is the promise of `fugupass-repl`,
+  and `video` is the promise of `fugupass-scan`. `prot_exec` is the promise of
+  the interpreter of the interface process, which maps each XS module with
+  `PROT_EXEC`. The execpromises hold no `wpath` and no `cpath`, so a child reads
+  a file of the list and writes none. It must unveil only these paths. They are
+  the vault directory (`rwc`), `/dev/tty` (`rw`), and the three child programs
+  (`x`). `fugupass-repl` takes the `r` permission as well, because the
+  interpreter reads the program text of it. The other paths are the runtime
+  files that the child programs load (`r`), and the resolver files that name
+  lookup needs (`r`). The derived list of PROG-SPLIT-10 carries the resolver
+  files, the service tables and the library tree of the interpreter of the
+  interface process.
 - **PROG-SPLIT-4** — `fugupass-scan` must unveil the video devices
   (`/dev/video*`) only and must pledge `stdio video` after it opens the device.
 - **PROG-SPLIT-5** — `fugupass-qr` must pledge `stdio` only.

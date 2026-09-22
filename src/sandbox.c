@@ -21,6 +21,12 @@
  * the pledge call. main() of fugupass.c sets RLIMIT_CORE to zero
  * before it calls this file (SEC-MEMORY-3).
  *
+ * The pledge call names SANDBOX_EXEC_PROMISES as its execpromises
+ * argument, and that argument carries the list below to each child
+ * of this process. A child of a NULL argument holds the whole file
+ * system, and the list below then restricts no child. sandbox.h
+ * states the promises of a child.
+ *
  * The path of the vault comes from the command line, and the path
  * of a helper comes from helper.h, so those paths stand outside the
  * table below. helper.h gives the path of each helper program, so
@@ -79,7 +85,7 @@ static const struct unveil_path unveil_list[] = {
 int
 sandbox_enter(const char *vault)
 {
-	const char	*path;
+	const char	*path, *perm;
 	size_t		 i;
 	int		 which;
 
@@ -101,12 +107,20 @@ sandbox_enter(const char *vault)
 			errno = EINVAL;
 			return -1;
 		}
-		if (unveil(path, "x") == -1 && errno != ENOENT)
+		/*
+		 * The interface process is Perl, and the kernel gives
+		 * the path of the program to the interpreter. The
+		 * interpreter reads the program text, so that one path
+		 * takes the r permission as well (PROG-SPLIT-7). A
+		 * compiled helper runs with the x permission alone.
+		 */
+		perm = (enum helper)which == HELPER_REPL ? "rx" : "x";
+		if (unveil(path, perm) == -1 && errno != ENOENT)
 			return -1;
 	}
 	if (unveil(NULL, NULL) == -1)
 		return -1;
-	if (pledge(SANDBOX_PROMISES, NULL) == -1)
+	if (pledge(SANDBOX_PROMISES, SANDBOX_EXEC_PROMISES) == -1)
 		return -1;
 	return 0;
 }
