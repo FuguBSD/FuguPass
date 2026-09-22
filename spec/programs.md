@@ -345,6 +345,28 @@ no keyboard.
 - **PROG-SCAN-7** — A plate scan needs a video device on the machine. A machine
   with no video device cannot run a ceremony that scans the plate. A virtual
   machine needs host device passthrough for that device.
+- **PROG-SCAN-8** — The program must take one optional argument, the path of the
+  video device, and it must take no option. A run with no argument must read
+  `/dev/video`. The core process runs the helper with no argument, so that path
+  is the device of a ceremony.
+- **PROG-SCAN-9** — The program must read frames through the `read(2)` access of
+  `video(4)`. It must ask the device for frames of 640 by 480 pixels, in the
+  `YUYV` pixel format. It must take the luminance byte of each pixel as the grey
+  value of it. A device that gives another pixel format is a failure. The
+  program must read frames for 60 seconds, and it must then report and exit 1.
+  The core process reads the standard output of the helper to its end, so an
+  endless read would hold a ceremony.
+- **PROG-SCAN-10** — The BIP39 English list holds 2048 words, so a group of four
+  digits above 2047 names no word. The program must report such a code as a
+  failure.
+- **PROG-SCAN-11** — A scan needs the `kern.video.record` variable of
+  `sysctl(2)` at 1. The `video(4)` driver blanks the image data of every reader
+  at the value 0, and 0 is the default of a machine. The superuser must set that
+  variable before a scan.
+- **PROG-SCAN-12** — The output line must hold one space between two words, and
+  one line feed must end it. The line must hold no other byte.
+- **PROG-SCAN-13** — Each failure must write one report line to the standard
+  error, and that line must name the cause.
 
 <a id="prog-qr"></a>
 
@@ -443,9 +465,25 @@ ports tree must hold it before this port builds.
   `GNUmakefile`, because the org pack of FuguBSD/Tooling owns it.
 - **PROG-BUILD-4** — The build must take libsecp256k1 from `LOCALBASE`, the
   ports tree of the machine (D-15, [PROG-PORT](programs.md#prog-port)).
+- **PROG-BUILD-5** — The QR decoder of the scan helper must sit in `src/quirc`
+  as a vendored source. That directory must hold the license of the library and
+  the record of its origin ([PROG-QR](programs.md#prog-qr)). The directory must
+  build the archive `libfuguquirc.a`, and `SUBDIR` of `src/Makefile` must name
+  it. `src/fugupass-scan` and `src/regress` must link that archive. The archive
+  name must differ from the name of the package of the ports tree, so no link
+  line takes the wrong file. The directory must build with `-Wall -Werror`,
+  because the vendored source does not take `-Wextra`. Every other C source of
+  this repository must keep `-Wextra`.
 
 The layout follows `usr.bin/ssh` of the OpenBSD tree. The archive sources sit
 flat, and each program directory holds the manual page of its program. A program
 with a C source adds a Makefile to that directory. The archive keeps one object
 of each archive source. The C build needs an OpenBSD machine, and the gates of
 the repository root need none.
+
+The tree holds the QR decoder, and the ports tree holds the encoder. The package
+of the decoder declares the SDL libraries as run dependencies, for the
+demonstration programs of it, and SDL needs the X11 libraries. The decoder
+itself needs the standard C functions alone. A port dependency would therefore
+pull SDL and X11 onto an air-gapped machine, and the vendored source pulls
+nothing.

@@ -19,23 +19,25 @@
 # The C sources sit flat in this directory, and the test sources sit
 # in regress. lib builds the archive of the flat sources, fugupass
 # builds the core process from that archive, and regress builds the
-# tests of it. The layout follows usr.bin/ssh of the OpenBSD tree.
+# tests of it. quirc holds the vendored QR decoder, and it builds an
+# archive of its own (PROG-BUILD-5). The layout follows usr.bin/ssh
+# of the OpenBSD tree.
 #
 # Each program gets a directory of its own, and a program with a C
-# source builds there through bsd.prog.mk (PROG-BUILD-2). fugupass
-# and fugupass-qr are two of them. fugupass-repl is Perl, so its
-# directory holds the manual page of it alone, and SUBDIR below does
-# not name that directory.
+# source builds there through bsd.prog.mk (PROG-BUILD-2). fugupass,
+# fugupass-qr and fugupass-scan are the three of them. fugupass-repl
+# is Perl, so its directory holds the manual page of it alone, and
+# SUBDIR below does not name that directory.
 #
 # The regress loop links the archive of lib, so it must run after the
 # build loop. bsd.subdir.mk declares regress with the double-colon
 # operator, and this line must use the same operator.
 #
-# SUBDIR holds the build order of the loop: lib builds the archive
-# that each program links, and regress comes last.
+# SUBDIR holds the build order of the loop: quirc and lib build the
+# two archives that each program links, and regress comes last.
 
 regress:: all
 
-SUBDIR=	lib fugupass fugupass-qr regress
+SUBDIR=	quirc lib fugupass fugupass-qr fugupass-scan regress
 
 .include <bsd.subdir.mk>

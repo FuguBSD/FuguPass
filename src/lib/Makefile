@@ -26,10 +26,15 @@
 LIB=		fugupass
 SRCS=		bip85.c ceremony.c commands.c derive.c entry.c envelope.c \
 		helper.c http.c iface.c oracle.c pin.c qr.c sandbox.c \
-		seal.c session.c share.c vault.c wordlist.c
+		scan.c seal.c session.c share.c vault.c wordlist.c
 
 CFLAGS+=	-Wall -Wextra -Werror
 CFLAGS+=	-I${.CURDIR}/..
+
+# scan.c reads quirc.h of the vendored decoder at ../quirc
+# (PROG-BUILD-5). That directory builds libfuguquirc.a, and each
+# directory that links scan.c adds that archive to LDADD.
+CFLAGS+=	-I${.CURDIR}/../quirc
 
 # The unveil list of the interface process (PROG-SPLIT-10).
 # unveil-paths runs Fugu::Sandbox of the perl of this machine and

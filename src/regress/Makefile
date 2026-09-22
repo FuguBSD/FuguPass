@@ -13,20 +13,22 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-# envelope, http, kat, oracle-client, qr, sandbox, share and vault,
-# the eight programs of this directory. bsd.regress.mk builds each
-# program of PROGS, and a run of exit 0 is a pass. envelope holds
-# the known-answer tests of the oracle protocol, kat holds the tests
-# of the derivation tree, qr holds the tests of the render helper,
-# sandbox holds the test of the unveil list and the pledge call,
-# share holds the tests of the custody layer, and vault holds the
-# tests of the vault on disk. Each of those six is a whole test, and
-# REGRESS_TARGETS names the default target of it.
+# envelope, http, kat, oracle-client, qr, sandbox, scan, share and
+# vault, the nine programs of this directory. bsd.regress.mk builds
+# each program of PROGS, and a run of exit 0 is a pass. envelope
+# holds the known-answer tests of the oracle protocol, kat holds the
+# tests of the derivation tree, qr holds the tests of the render
+# helper, sandbox holds the test of the unveil list and the pledge
+# call, scan holds the tests of the scan helper, share holds the
+# tests of the custody layer, and vault holds the tests of the vault
+# on disk. Each of those seven is a whole test, and REGRESS_TARGETS
+# names the default target of it.
 #
 # sandbox runs on OpenBSD alone, because unveil(2) and pledge(2)
 # restrict this process. qr runs there as well, for the pledge call
-# of the render helper. Every program of this directory builds on
-# OpenBSD alone (PROG-BUILD-1).
+# of the render helper, and scan reads <sys/videoio.h> of that
+# system. Every program of this directory builds on OpenBSD alone
+# (PROG-BUILD-1).
 #
 # http is the driver of the transport tests, and it holds no test
 # of its own. A test of a transport needs a peer, so http.t starts
@@ -52,8 +54,8 @@
 #
 # bsd.prog.mk takes the source of each program from the name of it,
 # so envelope.c, http.c, kat.c, oracle-client.c, qr.c, sandbox.c,
-# share.c and vault.c need no SRCS line. Every test source sits in
-# this one directory (PROG-BUILD-1).
+# scan.c, share.c and vault.c need no SRCS line. Every test source
+# sits in this one directory (PROG-BUILD-1).
 #
 # Two include directories reach the headers of a test. The first one
 # holds the interfaces of the flat sources, and the second one holds
@@ -64,24 +66,26 @@
 # envelope.c holds a name of its own in each directory: the interface
 # is envelope.h, and the vectors are vectors/oracle.h.
 #
-# Four C files of this directory carry the name of an archive
-# source: envelope.c, http.c, qr.c and sandbox.c. This directory
-# holds the test, and the directory above holds the archive source.
-# This file sets no .PATH, so each program takes the source of this
-# directory, and the archive carries the other one.
+# Five C files of this directory carry the name of an archive
+# source: envelope.c, http.c, qr.c, sandbox.c and scan.c. This
+# directory holds the test, and the directory above holds the
+# archive source. This file sets no .PATH, so each program takes the
+# source of this directory, and the archive carries the other one.
 #
 # The archive one directory up links nothing, so this directory owns
 # the link line of the libraries. libsecp256k1 and libqrencode come
 # from the ports tree, under LOCALBASE. bcrypt_pbkdf(3) comes from
 # libutil of the base system. http.c reads <tls.h> of libtls, and libtls needs
-# libssl. The lookup of the archive tests the obj directory of lib.
-# make obj puts the archive there, and a tree without make obj holds
-# the archive in lib. This file writes the literal name obj, because
-# make reads the condition before bsd.own.mk sets ${__objdir}.
+# libssl. The vendored QR decoder comes from the archive of quirc
+# (PROG-BUILD-5). The lookup of an archive tests the obj directory
+# of it. make obj puts an archive there, and a tree without make obj
+# holds it in the source directory. This file writes the literal
+# name obj, because make reads the condition before bsd.own.mk sets
+# ${__objdir}.
 
 .include <bsd.own.mk>
 
-PROGS=		envelope http kat oracle-client qr sandbox share vault
+PROGS=		envelope http kat oracle-client qr sandbox scan share vault
 
 # bsd.prog.mk takes a manual page name from each name of PROGS, and
 # this directory holds no manual page. That line sets a value for an
@@ -94,15 +98,21 @@ CFLAGS+=	-I${.CURDIR}/../../tests
 
 LOCALBASE?=	/usr/local
 LIBFUGUPASS=	${.CURDIR}/../lib
+LIBFUGUQUIRC=	${.CURDIR}/../quirc
 
 # envelope.c and share.c read <secp256k1.h> of the ports tree.
 CFLAGS+=	-I${LOCALBASE}/include
 
-# qr.c reads the picture of test vector 4 at a run, from the file of
-# tests/vectors/seedqr. The picture is text and no C header, because
-# it is the byte-for-byte copy of the FuguSeed fixture. That
-# directory holds the commit and the digest of the copy.
-CFLAGS+=	-DQR_PICTURE=\"${.CURDIR}/../../tests/vectors/seedqr/vector4.picture\"
+# scan.c reads quirc.h of the vendored decoder (PROG-BUILD-5).
+CFLAGS+=	-I${LIBFUGUQUIRC}
+
+# qr.c and scan.c read the pictures of tests/vectors/seedqr at a run.
+# A picture is text and no C header, because vector4.picture is the
+# byte-for-byte copy of the FuguSeed fixture. That directory holds
+# the commit and the digest of each picture.
+SEEDQR=		${.CURDIR}/../../tests/vectors/seedqr
+CFLAGS+=	-DQR_PICTURE=\"${SEEDQR}/vector4.picture\"
+CFLAGS+=	-DSEEDQR_DIR=\"${SEEDQR}\"
 
 .if exists(${LIBFUGUPASS}/obj)
 LDADD+=		-L${LIBFUGUPASS}/obj -lfugupass
@@ -110,6 +120,14 @@ DPADD+=		${LIBFUGUPASS}/obj/libfugupass.a
 .else
 LDADD+=		-L${LIBFUGUPASS} -lfugupass
 DPADD+=		${LIBFUGUPASS}/libfugupass.a
+.endif
+
+.if exists(${LIBFUGUQUIRC}/obj)
+LDADD+=		-L${LIBFUGUQUIRC}/obj -lfuguquirc
+DPADD+=		${LIBFUGUQUIRC}/obj/libfuguquirc.a
+.else
+LDADD+=		-L${LIBFUGUQUIRC} -lfuguquirc
+DPADD+=		${LIBFUGUQUIRC}/libfuguquirc.a
 .endif
 
 LDADD+=		-ltls -lssl -lcrypto -lutil
@@ -122,7 +140,8 @@ CLEANFILES+=	http.body http.request
 
 REGRESS_TARGETS=	run-regress-envelope run-regress-kat \
 			run-regress-qr run-regress-sandbox \
-			run-regress-share run-regress-vault run-http
+			run-regress-scan run-regress-share \
+			run-regress-vault run-http
 
 run-http: http
 	perl ${.CURDIR}/http.t ${.OBJDIR}/http </dev/null
