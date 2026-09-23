@@ -779,9 +779,9 @@ marker_remove(const struct state *st)
  *	the two reads in constant time (ORC-ENROLL-8, SEC-MEMORY-2,
  *	SEC-MEMORY-4).
  *
- *	fugupass_passphrase_new() reads one new passphrase under one
- *	pair of prompts. A change reads two passphrases, so it names
- *	the prompts of each pair here.
+ *	fugupass_passphrase_new() reads one new passphrase under the
+ *	prompts of a creation. A change needs other prompts, so it
+ *	names the pair here.
  *
  *	A failed read and a mismatch each give -1, and each one clears
  *	buf.
@@ -819,16 +819,18 @@ out:
 /*
  * pass_read(st):
  *	The old passphrase and the new passphrase, to the state. The
- *	change reads each one twice, and each pair must match
- *	(ORC-ENROLL-8). The canary checks of verify() verify the old
- *	one at each live oracle.
+ *	change reads the new one twice, and the pair must match
+ *	(ORC-ENROLL-8). It reads the old one once, because the canary
+ *	checks of verify() verify that one at each live oracle.
  */
 static int
 pass_read(struct state *st)
 {
-	if (read_twice("Old passphrase: ", "Old passphrase again: ",
-	    st->oldpass, sizeof(st->oldpass)) != 0)
+	if (fugupass_passphrase("Old passphrase: ", st->oldpass,
+	    sizeof(st->oldpass)) != 0) {
+		warnx("the passphrase: the read fails");
 		return -1;
+	}
 	st->oldlen = strlen(st->oldpass);
 	if (read_twice("New passphrase: ", "New passphrase again: ",
 	    st->newpass, sizeof(st->newpass)) != 0)

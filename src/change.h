@@ -72,13 +72,12 @@ int	change_pending(const char *);
  *	(ORC-ENROLL-4). The call gives 0 for a complete change, and
  *	-1 for an incomplete one.
  *
- *	The call reads the old passphrase twice and the new
- *	passphrase twice, and each pair must match (ORC-ENROLL-8). It
- *	verifies the old passphrase at the canary record of each live
- *	oracle, and it re-enrolls a canary that fails for a
- *	record-side cause (ORC-CANARY-4, ORC-CANARY-5). A mistyped
- *	old passphrase stops the change at the first canary, before
- *	any set_pin.
+ *	The call reads the new passphrase twice, and the pair must
+ *	match (ORC-ENROLL-8). It reads the old passphrase once, and
+ *	it verifies that one at the canary record of each live
+ *	oracle. It re-enrolls a canary that fails for a record-side
+ *	cause (ORC-CANARY-4, ORC-CANARY-5). A mistyped old passphrase
+ *	stops the change at the first canary, before any set_pin.
  *
  *	The loop takes each slot in turn, and each live oracle of a
  *	slot in list order (ORC-ENROLL-5). Before the first set_pin
