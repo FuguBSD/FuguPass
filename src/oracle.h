@@ -166,7 +166,8 @@ const char	*oracle_state_text(int);
  *	mask and the share (ORC-ENROLL-3).
  *
  *	A passphrase change re-enrolls each record of the machine
- *	(ORC-ENROLL-4 to ORC-ENROLL-12), and that loop is absent.
+ *	(ORC-ENROLL-4 to ORC-ENROLL-12), and change.h holds that
+ *	loop.
  */
 int	oracle_enroll(const struct oracle_ctx *, uint32_t,
 	    const unsigned char *, size_t);

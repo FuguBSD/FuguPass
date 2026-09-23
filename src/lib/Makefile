@@ -24,9 +24,9 @@
 .PATH:		${.CURDIR}/..
 
 LIB=		fugupass
-SRCS=		bip85.c ceremony.c commands.c derive.c entry.c envelope.c \
-		helper.c http.c iface.c oracle.c pin.c qr.c sandbox.c \
-		scan.c seal.c session.c share.c vault.c wordlist.c
+SRCS=		bip85.c ceremony.c change.c commands.c derive.c entry.c \
+		envelope.c helper.c http.c iface.c oracle.c pin.c qr.c \
+		sandbox.c scan.c seal.c session.c share.c vault.c wordlist.c
 
 CFLAGS+=	-Wall -Wextra -Werror
 CFLAGS+=	-I${.CURDIR}/..
