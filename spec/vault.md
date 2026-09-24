@@ -12,18 +12,17 @@ index wraps `c_idx_i`.
 
 One vault is one directory. The file paths inside it are:
 
-| Path                        | Content                                       | Set           |
-| --------------------------- | --------------------------------------------- | ------------- |
-| `<lowercase hex of H(K_e)>` | the sealed entry file of slot `e`             | shared        |
-| `index`                     | the sealed index file                         | shared        |
-| `machine/factor`            | the device factor `X`                         | machine-local |
-| `machine/wrap.<e>.<i>`      | the wrap `c_ei` of slot `e` at oracle `i`     | machine-local |
-| `machine/wrap.index.<i>`    | the index wrap `c_idx_i` of oracle `i`        | machine-local |
-| `machine/canary.<i>`        | the canary check seal of oracle `i`           | machine-local |
-| `machine/counters`          | the counters file, plaintext                  | machine-local |
-| `machine/config`            | the config file, plaintext                    | machine-local |
-| `machine/change`            | the change marker, plaintext                  | machine-local |
-| `machine/revocation-kit`    | the revocation kit of this machine, plaintext | machine-local |
+| Path                        | Content                                   | Set           |
+| --------------------------- | ----------------------------------------- | ------------- |
+| `<lowercase hex of H(K_e)>` | the sealed entry file of slot `e`         | shared        |
+| `index`                     | the sealed index file                     | shared        |
+| `machine/factor`            | the device factor `X`                     | machine-local |
+| `machine/wrap.<e>.<i>`      | the wrap `c_ei` of slot `e` at oracle `i` | machine-local |
+| `machine/wrap.index.<i>`    | the index wrap `c_idx_i` of oracle `i`    | machine-local |
+| `machine/canary.<i>`        | the canary check seal of oracle `i`       | machine-local |
+| `machine/counters`          | the counters file, plaintext              | machine-local |
+| `machine/config`            | the config file, plaintext                | machine-local |
+| `machine/change`            | the change marker, plaintext              | machine-local |
 
 In a file name, `<e>` is the unpadded decimal ASCII of the slot index. `<i>` is
 the unpadded decimal ASCII of the oracle index. These are the same encodings as
@@ -37,15 +36,14 @@ in a label ([keys.md](keys.md)).
   It lives at the vault root.
 - **VAULT-LAYOUT-4** — The machine-local set holds the device factor `X`, the
   wraps `c_ei`, and the index wraps `c_idx_i`. It also holds the canary check
-  seals, the counters file, the config file, the change marker, and the
-  revocation kit of this machine ([ORC-REVOKE](oracle.md#orc-revoke)). It lives
-  in the `machine/` subdirectory.
+  seals, the counters file, the config file, and the change marker. It lives in
+  the `machine/` subdirectory.
 - **VAULT-LAYOUT-5** — The name of the entry file of slot `e` must be the
   lowercase hex of `H(K_e)`, with no suffix.
 - **VAULT-LAYOUT-6** — These files must use the fixed paths of the table above.
-  They are the index file, the config file, the counters file, the factor file,
-  and the revocation kit. The other files are the wrap files, the index wrap
-  files, the canary check seals, and the change marker.
+  They are the index file, the config file, the counters file, and the factor
+  file. The other files are the wrap files, the index wrap files, the canary
+  check seals, and the change marker.
 - **VAULT-LAYOUT-7** — A directory listing must reveal nothing about entry names
   or sites (D-14).
 

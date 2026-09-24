@@ -433,13 +433,15 @@ detects a passphrase mistyped the same way twice.
   service stop is reversible, and it affects every machine. The operator can
   delete named record files. No oracle operation reverses a deletion, and a
   deletion needs the revocation kit.
-- **ORC-REVOKE-6** — The client must export a revocation kit for each machine.
-  The kit holds the machine name, and, for each oracle of the set, that oracle's
-  record file names. A record file name is the lowercase hex of the hash of the
-  record's compressed public key, with the suffix `.pin` (FuguOracle
-  STORE-KEYS-3). Client keys carry the oracle index
-  ([KEY-CLIENT](keys.md#key-client)), so each oracle holds different record
-  names. Record names are not secret.
+- **ORC-REVOKE-6** — The tool must produce the revocation kit of a machine on
+  demand, on the standard output. The tool must not store a kit. A stored kit is
+  a copy of derived data, and each refill makes it stale
+  ([CER-REFILL](ceremonies.md#cer-refill)). The kit holds the machine name, and,
+  for each oracle of the set, that oracle's record file names. A record file
+  name is the lowercase hex of the hash of the record's compressed public key,
+  with the suffix `.pin` (FuguOracle STORE-KEYS-3). Client keys carry the oracle
+  index ([KEY-CLIENT](keys.md#key-client)), so each oracle holds different
+  record names. Record names are not secret.
 - **ORC-REVOKE-7** — The documentation must state that the operator paths need a
   self-hosted or cooperative operator.
 - **ORC-REVOKE-8** — A revocation request must send the counter value
@@ -475,12 +477,11 @@ detects a passphrase mistyped the same way twice.
   must also direct the owner to a passphrase change on every other machine when
   the passphrase may be known ([ORC-ENROLL](oracle.md#orc-enroll)).
 
-The creation ceremony and the provisioning ceremony each export the kit of their
-machine ([CER-CREATE](ceremonies.md#cer-create),
-[CER-PROVISION](ceremonies.md#cer-provision)). An attacker who first raises a
-record's stored counter to `0xFFFFFFFF` locks that record for every caller. A
-locked record denies its mask to the attacker too. The revocation paths destroy
-or deny records, never data: every entry recovers from the plate
+The `kit` subcommand of [PROG-ONESHOT](programs.md#prog-oneshot) produces the
+kit of this machine, or of a named machine from the plate. An attacker who first
+raises a record's stored counter to `0xFFFFFFFF` locks that record for every
+caller. A locked record denies its mask to the attacker too. The revocation
+paths destroy or deny records, never data: every entry recovers from the plate
 ([REC-WIPE](recovery.md#rec-wipe)).
 
 A locked record is not a wiped record. A wipe unlinks the file, and a fresh

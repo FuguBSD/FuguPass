@@ -48,8 +48,6 @@ are the steps of the ceremony. The tool must run the steps in rule order.
   register this machine's name in it ([VAULT-INDEX](vault.md#vault-index)).
 - **CER-CREATE-8** — The tool must erase `M`, `root`, `K_idx`, every `K_e`,
   every share, and every mask with `explicit_bzero(3)`.
-- **CER-CREATE-9** — The tool must export this machine's revocation kit
-  ([ORC-REVOKE](oracle.md#orc-revoke)).
 
 Every `set_pin` failure is an HTTP error (FuguOracle OPS-SET-7), so the slot
 loop verifies each enrollment by its HTTP status. A stopped slot loop leaves a
@@ -57,8 +55,7 @@ slot with wraps at some oracles only. An oracle addition and a crash between a
 `set_pin` and its wrap write create the same partial-wrap state
 ([ORC-ENROLL](oracle.md#orc-enroll)). A stopped creation or refill runs again. A
 new `set_pin` replaces the record's key material at the oracle, and the tool
-recomputes the wrap from the re-derived share. The re-run is therefore safe. The
-revocation kit holds no secret, so its export follows the erasure step.
+recomputes the wrap from the re-derived share. The re-run is therefore safe.
 
 <a id="cer-refill"></a>
 
@@ -126,8 +123,6 @@ run these steps in rule order.
   oracle, per slot.
 - **CER-PROVISION-8** — The tool must register this machine's name in the index
   ([VAULT-INDEX](vault.md#vault-index)).
-- **CER-PROVISION-9** — The tool must export this machine's revocation kit
-  ([ORC-REVOKE](oracle.md#orc-revoke)).
 - **CER-PROVISION-10** — The tool must erase `M`, `root`, `K_idx`, every `K_e`,
   every share, and every mask with `explicit_bzero(3)`.
 - **CER-PROVISION-11** — Each machine holds its own records and wraps. The owner

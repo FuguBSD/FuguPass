@@ -16,7 +16,7 @@
 
 /*
  * Vault creation and the pool refill. ceremony.h states the
- * interface. CER-CREATE holds nine rules, the rules are the steps,
+ * interface. CER-CREATE holds eight rules, the rules are the steps,
  * and ceremony_create() calls one function of each step in rule
  * order.
  *
@@ -24,8 +24,7 @@
  * step_config() is CER-CREATE-3, and step_passphrase() is
  * CER-CREATE-4. step_canaries() is CER-CREATE-5, step_slots() is
  * CER-CREATE-6, and step_index() is CER-CREATE-7. The erasure of
- * CER-CREATE-8 sits in ceremony_create(), and step_kit() is
- * CER-CREATE-9.
+ * CER-CREATE-8 sits in ceremony_create().
  *
  * ceremony_refill() is the pool refill, the second ceremony of this
  * file (CER-REFILL). It reads the config of the vault and the device
@@ -45,8 +44,8 @@
  * bip85.c holds the two candidates, oracle.c holds each record and
  * each wrap, envelope.c holds the client public key, and vault.c
  * holds every path, the seal and the one writer. This file adds the
- * order of the steps, the text of the config, the index and the
- * kit, and the erasure.
+ * order of the steps, the text of the config and the index, and
+ * the erasure.
  *
  * The secrets of the ceremony live in one struct state. The
  * allocation of it never moves, so one explicit_bzero(3) of it
@@ -74,14 +73,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <openssl/sha.h>
-
 #include "bip85.h"
 #include "ceremony.h"
 #include "change.h"
 #include "derive.h"
 #include "entry.h"
-#include "envelope.h"
 #include "fugupass.h"
 #include "helper.h"
 #include "iface.h"
@@ -106,21 +102,6 @@
 
 /* The index of a new vault: the machine row and the pool rows. */
 #define INDEX_MAX	(DERIVE_MACHINE_MAX + CEREMONY_POOL_MAX * 11 + 96)
-
-/* One record row of the kit: the oracle index and the file name. */
-#define KIT_LINE_MAX	(sizeof("record 255 ") + 2 * DERIVE_KEYLEN + \
-			    sizeof(".pin"))
-
-/* One oracle of the kit: the URL row, each slot, and the canary. */
-#define KIT_ORACLE_MAX	(sizeof("oracle 255 ") + VAULT_URL_MAX + 1 + \
-			    (CEREMONY_POOL_MAX + 1) * KIT_LINE_MAX)
-
-/* The kit: the machine row, and one block of each position. */
-#define KIT_MAX		(DERIVE_ORACLE_MAX * KIT_ORACLE_MAX + \
-			    DERIVE_MACHINE_MAX + 96)
-
-/* The record file name of one record: the hex, and the suffix. */
-#define KIT_NAME_MAX	(2 * DERIVE_KEYLEN + sizeof(".pin"))
 
 /*
  * The bytes of the sealed index, and one more. A count of this
@@ -177,9 +158,6 @@ static int		 step_canaries(struct state *);
 static int		 step_slot(struct state *, uint32_t);
 static int		 step_slots(struct state *);
 static int		 step_index(const struct state *);
-static int		 kit_name(const struct state *, unsigned int, uint32_t,
-			    int, char *, size_t);
-static int		 step_kit(const struct state *);
 static int		 refill_config(struct state *);
 static int		 refill_factor(struct state *);
 static int		 index_line(const struct vault_line *, void *);
@@ -651,156 +629,6 @@ step_index(const struct state *st)
 	return 0;
 }
 
-/*
- * kit_name(st, oracle, slot, canary, out, outlen):
- *	The record file name of one record of this machine at the
- *	oracle index oracle, to the outlen bytes at out. canary
- *	takes the canary record of the oracle in place of the record
- *	of the slot index slot (ORC-RECORDS-1, ORC-RECORDS-2).
- *
- *	The name is the lowercase hex of the hash of the record's
- *	compressed client public key, with the suffix .pin
- *	(ORC-REVOKE-6, FuguOracle STORE-KEYS-3). The client key
- *	takes the device factor alone, so this call needs no
- *	passphrase and no master (KEY-CLIENT-1, KEY-CLIENT-4).
- *
- *	The call gives 0, and -1 with the report of the failure on
- *	the standard error. The caller of it adds no report.
- */
-static int
-kit_name(const struct state *st, unsigned int oracle, uint32_t slot,
-    int canary, char *out, size_t outlen)
-{
-	unsigned char	 client[DERIVE_KEYLEN];
-	unsigned char	 pub[ENVELOPE_PUBKEYLEN];
-	unsigned char	 digest[SHA256_DIGEST_LENGTH];
-	char		 text[2 * SHA256_DIGEST_LENGTH + 1];
-	int		 n, rv = -1;
-
-	if (outlen < KIT_NAME_MAX) {
-		warnx("the kit: the record name of oracle %u does not fit",
-		    oracle);
-		goto out;
-	}
-	if (canary)
-		n = derive_client_key_canary(st->factor, sizeof(st->factor),
-		    oracle, client, sizeof(client));
-	else
-		n = derive_client_key(st->factor, sizeof(st->factor), oracle,
-		    slot, client, sizeof(client));
-	if (n != 0) {
-		warnx("the kit: the client key of oracle %u fails", oracle);
-		goto out;
-	}
-	if (envelope_pubkey(client, pub) != 0) {
-		warnx("the kit: the client public key of oracle %u fails",
-		    oracle);
-		goto out;
-	}
-	if (SHA256(pub, sizeof(pub), digest) == NULL) {
-		warnx("the kit: the hash of a client public key fails");
-		goto out;
-	}
-	hex(digest, sizeof(digest), text);
-	n = snprintf(out, outlen, "%s.pin", text);
-	if (n < 0 || (size_t)n >= outlen) {
-		warnx("the kit: the record name of oracle %u does not fit",
-		    oracle);
-		goto out;
-	}
-	rv = 0;
-out:
-	/*
-	 * The client key is a secret of this machine, and the public
-	 * key and the name of it are not (ORC-REVOKE-6).
-	 */
-	explicit_bzero(client, sizeof(client));
-	return rv;
-}
-
-/*
- * step_kit(st):
- *	CER-CREATE-9. The revocation kit of this machine names the
- *	machine, and, for each oracle, the record file names of this
- *	machine at that oracle (ORC-REVOKE-6). The count is one name
- *	of each slot of the pool, and one canary name.
- *
- *	The kit holds no secret, so this step follows the erasure of
- *	CER-CREATE-8. It takes the device factor from the state,
- *	because that rule names no erasure of the device factor. The
- *	factor persists on disk as well (KEY-DEVICE-2).
- *
- *	The kit is plaintext, and it names the records of one
- *	machine, so it sits at the machine-local path of
- *	VAULT-LAYOUT-4 and VAULT-LAYOUT-6. This step prints that
- *	path (PROG-ONESHOT-7).
- */
-static int
-step_kit(const struct state *st)
-{
-	char		 name[KIT_NAME_MAX];
-	char		 path[PATH_MAX];
-	char		*text = NULL;
-	uint32_t	 slot;
-	size_t		 len = 0;
-	unsigned int	 i;
-	int		 n, rv = -1;
-
-	if (vault_path(path, sizeof(path), st->vault, VAULT_FILE_KIT,
-	    NULL) != 0) {
-		warnx("%s: the path of the kit does not fit",
-		    st->vault);
-		goto out;
-	}
-	if ((text = malloc(KIT_MAX)) == NULL) {
-		warn("the kit");
-		goto out;
-	}
-
-	n = snprintf(text, KIT_MAX, "machine %s\n", st->arg->machine);
-	if (n < 0 || (size_t)n >= KIT_MAX) {
-		warnx("the kit: the text does not fit");
-		goto out;
-	}
-	len = (size_t)n;
-
-	for (i = 1; i <= st->config.count; i++) {
-		if (st->config.oracle[i - 1].retired)
-			continue;
-		n = snprintf(&text[len], KIT_MAX - len, "oracle %u %s\n", i,
-		    st->config.oracle[i - 1].url);
-		if (n < 0 || (size_t)n >= KIT_MAX - len) {
-			warnx("the kit: the text does not fit");
-			goto out;
-		}
-		len += (size_t)n;
-
-		/* One name of each slot, and one of the canary. */
-		for (slot = 0; slot <= st->arg->pool; slot++) {
-			if (kit_name(st, i, slot, slot == st->arg->pool,
-			    name, sizeof(name)) != 0)
-				goto out;
-			n = snprintf(&text[len], KIT_MAX - len,
-			    "record %u %s\n", i, name);
-			if (n < 0 || (size_t)n >= KIT_MAX - len) {
-				warnx("the kit: the text does not fit");
-				goto out;
-			}
-			len += (size_t)n;
-		}
-	}
-
-	if (vault_write(path, (const unsigned char *)text, len) != 0) {
-		warn("%s", path);
-		goto out;
-	}
-	printf("%s\n", path);
-	rv = 0;
-out:
-	free(text);
-	return rv;
-}
-
 int
 ceremony_create(const struct ceremony_create *arg)
 {
@@ -859,10 +687,6 @@ out:
 	explicit_bzero(st->idxkey, sizeof(st->idxkey));
 	explicit_bzero(st->pass, sizeof(st->pass));
 	st->passlen = 0;
-
-	/* CER-CREATE-9, after the erasure: the kit holds no secret. */
-	if (rv == 0)
-		rv = step_kit(st);
 
 	explicit_bzero(st, sizeof(*st));
 	free(st);

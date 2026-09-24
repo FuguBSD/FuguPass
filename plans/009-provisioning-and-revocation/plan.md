@@ -5,9 +5,9 @@
 Proposed. It waits on no other plan. It completes the quorum leg of the harness.
 
 Implements: REC-WIPE, TEST-HARNESS, CER-PROVISION. Implements: VAULT-INDEX,
-KEY-MASK. Implements: ORC-REVOKE without ORC-REVOKE-7 and ORC-REVOKE-9.
-Implements: ORC-PROVISION without ORC-PROVISION-3 and ORC-PROVISION-8.
-Implements: ORC-COUNTER without ORC-COUNTER-7.
+KEY-MASK. Implements: ORC-REVOKE without ORC-REVOKE-6, ORC-REVOKE-7 and
+ORC-REVOKE-9. Implements: ORC-PROVISION without ORC-PROVISION-3 and
+ORC-PROVISION-8. Implements: ORC-COUNTER without ORC-COUNTER-7.
 
 Of ORC-PROVISION, this plan lands ORC-PROVISION-6 and ORC-PROVISION-7, the list
 changes. Of VAULT-INDEX, this plan lands VAULT-INDEX-7, the retirement mark. It
@@ -60,9 +60,8 @@ its index (ORC-PROVISION-6, VAULT-CONFIG-6).
 **Revocation is two subcommands and one counter.** `fugupass revoke` derives the
 client keys of the named machine from the plate. It sends, per record at each
 chosen oracle, one wrong attempt at the counter `0xFFFFFFFF`, or one `set_pin`
-replacement (ORC-REVOKE-3, ORC-REVOKE-8). `fugupass kit` exports the kit of a
-machine (ORC-REVOKE-6). The counter exception lives in one function, and every
-other request refuses that value (ORC-COUNTER-5).
+replacement (ORC-REVOKE-3, ORC-REVOKE-8). The counter exception lives in one
+function, and every other request refuses that value (ORC-COUNTER-5).
 
 **A lock retires the machine name.** A record with the stored counter
 `0xFFFFFFFF` accepts no later `set_pin` (FuguOracle OPS-SET-2), so the lock
@@ -82,10 +81,10 @@ creates fresh key material, so no old mask returns (REC-WIPE-3).
 | File                           | Change                                                           |
 | ------------------------------ | ---------------------------------------------------------------- |
 | `src/ceremony.c`               | Machine provisioning, its variants, and the retired-name refusal |
-| `src/revoke.c`, `src/revoke.h` | The kit, the lock, the replacement                               |
+| `src/revoke.c`, `src/revoke.h` | The lock, the replacement                                        |
 | `src/vault.c`                  | The retirement mark of the machine registry                      |
 | `src/oracle.c`                 | The revocation counter exception                                 |
-| `src/fugupass.c`               | The `provision`, `revoke`, and `kit` subcommands                 |
+| `src/fugupass.c`               | The `provision` and `revoke` subcommands                         |
 | `src/fugupass/fugupass.1`      | The subcommands, the variants, the retired machine name          |
 | `tests/harness.d/provision`    | The legs below                                                   |
 | `spec/STATUS.md`               | The cited units                                                  |
@@ -101,7 +100,7 @@ The harness holds, against the 2-of-3 topology of TEST-HARNESS-5:
 - An added fourth oracle takes position 4, and the loop enrolls exactly the new
   pairs (CER-PROVISION-14).
 - A retirement of position 3 deletes its wrap files, its canary seal, and its
-  index wrap, and the report names the kit (CER-PROVISION-16).
+  index wrap, and the report names the `kit` subcommand (CER-PROVISION-16).
 - A threshold change from 2 to 3 leaves every old wrap useless and every new
   reveal working on three oracles. An interrupted change leaves the marker, and
   the re-run removes it (CER-PROVISION-15).
@@ -112,8 +111,6 @@ The harness holds, against the 2-of-3 topology of TEST-HARNESS-5:
   (ORC-REVOKE-10).
 - A wiped record at one oracle blocks no reveal while two records remain, and
   the ceremony restores the third (REC-WIPE-6).
-- The kit of a machine names the record files that the oracle store holds
-  (ORC-REVOKE-6).
 - The lock retires the machine name at that oracle, the index registry marks it,
   and the report says so (ORC-REVOKE-11, VAULT-INDEX-7).
 - A provisioning run under a retired name refuses, and the refusal names a new
@@ -133,4 +130,5 @@ The harness holds, against the 2-of-3 topology of TEST-HARNESS-5:
 
 ## What this plan does not do
 
-It restores no data from the plate: plan 010 does. It writes no runbook.
+It restores no data from the plate: plan 010 does. It writes no runbook. It
+produces no kit: the `kit` subcommand exists (ORC-REVOKE-6).

@@ -15,7 +15,7 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-# The creation leg (CER-CREATE-2 to CER-CREATE-9, PROG-ONESHOT-4).
+# The creation leg (CER-CREATE-2 to CER-CREATE-8, PROG-ONESHOT-4).
 #
 # The ceremony reads the master from the scan double, and it reads
 # the passphrase twice from the console of the guest. The leg drives
@@ -115,9 +115,8 @@ return sub ($t)
 	#
 	# The whole ceremony.
 	#
-	my $vault  = $t->ceremony_vault('main');
-	my @before = $t->records;
-	my $run    = $t->create($vault);
+	my $vault = $t->ceremony_vault('main');
+	my $run   = $t->create($vault);
 	is( $run->{exit}, 0, 'the creation ceremony passes' )
 	    or diag( $run->{error} );
 
@@ -161,31 +160,6 @@ return sub ($t)
 	is( scalar $t->search( $dir, 'candidate-mnemonic' ),
 		0, 'no file of the vault holds a slot plaintext '
 		    . '(VAULT-SEAL-1)' );
-
-	# The revocation kit (CER-CREATE-9, ORC-REVOKE-6).
-	my $kit = $t->read_file("$dir/machine/revocation-kit");
-	like( $run->{out}, qr{\Q$dir/machine/revocation-kit\E},
-		'the report names the kit file (PROG-ONESHOT-7)' );
-	like( $kit, qr/^machine \Q$vault->{machine}\E$/m,
-		'the kit names this machine (ORC-REVOKE-6)' );
-
-	my @record = $kit =~ /^record 1 ([0-9a-f]{64}\.pin)$/mg;
-	is( scalar @record, 65,
-		'the kit names 65 record files of the oracle: the 64 slots '
-		    . 'and the canary (ORC-REVOKE-6)' );
-	my %once = map { $_ => 1 } @record;
-	is( scalar keys %once, 65,
-		'each record file name of the kit is a name of its own' );
-
-	# The names must be the record files that the oracle now
-	# holds. The two sets before and after the ceremony give the
-	# records of it, and a wrong hash input in the kit names 65
-	# unique files that no store holds.
-	my %before = map { $_ => 1 } @before;
-	my @fresh  = sort grep { !$before{$_} } $t->records;
-	is_deeply( \@fresh, [ sort @record ],
-		'the kit names the record files that the ceremony stored '
-		    . 'at the oracle (ORC-REVOKE-6)' );
 
 	#
 	# The mistyped second passphrase (CER-CREATE-4).
@@ -231,8 +205,6 @@ return sub ($t)
 		    . 'the refused one, and no file of it' );
 	is( $t->file_exists("$slow->{dir}/index"),
 		0, 'the stopped ceremony wrote no index' );
-	is( $t->file_exists("$slow->{dir}/machine/revocation-kit"),
-		0, 'the stopped ceremony wrote no kit' );
 
 	# The counter of that one record, above the stored counter of
 	# the oracle. Every other line of the file stays, so each

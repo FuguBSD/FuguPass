@@ -20,7 +20,7 @@
  * plate scan alone (CER-CREATE-1, KEY-MASTER-3).
  *
  * ceremony_create() is vault creation, the first ceremony. It runs
- * the nine steps of CER-CREATE in rule order, and ceremony.c states
+ * the eight steps of CER-CREATE in rule order, and ceremony.c states
  * the step of each function.
  *
  * ceremony_refill() is the pool refill. It extends the free slots of
@@ -36,8 +36,7 @@
  * The slots of a new pool, and the low watermark of it. The pool
  * size is tunable, and CEREMONY_POOL_SIZE is the default of it
  * (ENTRY-POOL-2). CEREMONY_POOL_MAX is the bound of the tunable,
- * because the index text and the revocation kit of a ceremony take
- * one row of each slot.
+ * because the index text of a ceremony takes one row of each slot.
  */
 #define CEREMONY_POOL_SIZE	64	/* ENTRY-POOL-2 */
 #define CEREMONY_POOL_MAX	255	/* ENTRY-POOL-2 */
@@ -61,7 +60,7 @@ struct ceremony_create {
 /*
  * ceremony_create(arg):
  *	The vault creation ceremony, in the vault directory of arg
- *	(CER-CREATE). The call gives 0 when each of the nine steps
+ *	(CER-CREATE). The call gives 0 when each of the eight steps
  *	passes, and -1 when one step fails.
  *
  *	Each oracle value of arg holds one position of the ordered
@@ -82,8 +81,7 @@ struct ceremony_create {
  *
  *	The call erases M, root, K_idx, every K_e, every share, and
  *	every mask before it exits, on every path (CER-CREATE-8,
- *	SEC-MEMORY-5). The kit holds no secret, so the export of it
- *	follows that erasure (CER-CREATE-9).
+ *	SEC-MEMORY-5).
  */
 int	ceremony_create(const struct ceremony_create *);
 

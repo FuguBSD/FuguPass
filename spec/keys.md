@@ -126,9 +126,10 @@ oracle and no passphrase. The entry file name is the lowercase hex of `H(K_e)`
   set ([VAULT-LAYOUT](vault.md#vault-layout)), and must not move to another
   machine.
 - **KEY-DEVICE-3** — The machine name is a user-chosen label. The config file
-  and the revocation kit record it. The machine name is not secret. The machine
-  name holds lowercase ASCII letters, digits, and hyphens only, with 1 to 64
-  bytes. A retired name is not reused ([ORC-REVOKE](oracle.md#orc-revoke)).
+  records it, and the revocation kit carries it. The machine name is not secret.
+  The machine name holds lowercase ASCII letters, digits, and hyphens only, with
+  1 to 64 bytes. A retired name is not reused
+  ([ORC-REVOKE](oracle.md#orc-revoke)).
 - **KEY-DEVICE-4** — The plate regenerates `X` for any machine name.
 
 KEY-DEVICE-4 carries provisioning and revocation (D-10). A plate ceremony

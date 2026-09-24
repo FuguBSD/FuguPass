@@ -35,9 +35,10 @@
  * over two tables (PROG-ONESHOT-4). The table below holds the
  * subcommands of this file: the vault creation, the canary
  * re-enrollment, the passphrase change, the resume of an incomplete
- * change, and the pool refill. commands_table of commands.h holds
- * the six commands of the session, and commands_oneshot() runs one
- * of them (PROG-ONESHOT-1, PROG-ONESHOT-2). A name that neither
+ * change, the pool refill, and the revocation kit. commands_table of
+ * commands.h holds the six commands of the session, and
+ * commands_oneshot() runs one of them (PROG-ONESHOT-1,
+ * PROG-ONESHOT-2). A name that neither
  * table holds gives the usage and the status 2. A run with no
  * subcommand starts the interactive session of iface.h, and that
  * session runs each command of the interface process
@@ -71,8 +72,10 @@
 #include "derive.h"
 #include "fugupass.h"
 #include "iface.h"
+#include "revoke.h"
 #include "sandbox.h"
 #include "session.h"
+#include "vault.h"
 
 /* The vault directory of a run without the -d option, under HOME. */
 #define VAULT_DIR	".fugupass"
@@ -89,6 +92,7 @@ static int	 cmd_canary(int, char *[], const char *);
 static int	 cmd_passwd(int, char *[], const char *);
 static int	 cmd_resume(int, char *[], const char *);
 static int	 cmd_refill(int, char *[], const char *);
+static int	 cmd_kit(int, char *[], const char *);
 static void	 usage(void);
 static int	 vault_dir(const char *, char *, size_t);
 
@@ -103,7 +107,8 @@ static const struct subcommand commands[] = {
 	{ "canary",	"oracle", cmd_canary },
 	{ "passwd",	"", cmd_passwd },
 	{ "resume",	"", cmd_resume },
-	{ "refill",	"", cmd_refill }
+	{ "refill",	"", cmd_refill },
+	{ "kit",	"[-m machine]", cmd_kit }
 };
 
 /*
@@ -170,7 +175,7 @@ vault_dir(const char *opt, char *buf, size_t bufsize)
  * cmd_create(argc, argv, vault):
  *	The vault creation ceremony of the vault directory vault
  *	(CER-CREATE). This function reads the command line of the
- *	subcommand, and ceremony.c runs the nine steps
+ *	subcommand, and ceremony.c runs the eight steps
  *	(PROG-ONESHOT-5, PROG-ONESHOT-6).
  *
  *	The threshold comes from -k, the machine name from -m, and
@@ -362,6 +367,51 @@ cmd_refill(int argc, char *argv[], const char *vault)
 	if (argc != 1)
 		usage();
 	return ceremony_refill(vault) == 0 ? 0 : 1;
+}
+
+/*
+ * cmd_kit(argc, argv, vault):
+ *	The revocation kit of one machine of the vault directory
+ *	vault, on the standard output (ORC-REVOKE-6, PROG-ONESHOT-7).
+ *	The subcommand opens no session and reads no passphrase, and
+ *	revoke.c derives each line of the kit.
+ *
+ *	A run without the -m option takes this machine, from the
+ *	machine-local set. The -m option names a machine that is
+ *	lost, and the kit of it takes a plate scan (ORC-REVOKE-4).
+ *	The record set of that machine is then each slot of the
+ *	vault, from the index of the shared set (revoke.h).
+ *
+ *	getopt(3) already ran over the options of the program, so
+ *	this second pass resets it.
+ */
+static int
+cmd_kit(int argc, char *argv[], const char *vault)
+{
+	const char	*machine = NULL;
+	int		 ch;
+
+	optreset = 1;
+	optind = 1;
+	while ((ch = getopt(argc, argv, "m:")) != -1) {
+		switch (ch) {
+		case 'm':
+			machine = optarg;
+			break;
+		default:
+			usage();
+		}
+	}
+	argc -= optind;
+	if (argc != 0)
+		usage();
+	if (machine != NULL &&
+	    derive_machine_check(machine, strlen(machine)) != 0) {
+		warnx("the machine name takes lowercase letters, digits "
+		    "and hyphens, 1 to %d bytes", DERIVE_MACHINE_MAX);
+		usage();
+	}
+	return revoke_kit(vault, machine) == 0 ? 0 : 1;
 }
 
 int

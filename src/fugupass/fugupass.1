@@ -46,6 +46,10 @@
 .Cm refill
 .Nm
 .Op Fl d Ar directory
+.Cm kit
+.Op Fl m Ar machine
+.Nm
+.Op Fl d Ar directory
 .Cm ls
 .Nm
 .Op Fl d Ar directory
@@ -107,9 +111,10 @@ and the default is 300 seconds.
 Every subcommand but
 .Cm create ,
 .Cm passwd ,
-.Cm resume
-and
+.Cm resume ,
 .Cm refill
+and
+.Cm kit
 opens a session of the vault first.
 The session reads the passphrase once.
 It takes the quorum of
@@ -163,7 +168,7 @@ passphrase.
 It then enrolls a canary record at each oracle, and it fills the
 pool of slots.
 Each slot takes one record at each oracle.
-The ceremony ends with the index and the revocation kit.
+The ceremony ends with the index.
 .Pp
 Each
 .Ar oracle
@@ -181,7 +186,7 @@ arguments.
 The name of this machine.
 The name holds lowercase ASCII letters, digits, and hyphens, 1 to 64
 bytes.
-The config file and the revocation kit record it.
+The config file records it.
 .It Fl r Ar rounds
 The round count of
 .Xr bcrypt_pbkdf 3 .
@@ -210,15 +215,7 @@ The ceremony writes these files of the vault directory: the device
 factor, the config file, the counters file, one canary seal of each
 oracle, and one index wrap of each oracle.
 It writes one sealed file of each slot of the pool, one wrap of each
-slot at each oracle, the index, and the revocation kit.
-.Pp
-The revocation kit is a plaintext file.
-It names this machine, each oracle of the set, and the record file
-name of each record of this machine at that oracle.
-The kit holds no secret.
-An operator of a self-hosted oracle needs a record file name to
-delete that record.
-The subcommand prints the path of the kit on the standard output.
+slot at each oracle, and the index.
 .It Cm canary Ar oracle
 Enroll the canary record of one oracle again.
 .Ar oracle
@@ -319,6 +316,54 @@ The ceremony refuses to start while the change marker exists, and
 the report names the
 .Cm resume
 subcommand.
+.It Cm kit Op Fl m Ar machine
+Print the revocation kit of one machine on the standard output.
+The kit names the machine, each live oracle of the set, and the
+record file name of each record of that machine at that oracle.
+An operator of a self-hosted oracle needs a record file name to
+delete that record.
+The kit holds no secret.
+.Pp
+The first line holds the word
+.Dq machine ,
+one space, and the machine name.
+Each live oracle then takes one line of the word
+.Dq oracle ,
+its position, and its URL.
+One line of the word
+.Dq record ,
+the position, and the record file name follows for each record of
+the machine at that oracle, and the canary record comes last.
+.Pp
+The subcommand derives the kit at each run, and no file of the
+vault holds a kit.
+A saved copy of the kit names no record of a later refill, so
+derive the kit again before a revocation.
+.Pp
+A run without the
+.Fl m
+option prints the kit of this machine.
+It reads the config file, the device factor, and the wrap files of
+this machine, so it opens no session and it reads no passphrase.
+Each wrap file names one record of this machine, so the kit holds
+every slot of every refill on this machine.
+.Bl -tag -width Ds
+.It Fl m Ar machine
+Print the kit of the machine
+.Ar machine ,
+for a machine that is lost.
+The subcommand takes the master from a plate scan of
+.Xr fugupass-scan 1 ,
+it derives the device factor of that name, and it writes no file.
+It opens the index of the vault under the index key of that plate.
+The next free slot index of the index bounds the kit.
+The kit of a named machine lists one record for each slot of the
+vault.
+A slot that the machine never enrolled names no record file at the
+oracle.
+A plate of another vault does not open the index, and the
+subcommand stops with a report.
+.El
 .It Cm ls
 Print the name of each entry of the index, one name on each line.
 The subcommand reads the open index, and it sends no entry request.
@@ -445,7 +490,7 @@ The home directory of the default vault directory.
 .Sh FILES
 The first path below is the default vault directory, and each other
 path sits inside the vault directory.
-.Bl -tag -width "machine/revocation-kit" -compact
+.Bl -tag -width "machine/wrap.index.i" -compact
 .It Pa ~/.fugupass
 the vault directory of a run without the
 .Fl d
@@ -463,8 +508,6 @@ the config file of this machine, plaintext
 the last counter of each record of this machine
 .It Pa machine/factor
 the device factor of this machine
-.It Pa machine/revocation-kit
-the revocation kit of this machine, plaintext
 .It Pa machine/wrap.index.\& Ns Ar i
 this machine's index wrap of oracle
 .Ar i

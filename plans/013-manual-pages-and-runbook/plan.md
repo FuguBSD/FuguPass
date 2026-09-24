@@ -44,6 +44,10 @@ holds the transport risks that TLS mitigates (ORC-PROVISION-3), the operator
 paths (ORC-REVOKE-7), and the restore residual of the oracle (ORC-REVOKE-9).
 Each page points to the other for the rest.
 
+**ORC-REVOKE-7 gains one sentence.** A saved copy of the kit is a snapshot, so
+the operator regenerates the kit before a revocation. `fugupass(7)` holds that
+sentence with the operator paths.
+
 **The detection story rests on FuguOracle alone.** The pages promise one log
 line per request with the outcome class and a prominent wipe line, and nothing
 more (SEC-DETECT-1, SEC-DETECT-2). They state that detection is manual and that
