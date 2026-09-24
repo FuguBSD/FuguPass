@@ -178,8 +178,8 @@ run these steps in rule order.
   covers exactly the affected pairs. The shares re-derive from the plate, so
   nothing is lost ([KEY-SHARE](keys.md#key-share)). At a retirement, the
   ceremony report must direct the owner to destroy this vault's records at the
-  departing oracle. The owner uses the revocation kit
-  ([ORC-REVOKE](oracle.md#orc-revoke)) before the config discards the URL.
+  departing oracle. The owner derives the revocation kit
+  ([ORC-REVOKE](oracle.md#orc-revoke)) to name those records.
 - **CER-PROVISION-17** — A full re-enrollment run re-enrolls every record of
   this machine under one passphrase. It runs the loop of CER-PROVISION-7 over
   every slot and every live oracle, with a fresh `set_pin` per record and every

@@ -318,8 +318,9 @@ the report names the
 subcommand.
 .It Cm kit Op Fl m Ar machine
 Print the revocation kit of one machine on the standard output.
-The kit names the machine, each live oracle of the set, and the
-record file name of each record of that machine at that oracle.
+The kit names the machine, each position of the config, live or
+retired, and the record file name of each record of that machine
+at that position.
 An operator of a self-hosted oracle needs a record file name to
 delete that record.
 The kit holds no secret.
@@ -327,13 +328,17 @@ The kit holds no secret.
 The first line holds the word
 .Dq machine ,
 one space, and the machine name.
-Each live oracle then takes one line of the word
+Each position then takes one line of the word
 .Dq oracle ,
-its position, and its URL.
+its index, and its URL.
+A retired position takes the word
+.Dq retired
+in place of its URL, because the records of the machine stay at
+the departing oracle.
 One line of the word
 .Dq record ,
 the position, and the record file name follows for each record of
-the machine at that oracle, and the canary record comes last.
+the machine at that position, and the canary record comes last.
 .Pp
 The subcommand derives the kit at each run, and no file of the
 vault holds a kit.

@@ -25,6 +25,10 @@
 # the records of that ceremony at that oracle, and the kit must
 # name each one of them under that oracle, and no other one.
 #
+# A copy of the vault with one retired position, and no wrap of it,
+# gives the kit after a retirement. The kit must name the records
+# of that position too, under the word retired.
+#
 # A second vault of another machine name takes the same plate and a
 # copy of the index, so the kit of the first machine derives there
 # from the plate and the index alone. That kit must match the kit
@@ -174,9 +178,9 @@ return sub ($t)
 	# grow by the slot count of the refill at each oracle. The
 	# mutation: a kit that takes the slot set from the pool size
 	# of the config names the 64 slots of the creation alone.
+	my $full  = fresh( $start, $refilled );
 	my $again = $t->program( '-d', $dir, 'kit' );
-	check_kit( $t, 'after the refill', $again, $vault,
-		fresh( $start, $refilled ) );
+	check_kit( $t, 'after the refill', $again, $vault, $full );
 
 	my $listed = kit_records( $again->{out} );
 	for my $oracle ( 1 .. $ORACLES ) {
@@ -190,6 +194,54 @@ return sub ($t)
 		$POOL * $ORACLES,
 		'the kit grew by the slot count of the refill times the '
 		    . 'oracle count (ORC-REVOKE-6)' );
+
+	#
+	# The kit after a retirement (ORC-PROVISION-6,
+	# CER-PROVISION-16).
+	#
+	# A retirement writes the word retired at the position, and
+	# it deletes the wrap files, the canary seal and the index
+	# wrap of that position. The records of this machine stay at
+	# the departing oracle, and the owner destroys them with the
+	# kit, so the kit names each one of them under that position.
+	# The leg builds that state in a copy of the vault. The copy
+	# holds the factor of this machine, so the record names of
+	# the copy are the record names of this machine.
+	#
+	# The mutations: a kit that steps over a retired position
+	# names no record of position 3. A kit that takes the slot
+	# set of a position from the wraps of that position alone
+	# names no record of it either, because the copy holds no
+	# wrap of position 3.
+	my $copy = "$dir-retired";
+	$t->copy_dir( $dir, $copy );
+	my @config = split /\n/, $t->read_file("$copy/machine/config");
+	s/\Aoracle-3: .*\z/oracle-3: retired/ for @config;
+	$t->write_file( "$copy/machine/config", @config );
+	$t->remove_file( map { "$copy/machine/$_" }
+		grep { /\.3\z/ } $t->names("$copy/machine") );
+
+	my $gone = $t->program( '-d', $copy, 'kit' );
+	is( $gone->{exit}, 0,
+		'the kit of a vault with a retired position passes' )
+	    or diag( $gone->{error} );
+	like( $gone->{out}, qr/^oracle 3 retired$/m,
+		'the kit names the retired position 3 with the word retired '
+		    . 'in place of its URL (ORC-REVOKE-6)' );
+	my $rest = kit_records( $gone->{out} );
+	is_deeply( $rest->{3}, $full->{3},
+		'the record lines of the retired position 3 name the records '
+		    . 'of this machine at the departing oracle, and no other '
+		    . 'one (ORC-REVOKE-6, CER-PROVISION-16)' );
+	for my $oracle ( 1 .. 2 ) {
+		my $url = $t->url($oracle);
+		like( $gone->{out}, qr/^oracle $oracle \Q$url\E$/m,
+			"the kit names the live oracle $oracle and its URL "
+			    . 'after the retirement' );
+		is_deeply( $rest->{$oracle}, $full->{$oracle},
+			"the record lines of oracle $oracle are unchanged "
+			    . 'after the retirement (ORC-REVOKE-6)' );
+	}
 
 	#
 	# The kit of a named machine, from the plate of a second

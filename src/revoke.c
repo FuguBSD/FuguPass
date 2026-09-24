@@ -34,15 +34,18 @@
  * set, and the name of this machine. kit_factor() reads the factor
  * file, and kit_wraps() reads the wrap files. One wrap file names
  * one record of this machine at one oracle (KEY-MASK-4), so the
- * wraps give the record set of this machine, and every slot of
- * every refill stands in it. kit_plate() takes a plate scan in
- * place of the two files, and it derives the factor of a named
- * machine from the master (KEY-DEVICE-4, ORC-REVOKE-4). kit_index()
- * then opens the index of the shared set under K_idx, from root
- * (VAULT-INDEX-4), and the next free slot index of it bounds the
- * kit. Every refill of every machine raises that index, so the
- * kit names each slot of the vault, and no constant bounds it
- * (CER-REFILL-2).
+ * wraps give the slot set of this machine, and every slot of
+ * every refill stands in it. A retirement deletes the wraps of
+ * its position, and the records of this machine stay at the
+ * departing oracle (CER-PROVISION-16), so the kit lists that set
+ * under each position, live or retired. kit_plate() takes a
+ * plate scan in place of the two files, and it derives the factor
+ * of a named machine from the master (KEY-DEVICE-4,
+ * ORC-REVOKE-4). kit_index() then opens the index of the shared
+ * set under K_idx, from root (VAULT-INDEX-4), and the next free
+ * slot index of it bounds the kit. Every refill of every machine
+ * raises that index, so the kit names each slot of the vault, and
+ * no constant bounds it (CER-REFILL-2).
  *
  * The device factor of a named machine belongs to that machine, so
  * this file writes it to no file (KEY-DEVICE-2). The master, root,
@@ -86,8 +89,8 @@
 /* The record file name of one record: the hex, and the suffix. */
 #define KIT_NAME_MAX	(2 * SHA256_DIGEST_LENGTH + sizeof(".pin"))
 
-/* The first allocation of the record list, in records. */
-#define RECORD_MIN	64
+/* The first allocation of the slot list, in slots. */
+#define SLOT_MIN	64
 
 /*
  * The bytes of the sealed index, and one more. A count of this
@@ -96,28 +99,22 @@
  */
 #define INDEX_RAW_MAX	(SESSION_INDEX_MAX + SEAL_OVERHEAD + 1)
 
-/* One record of the wrap files: a slot index at an oracle index. */
-struct record {
-	uint32_t	 slot;
-	unsigned int	 oracle;
-};
-
 /*
  * The state of one kit. machine is NULL for this machine, and the
- * name of a machine that is lost otherwise. record holds the
- * records of this machine in the order of the print. slots is the
- * next free slot index of the vault, from the pool-next line of
- * the index, and haveslots marks the read of that line
- * (VAULT-INDEX-2).
+ * name of a machine that is lost otherwise. slot holds the slot
+ * index of each wrap file of this machine, in the order of the
+ * print and with no repeat. slots is the next free slot index of
+ * the vault, from the pool-next line of the index, and haveslots
+ * marks the read of that line (VAULT-INDEX-2).
  */
 struct kit {
 	const char		*vault;
 	const char		*machine;
 	struct vault_config	*config;
 	unsigned char		 factor[DERIVE_KEYLEN];
-	struct record		*record;
-	size_t			 recordlen;
-	size_t			 recordmax;
+	uint32_t		*slot;
+	size_t			 slotlen;
+	size_t			 slotmax;
 	uint32_t		 slots;
 	int			 haveslots;
 };
@@ -125,8 +122,8 @@ struct kit {
 static void	 hex(const unsigned char *, size_t, char *);
 static int	 kit_config(struct kit *);
 static int	 kit_factor(struct kit *);
-static int	 record_add(struct kit *, uint32_t, unsigned int);
-static int	 record_cmp(const void *, const void *);
+static int	 slot_add(struct kit *, uint32_t);
+static int	 slot_cmp(const void *, const void *);
 static int	 kit_wraps(struct kit *);
 static int	 kit_index_line(const struct vault_line *, void *);
 static int	 kit_index(struct kit *, const unsigned char *);
@@ -235,61 +232,59 @@ out:
 }
 
 /*
- * record_add(k, slot, oracle):
- *	Add one record to the list of the state.
+ * slot_add(k, slot):
+ *	Add one slot index to the list of the state.
  */
 static int
-record_add(struct kit *k, uint32_t slot, unsigned int oracle)
+slot_add(struct kit *k, uint32_t slot)
 {
-	struct record	*at;
+	uint32_t	*at;
 	size_t		 max;
 
-	if (k->recordlen == k->recordmax) {
-		max = k->recordmax == 0 ? RECORD_MIN : 2 * k->recordmax;
-		if ((at = reallocarray(k->record, max, sizeof(*at))) == NULL) {
+	if (k->slotlen == k->slotmax) {
+		max = k->slotmax == 0 ? SLOT_MIN : 2 * k->slotmax;
+		if ((at = reallocarray(k->slot, max, sizeof(*at))) == NULL) {
 			warn("the kit");
 			return -1;
 		}
-		k->record = at;
-		k->recordmax = max;
+		k->slot = at;
+		k->slotmax = max;
 	}
-	k->record[k->recordlen].slot = slot;
-	k->record[k->recordlen].oracle = oracle;
-	k->recordlen++;
+	k->slot[k->slotlen++] = slot;
 	return 0;
 }
 
 /*
- * record_cmp(a, b):
- *	The order of the print: the oracle index, then the slot
- *	index.
+ * slot_cmp(a, b):
+ *	The order of the print: the slot index.
  */
 static int
-record_cmp(const void *a, const void *b)
+slot_cmp(const void *a, const void *b)
 {
-	const struct record	*x = a, *y = b;
+	const uint32_t	*x = a, *y = b;
 
-	if (x->oracle != y->oracle)
-		return x->oracle < y->oracle ? -1 : 1;
-	if (x->slot != y->slot)
-		return x->slot < y->slot ? -1 : 1;
+	if (*x != *y)
+		return *x < *y ? -1 : 1;
 	return 0;
 }
 
 /*
  * kit_wraps(k):
- *	The records of this machine, from the wrap files of the
+ *	The slot set of this machine, from the wrap files of the
  *	machine-local set (KEY-MASK-4, VAULT-LAYOUT-4). One wrap
  *	names one record of one slot at one oracle, and a ceremony
  *	writes the wrap of each record that it enrolls
  *	(CER-CREATE-6, CER-REFILL-2). The wraps therefore name every
- *	slot of every ceremony of this machine.
+ *	slot of every ceremony of this machine. A retirement deletes
+ *	the wraps of its position (CER-PROVISION-16), so the set
+ *	takes the wraps of every position, and the print lists it
+ *	under each position.
  *
  *	The walk reads the directory, and it takes the two indexes
  *	of a name. It asks vault_path() for the path of that pair,
  *	and a name that differs from the path names another file.
  *	The layout therefore stays in vault.c. The sort gives the
- *	order of the print, and each wrap gives one record.
+ *	order of the print, and one slot of many wraps stands once.
  */
 static int
 kit_wraps(struct kit *k)
@@ -301,6 +296,7 @@ kit_wraps(struct kit *k)
 	struct dirent	*ent;
 	const char	*head, *tail;
 	DIR		*dp;
+	size_t		 i, keep;
 	uint32_t	 slot, oracle;
 	int		 n, rv = -1;
 
@@ -335,11 +331,17 @@ kit_wraps(struct kit *k)
 		if (n < 0 || (size_t)n >= sizeof(name) ||
 		    strcmp(name, path) != 0)
 			continue;
-		if (record_add(k, slot, (unsigned int)oracle) != 0)
+		if (slot_add(k, slot) != 0)
 			goto out;
 	}
-	if (k->recordlen > 0)
-		qsort(k->record, k->recordlen, sizeof(*k->record), record_cmp);
+	if (k->slotlen > 0) {
+		qsort(k->slot, k->slotlen, sizeof(*k->slot), slot_cmp);
+		for (i = 1, keep = 1; i < k->slotlen; i++) {
+			if (k->slot[i] != k->slot[keep - 1])
+				k->slot[keep++] = k->slot[i];
+		}
+		k->slotlen = keep;
+	}
 	rv = 0;
 out:
 	closedir(dp);
@@ -597,22 +599,24 @@ kit_line(const struct kit *k, unsigned int oracle, uint32_t slot, int canary)
 /*
  * kit_print(k):
  *	The lines of the kit, on the standard output (ORC-REVOKE-6,
- *	PROG-ONESHOT-3). The first line names the machine. Each live
- *	oracle then takes one line of its index and its URL, one
+ *	PROG-ONESHOT-3). The first line names the machine. Each
+ *	position then takes one line of its index and its URL, one
  *	line of each record of the machine there in slot order, and
- *	the canary line last (ORC-RECORDS-1, ORC-RECORDS-2).
+ *	the canary line last (ORC-RECORDS-1, ORC-RECORDS-2). A
+ *	retired position takes the word retired in place of its URL.
+ *	The records of the machine stay at the departing oracle, and
+ *	the owner destroys them with the kit (ORC-PROVISION-6,
+ *	CER-PROVISION-16).
  *
- *	The kit of this machine takes the records of the wrap files,
- *	and the kit of a named machine takes each slot index below
- *	the next free slot index of the vault (kit_index). A wrap of
- *	a retired position names no live oracle, and the print steps
- *	over it (ORC-PROVISION-9).
+ *	The kit of this machine takes the slot set of the wrap
+ *	files, and the kit of a named machine takes each slot index
+ *	below the next free slot index of the vault (kit_index).
  */
 static int
 kit_print(const struct kit *k)
 {
 	const char	*machine;
-	size_t		 at = 0;
+	size_t		 at;
 	uint32_t	 slot;
 	unsigned int	 i;
 
@@ -620,19 +624,18 @@ kit_print(const struct kit *k)
 	printf("machine %s\n", machine);
 	for (i = 1; i <= k->config->count; i++) {
 		if (k->config->oracle[i - 1].retired)
-			continue;
-		printf("oracle %u %s\n", i, k->config->oracle[i - 1].url);
+			printf("oracle %u retired\n", i);
+		else
+			printf("oracle %u %s\n", i,
+			    k->config->oracle[i - 1].url);
 		if (k->machine != NULL) {
 			for (slot = 0; slot < k->slots; slot++) {
 				if (kit_line(k, i, slot, 0) != 0)
 					return -1;
 			}
 		} else {
-			while (at < k->recordlen && k->record[at].oracle < i)
-				at++;
-			for (; at < k->recordlen && k->record[at].oracle == i;
-			    at++) {
-				if (kit_line(k, i, k->record[at].slot, 0) != 0)
+			for (at = 0; at < k->slotlen; at++) {
+				if (kit_line(k, i, k->slot[at], 0) != 0)
 					return -1;
 			}
 		}
@@ -683,7 +686,7 @@ out:
 	 * stays in memory (KEY-DEVICE-2, SEC-MEMORY-5).
 	 */
 	explicit_bzero(k->factor, sizeof(k->factor));
-	free(k->record);
+	free(k->slot);
 	free(k->config);
 	free(k);
 	return rv;
