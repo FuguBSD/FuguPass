@@ -33,13 +33,15 @@
  *
  * The frame dispatches on the first argument after the options,
  * over two tables (PROG-ONESHOT-4). The table below holds the
- * subcommands of this file: the vault creation and the canary
- * re-enrollment. commands_table of commands.h holds the six
- * commands of the session, and commands_oneshot() runs one of them
- * (PROG-ONESHOT-1, PROG-ONESHOT-2). A name that neither table holds
- * gives the usage and the status 2. A run with no subcommand starts
- * the interactive session of iface.h, and that session runs each
- * command of the interface process (PROG-IFACE-1).
+ * subcommands of this file: the vault creation, the canary
+ * re-enrollment, the passphrase change, the resume of an incomplete
+ * change, and the pool refill. commands_table of commands.h holds
+ * the six commands of the session, and commands_oneshot() runs one
+ * of them (PROG-ONESHOT-1, PROG-ONESHOT-2). A name that neither
+ * table holds gives the usage and the status 2. A run with no
+ * subcommand starts the interactive session of iface.h, and that
+ * session runs each command of the interface process
+ * (PROG-IFACE-1).
  *
  * A subcommand reads the options and the arguments of its own
  * command line, and ceremony.c holds the steps of a ceremony
@@ -64,6 +66,7 @@
 #include <unistd.h>
 
 #include "ceremony.h"
+#include "change.h"
 #include "commands.h"
 #include "derive.h"
 #include "fugupass.h"
@@ -83,6 +86,9 @@ struct subcommand {
 
 static int	 cmd_create(int, char *[], const char *);
 static int	 cmd_canary(int, char *[], const char *);
+static int	 cmd_passwd(int, char *[], const char *);
+static int	 cmd_resume(int, char *[], const char *);
+static int	 cmd_refill(int, char *[], const char *);
 static void	 usage(void);
 static int	 vault_dir(const char *, char *, size_t);
 
@@ -94,7 +100,10 @@ static int	 vault_dir(const char *, char *, size_t);
 static const struct subcommand commands[] = {
 	{ "create",	"-k threshold -m machine -r rounds [-p slots] "
 	    "oracle ...", cmd_create },
-	{ "canary",	"oracle", cmd_canary }
+	{ "canary",	"oracle", cmd_canary },
+	{ "passwd",	"", cmd_passwd },
+	{ "resume",	"", cmd_resume },
+	{ "refill",	"", cmd_refill }
 };
 
 /*
@@ -110,8 +119,10 @@ usage(void)
 	size_t				 i;
 
 	for (i = 0; i < nitems(commands); i++) {
-		fprintf(stderr, "%s %s [-d directory] %s %s\n", lead,
-		    getprogname(), commands[i].name, commands[i].args);
+		fprintf(stderr, "%s %s [-d directory] %s%s%s\n", lead,
+		    getprogname(), commands[i].name,
+		    commands[i].args[0] == '\0' ? "" : " ",
+		    commands[i].args);
 		lead = "      ";
 	}
 	for (c = commands_table; c->name != NULL; c++) {
@@ -291,6 +302,65 @@ cmd_canary(int argc, char *argv[], const char *vault)
 	rv = session_canary(s, oracle);
 	session_close(s);
 	return rv == 0 ? 0 : 1;
+}
+
+/*
+ * cmd_passwd(argc, argv, vault):
+ *	The passphrase change of the vault directory vault
+ *	(ORC-ENROLL-4, PROG-ONESHOT-4). The subcommand takes no
+ *	option and no argument, and change.c runs each step.
+ *
+ *	The change takes no master, so it reads no plate. It reads
+ *	the old passphrase once, and the new passphrase twice
+ *	(ORC-ENROLL-8). An incomplete change leaves the marker, and
+ *	cmd_resume() completes it (ORC-ENROLL-10).
+ */
+static int
+cmd_passwd(int argc, char *argv[], const char *vault)
+{
+	(void)argv;
+	if (argc != 1)
+		usage();
+	return change_passphrase(vault) == 0 ? 0 : 1;
+}
+
+/*
+ * cmd_resume(argc, argv, vault):
+ *	The rest of an incomplete passphrase change of the vault
+ *	directory vault (ORC-ENROLL-10, PROG-ONESHOT-4). The
+ *	subcommand takes no option and no argument.
+ *
+ *	The marker of the change splits the records of this machine,
+ *	and change.c holds that rule. A vault that holds no marker
+ *	gives the status 1.
+ */
+static int
+cmd_resume(int argc, char *argv[], const char *vault)
+{
+	(void)argv;
+	if (argc != 1)
+		usage();
+	return change_resume(vault) == 0 ? 0 : 1;
+}
+
+/*
+ * cmd_refill(argc, argv, vault):
+ *	The pool refill ceremony of the vault directory vault
+ *	(CER-REFILL, PROG-ONESHOT-4). The subcommand takes no option
+ *	and no argument: the config file of the vault holds the pool
+ *	size, and ceremony.c reads it (ENTRY-POOL-2).
+ *
+ *	The ceremony takes the master from a plate scan, and it
+ *	refuses to start while the change marker exists
+ *	(CER-REFILL-1, CER-REFILL-8).
+ */
+static int
+cmd_refill(int argc, char *argv[], const char *vault)
+{
+	(void)argv;
+	if (argc != 1)
+		usage();
+	return ceremony_refill(vault) == 0 ? 0 : 1;
 }
 
 int

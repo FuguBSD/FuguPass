@@ -14,7 +14,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: September 22 2026 $
+.Dd $Mdocdate: September 24 2026 $
 .Dt FUGUPASS 1
 .Os
 .Sh NAME
@@ -35,6 +35,15 @@
 .Op Fl d Ar directory
 .Cm canary
 .Ar oracle
+.Nm
+.Op Fl d Ar directory
+.Cm passwd
+.Nm
+.Op Fl d Ar directory
+.Cm resume
+.Nm
+.Op Fl d Ar directory
+.Cm refill
 .Nm
 .Op Fl d Ar directory
 .Cm ls
@@ -96,7 +105,11 @@ The config file holds the idle time as
 and the default is 300 seconds.
 .Pp
 Every subcommand but
-.Cm create
+.Cm create ,
+.Cm passwd ,
+.Cm resume
+and
+.Cm refill
 opens a session of the vault first.
 The session reads the passphrase once.
 It takes the quorum of
@@ -224,6 +237,80 @@ A session that holds the index key wraps the index share again at
 once.
 A session without that key deletes the dead wrap file, and it names
 the provisioning ceremony.
+.It Cm passwd
+Change the passphrase of this machine.
+The change re-enrolls every record of this machine at every live
+oracle, and it takes no master.
+Each other machine keeps the old passphrase on its own records,
+until the change runs on that machine.
+.Pp
+The subcommand reads the old passphrase once, at the prompt
+.Dq Old passphrase: .
+It reads the new passphrase twice, at the prompts
+.Dq New passphrase:
+and
+.Dq New passphrase again: .
+The two reads of the new passphrase must match.
+The change then verifies the old passphrase at the canary record of
+each live oracle.
+It re-enrolls a canary that fails for record-side causes.
+A mistyped old passphrase stops the change at the first canary, and
+no record of the vault changes.
+.Pp
+The change takes each slot in turn, and each live oracle of a slot
+in the order of the config file.
+It opens the file of a slot through the quorum before the first
+record of that slot.
+A file that no quorum opens stops the change there, and the report
+names the slot and each quorum.
+The canary records come last.
+.Pp
+The change writes the change marker before the first record, and it
+removes the marker after the last one.
+While the marker exists, a session refuses each reveal, and the
+report names the
+.Cm resume
+subcommand.
+An unreachable live oracle leaves the change incomplete, and the
+marker stays.
+.It Cm resume
+Complete the passphrase change that the change marker holds.
+The subcommand reads the two passphrases again, as
+.Cm passwd
+reads them.
+It takes the new passphrase for every record of the marker, and the
+old passphrase for every other record.
+It verifies the new passphrase at each canary of the marker, and the
+old passphrase at every other canary.
+The change resumes at the first record that the marker does not
+hold, and it removes the marker after the last record.
+.Pp
+A vault that holds no marker gives a report and the exit status 1.
+.It Cm refill
+Add slots to the pool of this vault.
+The ceremony takes the master from a plate scan of
+.Xr fugupass-scan 1 ,
+as
+.Cm create
+takes it.
+It reads the passphrase once, and it verifies that passphrase at the
+canary record of each live oracle before the first new slot.
+.Pp
+The subcommand takes no option.
+The count of the new slots is the
+.Ic pool-size
+line of the config file, and a file with no such line gives 64
+slots.
+The new slots take the slot indexes after the pool, so the ceremony
+writes no file of an existing entry.
+.Pp
+The index takes the new pool state after the last new slot.
+An interrupted refill therefore leaves the index as it was, and a
+second run is safe.
+The ceremony refuses to start while the change marker exists, and
+the report names the
+.Cm resume
+subcommand.
 .It Cm ls
 Print the name of each entry of the index, one name on each line.
 The subcommand reads the open index, and it sends no entry request.
@@ -360,6 +447,8 @@ the sealed index of the vault
 .It Pa machine/canary.\& Ns Ar i
 the canary check seal of oracle
 .Ar i
+.It Pa machine/change
+the marker of an incomplete passphrase change
 .It Pa machine/config
 the config file of this machine, plaintext
 .It Pa machine/counters
@@ -449,7 +538,9 @@ The session therefore stops the reveal of that slot.
 .It slot Ar e : the session reveals it no other way
 No untried reachable oracle remains, so the substitutions end.
 .It the pool holds Ar n No free slots, at the low watermark of Ar w
-The refill ceremony adds slots to the pool.
+The
+.Cm refill
+subcommand adds slots to the pool.
 .Cm add
 and
 .Cm gen
@@ -459,7 +550,9 @@ still run.
 and
 .Cm gen
 refuse a new entry.
-The refill ceremony adds slots to the pool.
+The
+.Cm refill
+subcommand adds slots to the pool.
 .It no free slot of the pool holds the wraps of this machine at Ar k No live oracles
 Free slots remain, and no one of them reveals on this machine.
 The provisioning ceremony writes the wraps of this machine.
