@@ -1130,8 +1130,7 @@ test_layout(void)
 		{ VAULT_FILE_CANARY, "machine/canary.2" },
 		{ VAULT_FILE_COUNTERS, "machine/counters" },
 		{ VAULT_FILE_CONFIG, "machine/config" },
-		{ VAULT_FILE_CHANGE, "machine/change" },
-		{ VAULT_FILE_KIT, "machine/revocation-kit" }
+		{ VAULT_FILE_CHANGE, "machine/change" }
 	};
 	static const unsigned char	 key[DERIVE_KEYLEN] = { 0 };
 	static const unsigned char	 body[] = "slot: 17\n";

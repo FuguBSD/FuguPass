@@ -1077,10 +1077,12 @@ sub file_exists ( $, $path )
 	return ( $result->{exit_code} // -1 ) == 0 ? 1 : 0;
 }
 
-sub remove_file ( $, $path )
+# $cp->remove_file(@path):
+#	The files @path of the guest, removed in one call.
+sub remove_file ( $, @path )
 {
-	main::guest_ok( "the removal of $path",
-		'rm -f ' . main::_shq($path) );
+	main::guest_ok( "the removal of $path[0]",
+		'rm -f ' . join( ' ', map { main::_shq($_) } @path ) );
 	return;
 }
 
@@ -1103,6 +1105,18 @@ sub copy_file ( $, $from, $to )
 {
 	main::guest_ok( "the copy of $from",
 		'cp ' . main::_shq($from) . ' ' . main::_shq($to) );
+	return;
+}
+
+# $cp->copy_dir($from, $to):
+#	The directory $from of the guest, at the path $to. A leg
+#	builds the state of a ceremony in a copy of a vault, such as
+#	the retirement of one position (CER-PROVISION-16).
+sub copy_dir ( $, $from, $to )
+{
+	main::guest_ok( "the copy of $from",
+		'rm -rf ' . main::_shq($to) . ' && cp -R '
+		    . main::_shq($from) . ' ' . main::_shq($to) );
 	return;
 }
 

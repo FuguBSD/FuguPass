@@ -292,9 +292,11 @@ reports therefore name different user actions.
   `-r` ([KEY-PIN](keys.md#key-pin)). The `-k`, `-m` and `-r` options and the
   argument list are mandatory. The subcommand must take the slots of the new
   pool from the optional `-p` option ([ENTRY-POOL](entries.md#entry-pool)).
-- **PROG-ONESHOT-7** — The `create` subcommand must write the revocation kit
-  ([ORC-REVOKE](oracle.md#orc-revoke)) at the path of
-  [VAULT-LAYOUT](vault.md#vault-layout). It must print the path of that file.
+- **PROG-ONESHOT-7** — The `kit` subcommand must print the revocation kit of
+  this machine on the standard output ([ORC-REVOKE](oracle.md#orc-revoke)). With
+  the `-m` option, it must derive the kit of the named machine from the plate
+  ([KEY-DEVICE](keys.md#key-device)). The slot set of that kit must come from
+  the index ([VAULT-INDEX](vault.md#vault-index)). A constant must not bound it.
 - **PROG-ONESHOT-8** — `add` and `gen` must take the entry type of a new entry
   from the `-T` option ([ENTRY-TYPES](entries.md#entry-types)). A rotation must
   take the type from the index, and it must refuse a `-T` option of another type

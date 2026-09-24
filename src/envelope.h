@@ -135,9 +135,9 @@ void	envelope_draw(unsigned char *, unsigned char *);
  *	out.
  *
  *	Each request of this file takes the public key of its own
- *	ephemeral key. The revocation kit takes the public key of a
- *	record's client key, because the record file name of an
- *	oracle is the hash of that key (ORC-REVOKE-6).
+ *	ephemeral key. The revocation kit of revoke.c takes the
+ *	public key of a record's client key, because the record file
+ *	name at an oracle is the hash of that key (ORC-REVOKE-6).
  */
 int	envelope_pubkey(const unsigned char *, unsigned char *);
 

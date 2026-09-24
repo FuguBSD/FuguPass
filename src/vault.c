@@ -151,8 +151,7 @@ static const struct {
 	[VAULT_FILE_CANARY]	= { "canary", WANT_ORACLE, 1 },
 	[VAULT_FILE_COUNTERS]	= { "counters", 0, 1 },
 	[VAULT_FILE_CONFIG]	= { "config", 0, 1 },
-	[VAULT_FILE_CHANGE]	= { "change", 0, 1 },
-	[VAULT_FILE_KIT]	= { "revocation-kit", 0, 1 }
+	[VAULT_FILE_CHANGE]	= { "change", 0, 1 }
 };
 
 /*
