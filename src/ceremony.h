@@ -22,6 +22,11 @@
  * ceremony_create() is vault creation, the first ceremony. It runs
  * the nine steps of CER-CREATE in rule order, and ceremony.c states
  * the step of each function.
+ *
+ * ceremony_refill() is the pool refill. It extends the free slots of
+ * one vault on one machine (CER-REFILL). It runs the slot loop of
+ * CER-CREATE-6 for each new slot, so the two ceremonies hold one
+ * slot loop.
  */
 
 #ifndef CEREMONY_H
@@ -81,5 +86,37 @@ struct ceremony_create {
  *	follows that erasure (CER-CREATE-9).
  */
 int	ceremony_create(const struct ceremony_create *);
+
+/*
+ * ceremony_refill(vault):
+ *	The pool refill ceremony, in the vault directory vault
+ *	(CER-REFILL). The call gives 0 for a complete refill, and -1
+ *	for a failure of one step.
+ *
+ *	The call reads the config file of the vault, so it takes no
+ *	oracle set and no tunable of a command line. The count of the
+ *	new slots is the pool size of that file, and a file with no
+ *	such line gives CEREMONY_POOL_SIZE (ENTRY-POOL-2).
+ *
+ *	The call reads the master from the scan helper, and it reads
+ *	the passphrase once from the terminal (CER-REFILL-1,
+ *	CER-REFILL-7). The canary record of each live oracle verifies
+ *	that passphrase before the slot loop, and a failure of one
+ *	canary sends no set_pin.
+ *
+ *	The new slots take the indexes after the pool-next line of
+ *	the index, so the refill writes no file of an existing entry
+ *	(CER-REFILL-2, CER-REFILL-4). The index takes the new pool
+ *	state after the slot loop, and an interrupted refill leaves
+ *	it as it was. A re-run is therefore safe.
+ *
+ *	While the change marker exists, the call refuses to start and
+ *	it names the resume command (CER-REFILL-8).
+ *
+ *	The call erases M, root, K_idx, every new K_e, every share,
+ *	and every mask before it exits, on every path (CER-REFILL-6,
+ *	SEC-MEMORY-5).
+ */
+int	ceremony_refill(const char *);
 
 #endif /* CEREMONY_H */

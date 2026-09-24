@@ -56,11 +56,10 @@
  *
  * This file holds no entry model: the field table of a type, the
  * pool, the rotation and the shadow audit sit above it
- * (ENTRY-TYPES-5, ENTRY-POOL, ENTRY-ROTATION, ENTRY-SHADOW). It
- * holds no change marker, so a session runs while a passphrase
- * change is incomplete (ORC-ENROLL-10). It holds no idle lock
- * (PROG-REPL-7), and it opens no vault without an oracle
- * (PROG-REPL-6).
+ * (ENTRY-TYPES-5, ENTRY-POOL, ENTRY-ROTATION, ENTRY-SHADOW). A
+ * session refuses each reveal while the change marker of the vault
+ * exists (ORC-ENROLL-10). It holds no idle lock (PROG-REPL-7), and
+ * it opens no vault without an oracle (PROG-REPL-6).
  */
 
 #ifndef SESSION_H
@@ -208,6 +207,10 @@ int	session_slot_ready(const struct session *, uint32_t);
  *	the oracle (ORC-REVEAL-5), and a decrypt failure names no
  *	record of the quorum (ORC-QUORUM-4). The report of the stop
  *	names the slot and the oracle of the record.
+ *
+ *	The call gives -1 before the first request while the change
+ *	marker of the vault exists, and the report names
+ *	CHANGE_RESUME_CMD of change.h (ORC-ENROLL-10).
  *
  *	The entry key leaves memory directly after the decrypt
  *	(SEC-MEMORY-6). The plaintext belongs to the session, and the

@@ -81,6 +81,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "change.h"
 #include "derive.h"
 #include "fugupass.h"
 #include "oracle.h"
@@ -996,6 +997,9 @@ entry_open(struct session *s, const unsigned char *key)
  *	keep holds the entry key in the session for session_seal(),
  *	and the key of every other reveal leaves memory directly
  *	after the decrypt (SEC-MEMORY-6).
+ *
+ *	The change marker of the vault stops the call before the
+ *	first request (ORC-ENROLL-10).
  */
 static int
 reveal(struct session *s, uint32_t slot, int keep)
@@ -1005,6 +1009,19 @@ reveal(struct session *s, uint32_t slot, int keep)
 	struct oracle_ctx	 ctx;
 	unsigned int		 i, tries = 0, victim = 0;
 	int			 n, fail, rv = -1;
+
+	/*
+	 * A record of an incomplete change holds the old pin or the
+	 * new one, so the session refuses each reveal, and the
+	 * report names the resume command (ORC-ENROLL-10). An
+	 * unknown marker state refuses as well, because it proves
+	 * no complete change (change.h).
+	 */
+	if (change_pending(s->vault) != 0) {
+		warnx("this vault holds an incomplete passphrase change, "
+		    "and \"%s\" completes it", CHANGE_RESUME_CMD);
+		return -1;
+	}
 
 	memset(shares, 0, sizeof(shares));
 	memset(key, 0, sizeof(key));

@@ -15,7 +15,7 @@
  */
 
 /*
- * Vault creation, the first ceremony. ceremony.h states the
+ * Vault creation and the pool refill. ceremony.h states the
  * interface. CER-CREATE holds nine rules, the rules are the steps,
  * and ceremony_create() calls one function of each step in rule
  * order.
@@ -26,6 +26,19 @@
  * CER-CREATE-6, and step_index() is CER-CREATE-7. The erasure of
  * CER-CREATE-8 sits in ceremony_create(), and step_kit() is
  * CER-CREATE-9.
+ *
+ * ceremony_refill() is the pool refill, the second ceremony of this
+ * file (CER-REFILL). It reads the config of the vault and the device
+ * factor of this machine. It scans a plate, and it opens the index
+ * under K_idx. It then reserves the next sequential slot indexes,
+ * and it runs step_slot() for each new slot (CER-REFILL-2). The two
+ * ceremonies therefore hold one slot loop, and a new slot of a
+ * refill takes the steps of CER-CREATE-6.
+ *
+ * refill_canaries() is the verification of CER-REFILL-7, before the
+ * slot loop. refill_index_write() records the new pool state, after
+ * the slot loop. An interrupted refill therefore leaves the index as
+ * it was, and the re-run reserves the same indexes again.
  *
  * The steps come from the other files of the tree. helper.c runs
  * the scan helper, derive.c holds each label and the master gate,
@@ -65,6 +78,7 @@
 
 #include "bip85.h"
 #include "ceremony.h"
+#include "change.h"
 #include "derive.h"
 #include "entry.h"
 #include "envelope.h"
@@ -73,6 +87,7 @@
 #include "iface.h"
 #include "oracle.h"
 #include "seal.h"
+#include "session.h"
 #include "vault.h"
 
 /*
@@ -108,13 +123,31 @@
 #define KIT_NAME_MAX	(2 * DERIVE_KEYLEN + sizeof(".pin"))
 
 /*
+ * The bytes of the sealed index, and one more. A count of this
+ * value names a file that is too long (vault.h). session.h states
+ * the plaintext bound of the index.
+ */
+#define INDEX_RAW_MAX	(SESSION_INDEX_MAX + SEAL_OVERHEAD + 1)
+
+/*
  * The state of one ceremony. The master, root, the index key and
- * the passphrase are the secrets of CER-CREATE-8. The device factor
- * persists on disk, so that rule holds no erasure of it
- * (KEY-DEVICE-2).
+ * the passphrase are the secrets of CER-CREATE-8 and of
+ * CER-REFILL-6. The device factor persists on disk, so the two rules
+ * hold no erasure of it (KEY-DEVICE-2).
+ *
+ * The two ceremonies share this state, and each one fills the
+ * members that its steps read. arg is the command line of one
+ * creation, and a refill takes each tunable of the config file.
+ *
+ * The three buffers and the four members below them belong to the
+ * refill. raw takes the sealed index, plain takes the plaintext of
+ * it, and text takes the plaintext of the write. free is the free
+ * slots of the pool, next is the lowest unreserved slot index, and
+ * add is the slots of this refill (VAULT-INDEX-2, ENTRY-POOL-1).
  */
 struct state {
 	const struct ceremony_create	*arg;
+	const char			*vault;
 	struct vault_config		 config;
 	char				 master[DERIVE_MASTER_MAX + 1];
 	unsigned char			 root[DERIVE_ROOTLEN];
@@ -122,6 +155,14 @@ struct state {
 	unsigned char			 idxkey[DERIVE_KEYLEN];
 	char				 pass[FUGUPASS_PASS_MAX];
 	size_t				 passlen;
+	unsigned char			*raw;
+	char				*plain;
+	char				*text;
+	size_t				 textlen;
+	char				 free[VAULT_VALUE_MAX + 1];
+	uint32_t			 next;
+	int				 havenext;
+	unsigned int			 add;
 };
 
 static void		 hex(const unsigned char *, size_t, char *);
@@ -139,6 +180,15 @@ static int		 step_index(const struct state *);
 static int		 kit_name(const struct state *, unsigned int, uint32_t,
 			    int, char *, size_t);
 static int		 step_kit(const struct state *);
+static int		 refill_config(struct state *);
+static int		 refill_factor(struct state *);
+static int		 index_line(const struct vault_line *, void *);
+static int		 refill_index_read(struct state *);
+static int		 refill_reserve(struct state *);
+static int		 refill_pass(struct state *);
+static int		 refill_canaries(struct state *);
+static int		 refill_slots(struct state *);
+static int		 refill_index_write(struct state *);
 
 /*
  * hex(in, inlen, out):
@@ -163,7 +213,7 @@ static void
 ctx_of(struct oracle_ctx *ctx, const struct state *st, unsigned int oracle)
 {
 	memset(ctx, 0, sizeof(*ctx));
-	ctx->vault = st->arg->vault;
+	ctx->vault = st->vault;
 	ctx->config = &st->config;
 	ctx->factor = st->factor;
 	ctx->factorlen = sizeof(st->factor);
@@ -256,10 +306,10 @@ step_factor(struct state *st)
 		warnx("the device factor: the machine name is wrong");
 		return -1;
 	}
-	if (vault_path(path, sizeof(path), st->arg->vault, VAULT_FILE_FACTOR,
+	if (vault_path(path, sizeof(path), st->vault, VAULT_FILE_FACTOR,
 	    NULL) != 0) {
 		warnx("%s: the path of the factor file does not fit",
-		    st->arg->vault);
+		    st->vault);
 		return -1;
 	}
 	if (vault_write(path, st->factor, sizeof(st->factor)) != 0) {
@@ -339,10 +389,10 @@ step_config(struct state *st)
 		warnx("the config: an oracle value or the threshold is wrong");
 		goto out;
 	}
-	if (vault_path(path, sizeof(path), st->arg->vault, VAULT_FILE_CONFIG,
+	if (vault_path(path, sizeof(path), st->vault, VAULT_FILE_CONFIG,
 	    NULL) != 0) {
 		warnx("%s: the path of the config file does not fit",
-		    st->arg->vault);
+		    st->vault);
 		goto out;
 	}
 	if (vault_write(path, (const unsigned char *)text, len) != 0) {
@@ -502,10 +552,10 @@ step_slot(struct state *st, uint32_t slot)
 	}
 	memset(&at, 0, sizeof(at));
 	at.name = name;
-	if (vault_path(path, sizeof(path), st->arg->vault, VAULT_FILE_ENTRY,
+	if (vault_path(path, sizeof(path), st->vault, VAULT_FILE_ENTRY,
 	    &at) != 0) {
 		warnx("%s: the path of the entry file does not fit",
-		    st->arg->vault);
+		    st->vault);
 		goto out;
 	}
 	if (vault_seal_write(path, key, sizeof(key),
@@ -587,10 +637,10 @@ step_index(const struct state *st)
 	}
 	len += (size_t)n;
 
-	if (vault_path(path, sizeof(path), st->arg->vault, VAULT_FILE_INDEX,
+	if (vault_path(path, sizeof(path), st->vault, VAULT_FILE_INDEX,
 	    NULL) != 0) {
 		warnx("%s: the path of the index file does not fit",
-		    st->arg->vault);
+		    st->vault);
 		return -1;
 	}
 	if (vault_seal_write(path, st->idxkey, sizeof(st->idxkey),
@@ -696,10 +746,10 @@ step_kit(const struct state *st)
 	unsigned int	 i;
 	int		 n, rv = -1;
 
-	if (vault_path(path, sizeof(path), st->arg->vault, VAULT_FILE_KIT,
+	if (vault_path(path, sizeof(path), st->vault, VAULT_FILE_KIT,
 	    NULL) != 0) {
 		warnx("%s: the path of the kit does not fit",
-		    st->arg->vault);
+		    st->vault);
 		goto out;
 	}
 	if ((text = malloc(KIT_MAX)) == NULL) {
@@ -780,6 +830,7 @@ ceremony_create(const struct ceremony_create *arg)
 		return -1;
 	}
 	st->arg = arg;
+	st->vault = arg->vault;
 
 	if (step_master(st) != 0)
 		goto out;
@@ -813,6 +864,461 @@ out:
 	if (rv == 0)
 		rv = step_kit(st);
 
+	explicit_bzero(st, sizeof(*st));
+	free(st);
+	return rv;
+}
+
+/*
+ * refill_config(st):
+ *	The config file of the vault, to the state (VAULT-CONFIG-1,
+ *	VAULT-CONFIG-2). The reader holds the position rule of the
+ *	file, so this step adds no gate (VAULT-CONFIG-6).
+ *
+ *	The refill takes the oracle set, the threshold and the pool
+ *	size of the vault from this file. The creation writes the
+ *	file, and the operator edits the two tunables of it
+ *	(ENTRY-POOL-2).
+ */
+static int
+refill_config(struct state *st)
+{
+	char	 path[PATH_MAX];
+	char	*text;
+	size_t	 len = 0;
+	int	 rv = -1;
+
+	if (vault_path(path, sizeof(path), st->vault, VAULT_FILE_CONFIG,
+	    NULL) != 0) {
+		warnx("%s: the path of the config file does not fit",
+		    st->vault);
+		return -1;
+	}
+	if ((text = malloc(CONFIG_MAX)) == NULL) {
+		warn("the config");
+		return -1;
+	}
+	if (vault_read(path, (unsigned char *)text, CONFIG_MAX, &len) != 0) {
+		warn("%s", path);
+		goto out;
+	}
+	if (len == 0 || len == CONFIG_MAX) {
+		warnx("%s: the config file is absent or too long", path);
+		goto out;
+	}
+	if (vault_config_read(text, len, &st->config) != 0) {
+		warnx("%s: an oracle position or the threshold is wrong",
+		    path);
+		goto out;
+	}
+	rv = 0;
+out:
+	free(text);
+	return rv;
+}
+
+/*
+ * refill_factor(st):
+ *	The device factor X of this machine, to the state
+ *	(KEY-DEVICE-1, KEY-DEVICE-2). The creation of the vault wrote
+ *	the file, and each record of this machine takes the value of
+ *	it (CER-CREATE-2).
+ *
+ *	A machine with no machine-local set holds no such file, and
+ *	the refill stops there. The provisioning ceremony adds a
+ *	machine to a vault (CER-PROVISION-3).
+ */
+static int
+refill_factor(struct state *st)
+{
+	unsigned char	 buf[DERIVE_KEYLEN + 1];
+	char		 path[PATH_MAX];
+	size_t		 len = 0;
+	int		 rv = -1;
+
+	if (vault_path(path, sizeof(path), st->vault, VAULT_FILE_FACTOR,
+	    NULL) != 0) {
+		warnx("%s: the path of the factor file does not fit",
+		    st->vault);
+		return -1;
+	}
+	if (vault_read(path, buf, sizeof(buf), &len) != 0) {
+		warn("%s", path);
+		goto out;
+	}
+	if (len != DERIVE_KEYLEN) {
+		warnx("%s: the device factor of this machine is absent", path);
+		goto out;
+	}
+	memcpy(st->factor, buf, sizeof(st->factor));
+	rv = 0;
+out:
+	explicit_bzero(buf, sizeof(buf));
+	return rv;
+}
+
+/*
+ * index_line(line, arg):
+ *	Take one line of the index to the state at arg. The two pool
+ *	lines give the pool state of it, and they stay out of the
+ *	text of the write. refill_index_write() writes the new state
+ *	of the two (VAULT-INDEX-2).
+ *
+ *	Every other line reaches that text again, so the refill
+ *	changes no entry and no machine of the registry
+ *	(CER-REFILL-4).
+ */
+static int
+index_line(const struct vault_line *line, void *arg)
+{
+	struct state	*st = arg;
+	const char	*name = line->field->name;
+	int		 n;
+
+	if (strcmp(name, "pool-free") == 0) {
+		if (line->valuelen >= sizeof(st->free))
+			return -1;
+		memcpy(st->free, line->value, line->valuelen + 1);
+		return 0;
+	}
+	if (strcmp(name, "pool-next") == 0) {
+		if (vault_number(line->value, line->valuelen, VAULT_SLOT_MAX,
+		    &st->next) != 0)
+			return -1;
+		st->havenext = 1;
+		return 0;
+	}
+	n = snprintf(&st->text[st->textlen], SESSION_INDEX_MAX - st->textlen,
+	    "%s: %s\n", name, line->value);
+	if (n < 0 || (size_t)n >= SESSION_INDEX_MAX - st->textlen)
+		return -1;
+	st->textlen += (size_t)n;
+	return 0;
+}
+
+/*
+ * refill_index_read(st):
+ *	The index of the vault, under K_idx (VAULT-INDEX-1,
+ *	VAULT-INDEX-3). The scan keeps each line of the file for the
+ *	write, and it takes the pool state of the two pool lines.
+ *
+ *	The plate gives root, so K_idx derives here and no oracle
+ *	request carries a share of it (KEY-MASK-6). An index that
+ *	does not open names another master, so this step holds the
+ *	plate of this vault (KEY-MASTER-5).
+ *
+ *	An index with no pool-next line names no free slot index. A
+ *	reservation from 0 would replace the records of the first
+ *	entries, so the refill stops there (CER-REFILL-4,
+ *	KEY-ENTRY-1).
+ *
+ *	The plaintext of the index is a secret of the vault, and it
+ *	leaves memory in ceremony_refill() (SEC-MEMORY-1).
+ */
+static int
+refill_index_read(struct state *st)
+{
+	char	 path[PATH_MAX];
+	size_t	 len = 0;
+
+	if (derive_index_key(st->root, sizeof(st->root), st->idxkey,
+	    sizeof(st->idxkey)) != 0) {
+		warnx("the index key fails");
+		return -1;
+	}
+	if (vault_path(path, sizeof(path), st->vault, VAULT_FILE_INDEX,
+	    NULL) != 0) {
+		warnx("%s: the path of the index file does not fit",
+		    st->vault);
+		return -1;
+	}
+	if (vault_read(path, st->raw, INDEX_RAW_MAX, &len) != 0) {
+		warn("%s", path);
+		return -1;
+	}
+	if (len <= SEAL_OVERHEAD || len == INDEX_RAW_MAX) {
+		warnx("%s: the index is absent, or it is not a sealed file "
+		    "of this vault", path);
+		return -1;
+	}
+	if (seal_open(st->idxkey, sizeof(st->idxkey), st->raw, len,
+	    (unsigned char *)st->plain, len - SEAL_OVERHEAD) != 0) {
+		warnx("%s: the index does not open under the index key of "
+		    "this plate", path);
+		return -1;
+	}
+	if (vault_scan(st->plain, len - SEAL_OVERHEAD, vault_index_fields,
+	    index_line, st) != 0) {
+		warnx("%s: the index holds a line that the reader rejects, "
+		    "or the text of the write does not fit", path);
+		return -1;
+	}
+	if (!st->havenext) {
+		warnx("%s: the index holds no pool-next line, and the refill "
+		    "reserves no slot index", path);
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * refill_reserve(st):
+ *	CER-REFILL-2. The refill reserves the next sequential slot
+ *	indexes, from the pool-next line of the index
+ *	(VAULT-INDEX-2). The count is the pool size of the config,
+ *	and a config with no such line takes CEREMONY_POOL_SIZE
+ *	(ENTRY-POOL-2).
+ *
+ *	Each reserved index stands above every index of every earlier
+ *	ceremony, so the slot loop writes the file of no existing
+ *	entry (CER-REFILL-4, VAULT-LAYOUT-5).
+ *
+ *	The new pool-next is the index after the last new slot, and
+ *	that value stays inside the form of a number
+ *	(VAULT-FORMAT-7, KEY-ENTRY-1).
+ */
+static int
+refill_reserve(struct state *st)
+{
+	st->add = st->config.pool_size != 0 ? st->config.pool_size :
+	    CEREMONY_POOL_SIZE;
+	if (st->add > CEREMONY_POOL_MAX) {
+		warnx("the pool size takes %d slots at the most",
+		    CEREMONY_POOL_MAX);
+		return -1;
+	}
+	if (st->add > (uint32_t)VAULT_SLOT_MAX - st->next) {
+		warnx("the pool reaches the highest slot index, and this "
+		    "vault takes no refill");
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * refill_pass(st):
+ *	CER-REFILL-7. readpassphrase(3) reads the passphrase once,
+ *	and the canary check of each live oracle verifies it
+ *	(SEC-MEMORY-4). A creation reads twice, because no file
+ *	verifies the passphrase of a new vault (ORC-CANARY-6).
+ */
+static int
+refill_pass(struct state *st)
+{
+	if (fugupass_passphrase("Passphrase: ", st->pass,
+	    sizeof(st->pass)) != 0) {
+		warnx("the passphrase: the read fails");
+		return -1;
+	}
+	st->passlen = strlen(st->pass);
+	return 0;
+}
+
+/*
+ * refill_canaries(st):
+ *	CER-REFILL-7. The canary record of each live oracle verifies
+ *	the passphrase, before the slot loop (ORC-CANARY-1). The walk
+ *	stops at the first failure, so a mistyped passphrase enrolls
+ *	no record (ORC-CANARY-4).
+ *
+ *	The slot loop needs every live oracle, so a failure of one
+ *	oracle stops the ceremony here (CER-CREATE-6). A junk answer
+ *	names no cause, so the report names the cause set
+ *	(ORC-CANARY-9).
+ *
+ *	The refill takes K_idx from the plate, so it needs no index
+ *	share of an answer (ORC-CANARY-3). The share of the check
+ *	therefore leaves memory here (KEY-SHARE-8).
+ */
+static int
+refill_canaries(struct state *st)
+{
+	struct oracle_ctx	 ctx;
+	unsigned char		 share[DERIVE_KEYLEN];
+	unsigned int		 i;
+	int			 live = 0, rv, ok = 0;
+
+	for (i = 1; i <= st->config.count; i++) {
+		if (st->config.oracle[i - 1].retired)
+			continue;
+		ctx_of(&ctx, st, i);
+		rv = oracle_canary_check(&ctx, NULL, 0, share, sizeof(share),
+		    &live);
+		if (rv == 0)
+			continue;
+		warnx("the canary of oracle %u (%s): %s", i,
+		    st->config.oracle[i - 1].url, oracle_state_text(rv));
+		if (rv == ORACLE_EJUNK)
+			warnx("the cause is the passphrase, or, at oracle %u, "
+			    "a wiped canary record, a counter behind the "
+			    "record, or a stale canary check seal of this "
+			    "machine", i);
+		warnx("the refill sends no set_pin");
+		ok = -1;
+		break;
+	}
+	explicit_bzero(share, sizeof(share));
+	return ok;
+}
+
+/*
+ * refill_slots(st):
+ *	CER-REFILL-2. The slot loop of CER-CREATE-6 runs for each new
+ *	slot, and step_slot() is that loop. Each new slot therefore
+ *	takes one record at each live oracle, this machine's wrap of
+ *	each one, and one sealed slot file (ENTRY-POOL-1).
+ */
+static int
+refill_slots(struct state *st)
+{
+	unsigned int	 i;
+
+	for (i = 0; i < st->add; i++) {
+		if (step_slot(st, st->next + i) != 0)
+			return -1;
+	}
+	return 0;
+}
+
+/*
+ * refill_index_write(st):
+ *	CER-REFILL-2. The new pool state reaches the index. Each new
+ *	slot joins the free list, and pool-next takes the index after
+ *	the last new slot (VAULT-INDEX-2, ENTRY-POOL-1).
+ *
+ *	The step follows the slot loop, so an interrupted refill
+ *	leaves the index as it was. A re-run reserves the same
+ *	indexes again, and a fresh set_pin replaces each record of
+ *	them (CER-CREATE-6).
+ *
+ *	Every other line comes from the read, so the write changes no
+ *	entry of the vault (CER-REFILL-4).
+ */
+static int
+refill_index_write(struct state *st)
+{
+	char		 path[PATH_MAX];
+	size_t		 len;
+	unsigned int	 i;
+	int		 n;
+
+	len = strlen(st->free);
+	for (i = 0; i < st->add; i++) {
+		n = snprintf(&st->free[len], sizeof(st->free) - len,
+		    "%s%" PRIu32, len == 0 ? "" : ",", st->next + i);
+		if (n < 0 || (size_t)n >= sizeof(st->free) - len) {
+			warnx("the index: the free slots of the pool do not "
+			    "fit one line");
+			return -1;
+		}
+		len += (size_t)n;
+	}
+	n = snprintf(&st->text[st->textlen], SESSION_INDEX_MAX - st->textlen,
+	    "pool-free: %s\npool-next: %" PRIu32 "\n", st->free,
+	    st->next + st->add);
+	if (n < 0 || (size_t)n >= SESSION_INDEX_MAX - st->textlen) {
+		warnx("the index: the text does not fit");
+		return -1;
+	}
+	st->textlen += (size_t)n;
+
+	if (vault_path(path, sizeof(path), st->vault, VAULT_FILE_INDEX,
+	    NULL) != 0) {
+		warnx("%s: the path of the index file does not fit",
+		    st->vault);
+		return -1;
+	}
+	if (vault_seal_write(path, st->idxkey, sizeof(st->idxkey),
+	    (const unsigned char *)st->text, st->textlen, st->raw,
+	    INDEX_RAW_MAX) != 0) {
+		warn("%s", path);
+		return -1;
+	}
+	return 0;
+}
+
+int
+ceremony_refill(const char *vault)
+{
+	struct state	*st;
+	int		 n, rv = -1;
+
+	if (vault == NULL) {
+		warnx("the refill takes no vault directory");
+		return -1;
+	}
+
+	/*
+	 * CER-REFILL-8. A marker names an incomplete change, and this
+	 * ceremony enrolls a record, so it refuses to start
+	 * (CER-PROVISION-18, ORC-ENROLL-10).
+	 */
+	if ((n = change_pending(vault)) != 0) {
+		if (n == 1)
+			warnx("this vault holds an incomplete passphrase "
+			    "change, and \"%s\" completes it",
+			    CHANGE_RESUME_CMD);
+		return -1;
+	}
+
+	if ((st = calloc(1, sizeof(*st))) == NULL) {
+		warn("the refill");
+		return -1;
+	}
+	st->vault = vault;
+
+	/* The three buffers of the index (struct state). */
+	st->raw = malloc(INDEX_RAW_MAX);
+	st->plain = malloc(SESSION_INDEX_MAX);
+	st->text = malloc(SESSION_INDEX_MAX);
+	if (st->raw == NULL || st->plain == NULL || st->text == NULL) {
+		warn("the refill");
+		goto out;
+	}
+
+	/*
+	 * The two reads of the disk come first, so a vault that this
+	 * machine cannot refill takes no plate.
+	 */
+	if (refill_config(st) != 0)
+		goto out;
+	if (refill_factor(st) != 0)
+		goto out;
+	if (step_master(st) != 0)
+		goto out;
+	if (refill_index_read(st) != 0)
+		goto out;
+	if (refill_reserve(st) != 0)
+		goto out;
+	if (refill_pass(st) != 0)
+		goto out;
+	if (refill_canaries(st) != 0)
+		goto out;
+	if (refill_slots(st) != 0)
+		goto out;
+	if (refill_index_write(st) != 0)
+		goto out;
+	rv = 0;
+out:
+	/*
+	 * CER-REFILL-6. M, root, K_idx and the passphrase leave
+	 * memory here, on the pass and on every failure path
+	 * (SEC-MEMORY-4, SEC-MEMORY-5). Every new K_e, every share
+	 * and every mask left memory in the step that held it. The
+	 * three buffers hold vault data, and they leave with it.
+	 */
+	if (st->raw != NULL) {
+		explicit_bzero(st->raw, INDEX_RAW_MAX);
+		free(st->raw);
+	}
+	if (st->plain != NULL) {
+		explicit_bzero(st->plain, SESSION_INDEX_MAX);
+		free(st->plain);
+	}
+	if (st->text != NULL) {
+		explicit_bzero(st->text, SESSION_INDEX_MAX);
+		free(st->text);
+	}
 	explicit_bzero(st, sizeof(*st));
 	free(st);
 	return rv;
