@@ -72,12 +72,15 @@ int	change_pending(const char *);
  *	(ORC-ENROLL-4). The call gives 0 for a complete change, and
  *	-1 for an incomplete one.
  *
- *	The call reads the new passphrase twice, and the pair must
- *	match (ORC-ENROLL-8). It reads the old passphrase once, and
- *	it verifies that one at the canary record of each live
- *	oracle. It re-enrolls a canary that fails for a record-side
- *	cause (ORC-CANARY-4, ORC-CANARY-5). A mistyped old passphrase
- *	stops the change at the first canary, before any set_pin.
+ *	The call reads the old passphrase twice and the new
+ *	passphrase twice, and each pair must match (ORC-ENROLL-8).
+ *	The two reads of the old passphrase are the reads of a canary
+ *	enrollment under it (ORC-CANARY-6). The call verifies the old
+ *	passphrase at the canary record of each live oracle, and it
+ *	re-enrolls a canary that fails for a record-side cause
+ *	(ORC-CANARY-4, ORC-CANARY-5). A mistyped old passphrase stops
+ *	the change at the first canary of that passphrase, before any
+ *	set_pin.
  *
  *	The loop takes each slot in turn, and each live oracle of a
  *	slot in list order (ORC-ENROLL-5). Before the first set_pin
@@ -95,7 +98,10 @@ int	change_pending(const char *);
  *	names CHANGE_RESUME_CMD.
  *
  *	A live oracle that no request reaches leaves the change
- *	incomplete, and the marker stays (ORC-ENROLL-11).
+ *	incomplete, and the marker stays (ORC-ENROLL-11). A call that
+ *	starts with fewer than k reachable oracles stops before the
+ *	marker write, and before the first re-enrollment. It
+ *	therefore sends no set_pin, and it writes no marker.
  */
 int	change_passphrase(const char *);
 

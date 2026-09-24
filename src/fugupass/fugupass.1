@@ -244,18 +244,26 @@ oracle, and it takes no master.
 Each other machine keeps the old passphrase on its own records,
 until the change runs on that machine.
 .Pp
-The subcommand reads the old passphrase once, at the prompt
-.Dq Old passphrase: .
+The subcommand reads the old passphrase twice, at the prompts
+.Dq Old passphrase:
+and
+.Dq Old passphrase again: .
 It reads the new passphrase twice, at the prompts
 .Dq New passphrase:
 and
 .Dq New passphrase again: .
-The two reads of the new passphrase must match.
+The two reads of each passphrase must match.
+A canary enrollment of the change can take the old passphrase.
+That enrollment needs the two reads of it.
+.Pp
 The change then verifies the old passphrase at the canary record of
 each live oracle.
-It re-enrolls a canary that fails for record-side causes.
-A mistyped old passphrase stops the change at the first canary, and
-no record of the vault changes.
+It re-enrolls a canary that fails for record-side causes, after the
+check of the reachable oracles.
+A mistyped old passphrase stops the change at the first canary of
+that passphrase, and no record of the vault changes.
+A change that starts with fewer than the threshold of reachable
+oracles stops before the first record, and it writes no marker.
 .Pp
 The change takes each slot in turn, and each live oracle of a slot
 in the order of the config file.

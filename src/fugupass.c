@@ -311,9 +311,10 @@ cmd_canary(int argc, char *argv[], const char *vault)
  *	option and no argument, and change.c runs each step.
  *
  *	The change takes no master, so it reads no plate. It reads
- *	the old passphrase once, and the new passphrase twice
- *	(ORC-ENROLL-8). An incomplete change leaves the marker, and
- *	cmd_resume() completes it (ORC-ENROLL-10).
+ *	each passphrase twice, because a canary enrollment of the
+ *	change can take either one (ORC-ENROLL-8, ORC-CANARY-6). An
+ *	incomplete change leaves the marker, and cmd_resume()
+ *	completes it (ORC-ENROLL-10).
  */
 static int
 cmd_passwd(int argc, char *argv[], const char *vault)

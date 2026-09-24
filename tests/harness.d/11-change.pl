@@ -22,13 +22,14 @@
 # refill against the example topology of three oracles with a
 # threshold of two (TEST-HARNESS-5). Each case takes a vault of its
 # own: a change replaces the pin of every record of one vault, and a
-# refill extends the pool of one vault.
+# refill extends the pool of one vault. One case takes a threshold
+# of three over the same three instances, and the comment of that
+# case states the reason.
 #
 # The three subcommands read the passphrases from /dev/tty, so each
 # one runs on the console of the guest (TEST-HARNESS-8). passwd and
-# resume read three answers: the old passphrase once, and the new
-# one twice (ORC-ENROLL-8). refill reads one answer, and create
-# reads two.
+# resume read four answers: each passphrase twice (ORC-ENROLL-8,
+# ORC-CANARY-6). refill reads one answer, and create reads two.
 #
 # A ceremony vault takes the machine name of its tag, so each vault
 # of this leg addresses records of its own at the counterparty
@@ -141,7 +142,7 @@ sub change_case ($t)
 
 	my ($change) = $t->console( $vault,
 		{ argv => ['passwd'],
-			answers => [ 'right', 'other', 'other' ] } );
+			answers => [ 'right', 'right', 'other', 'other' ] } );
 	is( $change->{exit}, 0, 'the passphrase change passes '
 		    . '(ORC-ENROLL-4)' )
 	    or diag( $change->{error} );
@@ -242,7 +243,7 @@ sub stop_case ($t)
 
 	my ($stop) = $t->console( $vault,
 		{ argv => ['passwd'],
-			answers => [ 'right', 'other', 'other' ] } );
+			answers => [ 'right', 'right', 'other', 'other' ] } );
 
 	my $url = $t->url(1);
 	isnt( $stop->{exit}, 0,
@@ -287,7 +288,7 @@ sub stop_case ($t)
 
 	my ($resume) = $t->console( $vault,
 		{ argv => ['resume'],
-			answers => [ 'right', 'other', 'other' ] } );
+			answers => [ 'right', 'right', 'other', 'other' ] } );
 	is( $resume->{exit}, 0, 'the resume completes the change '
 		    . '(ORC-ENROLL-10)' )
 	    or diag( $resume->{error} );
@@ -341,7 +342,7 @@ sub down_case ($t)
 	$t->stop_oracle($ORACLES);
 	my ($down) = $t->console( $vault,
 		{ argv => ['passwd'],
-			answers => [ 'right', 'other', 'other' ] } );
+			answers => [ 'right', 'right', 'other', 'other' ] } );
 	$t->start_oracle($ORACLES);
 
 	my $url = $t->url($ORACLES);
@@ -361,7 +362,7 @@ sub down_case ($t)
 
 	my ($back) = $t->console( $vault,
 		{ argv => ['resume'],
-			answers => [ 'right', 'other', 'other' ] } );
+			answers => [ 'right', 'right', 'other', 'other' ] } );
 	is( $back->{exit}, 0,
 		'the restart after the return of the oracle completes the '
 		    . 'change (ORC-ENROLL-11)' )
@@ -377,6 +378,72 @@ sub down_case ($t)
 	is_deeply( [ $t->terminal($show) ], [$secret],
 		'every record answers the new pin after the restart '
 		    . '(ORC-ENROLL-11)' );
+	return;
+}
+
+# reach_case($t):
+#	A change that starts with fewer than k reachable oracles
+#	(ORC-ENROLL-11). The change stops before the marker write,
+#	and before the first re-enrollment.
+#
+#	The vault of this case takes a threshold of three over the
+#	three instances. A record-side canary failure needs a pass at
+#	another oracle before it (ORC-CANARY-4), so a start with one
+#	such failure holds two answers at least. A threshold of two
+#	therefore admits no start below k with a canary to repair.
+#
+#	The canary seal of the second oracle takes the seal of the
+#	first one. That file opens under no canary mask of the second
+#	oracle, so the check of it gives a junk answer after the pass
+#	at the first oracle (ORC-CANARY-9). The third oracle stops,
+#	so two of the three oracles answer.
+#
+#	The mutation: a repair of that second canary before the reach
+#	gate sends a set_pin of the canary record. It writes the
+#	canary seal of that oracle again, and it takes the index wrap
+#	of that oracle away, so the state of the machine then moves.
+#	The report states that the change sends no set_pin, and that
+#	statement holds while the machine keeps its bytes.
+sub reach_case ($t)
+{
+	my $vault = $t->ceremony_vault(
+		'c-reach',
+		oracles   => $ORACLES,
+		threshold => $ORACLES,
+		pool      => 1 );
+
+	my $made = $t->create($vault);
+	is( $made->{exit}, 0, 'the creation of the reach vault passes' )
+	    or diag( $made->{error} );
+
+	$t->copy_file( $t->seal( $vault, oracle => 1 ),
+		$t->seal( $vault, oracle => 2 ) );
+	my %before = machine_state( $t, $vault );
+
+	$t->stop_oracle($ORACLES);
+	my ($run) = $t->console( $vault,
+		{ argv => ['passwd'],
+			answers => [ 'right', 'right', 'other', 'other' ] } );
+	$t->start_oracle($ORACLES);
+
+	isnt( $run->{exit}, 0,
+		'a start below the threshold stops the change '
+		    . '(ORC-ENROLL-11)' );
+	like( $run->{error},
+		qr/the quorum takes $ORACLES reachable oracles, and 2 answered/,
+		'the report names the threshold and the count of the oracles '
+		    . 'that answered (ORC-ENROLL-11)' );
+	like( $run->{error}, qr/the change sends no set_pin/,
+		'the report states that no record takes a set_pin '
+		    . '(ORC-ENROLL-11)' );
+	is( $t->file_exists( marker($vault) ),
+		0, 'the stopped change wrote no marker, and the marker comes '
+		    . 'before the first set_pin (ORC-ENROLL-10)' );
+	is_deeply( { machine_state( $t, $vault ) },
+		\%before,
+		'each wrap, each index wrap and each canary seal holds the '
+		    . 'bytes of the step before, so the change re-enrolled '
+		    . 'no canary (ORC-ENROLL-11, ORC-CANARY-5)' );
 	return;
 }
 
@@ -411,7 +478,7 @@ sub typo_case ($t)
 		$vault,
 		{ argv => ['ls'], answers => ['right'] },
 		{ argv => ['passwd'],
-			answers => [ 'wrong', 'other', 'other' ] } );
+			answers => [ 'wrong', 'wrong', 'other', 'other' ] } );
 
 	my $url = $t->url(1);
 	is( $base->{exit}, 0, 'ls opens the session of the typo vault' )
@@ -444,6 +511,132 @@ sub typo_case ($t)
 	is_deeply( \@moved, [],
 		'the walk stopped at the first canary, so no other record '
 		    . 'takes a request (ORC-CANARY-4, ORC-ENROLL-8)' );
+	return;
+}
+
+# resume_typo_case($t):
+#	A mistyped old passphrase of a resume (ORC-CANARY-4,
+#	ORC-CANARY-10). The marker of the resume holds the canary of
+#	the first oracle, so that canary answers the new passphrase
+#	and every other canary answers the old one (ORC-ENROLL-10).
+#
+#	The counters file gives the canary of the second oracle the
+#	greatest counter, so this machine sends no request of that
+#	record (ORC-COUNTER-5). The first change therefore ends the
+#	canary of the first oracle, and it stops at the canary of the
+#	second one. The restored counter lets the last resume
+#	complete the change.
+#
+#	The resume between the two mistypes the old passphrase. The
+#	canary of the first oracle passes under the new passphrase,
+#	and the canary of the second one gives a junk answer under
+#	the mistyped old one. That junk answer is the first of the
+#	old passphrase, so it holds the typo case and it stops the
+#	resume (ORC-CANARY-4).
+#
+#	The mutation: one pass count over both passphrases takes the
+#	pass of the first oracle for the old passphrase as well. The
+#	junk answer then looks record-side, and the resume re-enrolls
+#	the canary of the second oracle under the mistyped
+#	passphrase. That canary then accepts the mistyped passphrase,
+#	which is the poisoned canary of ORC-CANARY-10. The resume
+#	completes, so the exit assertion and the state of the machine
+#	both hold the mutation.
+sub resume_typo_case ($t)
+{
+	my $secret = $t->answer('secret');
+	my $vault  = $t->ceremony_vault(
+		'c-rtypo',
+		oracles   => $ORACLES,
+		threshold => $THRESHOLD,
+		pool      => 2 );
+
+	my $made = $t->create($vault);
+	is( $made->{exit}, 0, 'the creation of the resume typo vault passes' )
+	    or diag( $made->{error} );
+
+	my ($add) = $t->console( $vault,
+		{ argv => [ 'add', '-T', 'password', 'a1' ],
+			answers => [ 'right', 'secret' ] } );
+	is( $add->{exit}, 0, 'add writes the entry of the resume typo vault' )
+	    or diag( $add->{error} );
+
+	# The counter of the canary of the second oracle, above every
+	# value that this machine sends. Every other line stays.
+	my $canary = $t->canary_record( $vault, oracle => 2 );
+	my $file   = $t->counters($vault);
+	my $text   = $t->read_file($file) // q{};
+	my ($keep) = $text =~ /^\Q$canary\E: ([0-9]+)$/m;
+	ok( defined $keep,
+		"the counters file holds the record $canary (ORC-COUNTER-2)" );
+	my @line = grep { !/\A\Q$canary\E: / } split /\n/, $text;
+	$t->write_file( $file, @line, "$canary: $MAX_COUNTER" );
+
+	my ($stop) = $t->console( $vault,
+		{ argv => ['passwd'],
+			answers => [ 'right', 'right', 'other', 'other' ] } );
+	isnt( $stop->{exit}, 0,
+		'the canary of the greatest counter stops the change '
+		    . '(ORC-COUNTER-5)' );
+	is_deeply( [ done_lines( $t, $vault ) ],
+		[ '0-1', '0-2', '0-3', '1-1', '1-2', '1-3', 'canary-1' ],
+		'the marker holds each record of the two slots and the '
+		    . 'canary of the first oracle (ORC-ENROLL-10)' );
+
+	# The counter of the canary, as it stood before the change.
+	# No request of it reached the oracle.
+	@line = grep { !/\A\Q$canary\E: / }
+	    split /\n/, $t->read_file($file) // q{};
+	$t->write_file( $file, @line, "$canary: $keep" );
+
+	my %before = machine_state( $t, $vault );
+	my $url    = $t->url(2);
+	my ($typo) = $t->console( $vault,
+		{ argv => ['resume'],
+			answers => [ 'wrong', 'wrong', 'other', 'other' ] } );
+
+	isnt( $typo->{exit}, 0,
+		'a mistyped old passphrase stops the resume (ORC-CANARY-4)' );
+	like( $typo->{error},
+		qr/the canary of oracle 2 \(\Q$url\E\): the check fails/,
+		'the report names the canary of the first oracle of the old '
+		    . 'passphrase (ORC-CANARY-4)' );
+	like( $typo->{error}, qr/the cause is the passphrase/,
+		'the report holds the typo case, because no canary of the '
+		    . 'old passphrase passed (ORC-CANARY-4)' );
+	unlike( $typo->{error}, qr/the passphrase passed at oracle/,
+		'the report names no pass of the other passphrase '
+		    . '(ORC-CANARY-4)' );
+	like( $typo->{error}, qr/the change sends no set_pin/,
+		'the report states that no record takes a set_pin '
+		    . '(ORC-ENROLL-8)' );
+	is( $t->file_exists( marker($vault) ),
+		1, 'the stopped resume leaves the marker (ORC-ENROLL-10)' );
+	is_deeply( { machine_state( $t, $vault ) },
+		\%before,
+		'each wrap, each index wrap and each canary seal holds the '
+		    . 'bytes of the step before, so the resume re-enrolled '
+		    . 'no canary under the mistyped passphrase '
+		    . '(ORC-CANARY-10)' );
+
+	my ($done) = $t->console( $vault,
+		{ argv => ['resume'],
+			answers => [ 'right', 'right', 'other', 'other' ] } );
+	is( $done->{exit}, 0,
+		'the old passphrase completes the change after the stopped '
+		    . 'resume (ORC-ENROLL-10)' )
+	    or diag( $done->{error} );
+	is( $t->file_exists( marker($vault) ),
+		0, 'the resume removed the marker (ORC-ENROLL-10)' );
+
+	my ($show) = $t->console( $vault,
+		{ argv => [ 'show', 'a1' ], answers => ['other'] } );
+	is( $show->{exit}, 0,
+		'the new passphrase opens a session after the resume' )
+	    or diag( $show->{error} );
+	is_deeply( [ $t->terminal($show) ], [$secret],
+		'every record answers the new pin after the resume '
+		    . '(ORC-ENROLL-10)' );
 	return;
 }
 
@@ -491,7 +684,7 @@ sub damage_case ($t)
 	my %before = machine_state( $t, $vault );
 	my ($stop) = $t->console( $vault,
 		{ argv => ['passwd'],
-			answers => [ 'right', 'other', 'other' ] } );
+			answers => [ 'right', 'right', 'other', 'other' ] } );
 
 	isnt( $stop->{exit}, 0,
 		'the damaged slot file stops the change (ORC-ENROLL-9)' );
@@ -679,7 +872,11 @@ return sub ($t)
 	    sub { stop_case($t) };
 	subtest 'the change with one oracle stopped' =>
 	    sub { down_case($t) };
+	subtest 'the change that starts below the threshold' =>
+	    sub { reach_case($t) };
 	subtest 'the mistyped old passphrase' => sub { typo_case($t) };
+	subtest 'the mistyped old passphrase of a resume' =>
+	    sub { resume_typo_case($t) };
 	subtest 'the damaged slot file'       => sub { damage_case($t) };
 	subtest 'the pool refill'             => sub { refill_case($t) };
 	subtest 'the refill with the change marker' =>

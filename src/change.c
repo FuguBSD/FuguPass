@@ -25,12 +25,13 @@
  *
  * verify() runs the verification of ORC-ENROLL-8. It checks one
  * canary per live oracle, in list order. A failure at the first
- * canary holds the typo case, and it stops the change before any
- * set_pin (ORC-CANARY-4). A failure after a pass at another oracle
- * excludes the typo, so that canary takes a re-enrollment
- * (ORC-CANARY-5). The same checks carry this machine's index shares,
- * so the index key reaches the state with no request of its own
- * (ORC-CANARY-3, VAULT-INDEX-3).
+ * canary of a passphrase holds the typo case, and it stops the
+ * change before any set_pin (ORC-CANARY-4). A failure after a pass
+ * under the same passphrase excludes the typo. That canary then
+ * takes a re-enrollment, after the reachability gate of
+ * ORC-ENROLL-11 (ORC-CANARY-5). The same checks carry this
+ * machine's index shares, so the index key reaches the state with
+ * no request of its own (ORC-CANARY-3, VAULT-INDEX-3).
  *
  * slots_read() gives the records of this machine. One wrap file
  * names one record, and the slots of those files are the slots of
@@ -122,6 +123,9 @@
 #define STATE_PASS	0	/* the canary check of it passes */
 #define STATE_UNTRIED	1	/* the change sent no request to it */
 
+/* The two passphrases of a change hold one pass count each. */
+#define PASS_COUNT	2
+
 /*
  * One record of this machine: one slot at one oracle, or the canary
  * of one oracle (ORC-RECORDS-1, ORC-RECORDS-2). The marker names a
@@ -144,10 +148,14 @@ struct record {
  *
  * reach holds the reachable oracles in list order, and the first k
  * of them are the quorum of a reconstruction (ORC-QUORUM-2).
- * state[i] is the last state of oracle i, for the reports. passed
- * counts the canary checks that passed, and first is the oracle of
- * the first one, because a canary failure after a pass excludes the
- * typo (ORC-CANARY-4).
+ * state[i] is the last state of oracle i, for the reports.
+ *
+ * passed[f] counts the canary checks that passed under one
+ * passphrase, and first[f] is the oracle of the first one. The
+ * index f is the migration state of that canary: 0 names the old
+ * passphrase, and 1 names the new one (ORC-ENROLL-10). A canary
+ * failure after a pass excludes the typo under that one passphrase
+ * (ORC-CANARY-4).
  *
  * opened states that idxkey holds K_idx of this vault, and the index
  * read of verify() proves it (ORC-ENROLL-6).
@@ -173,8 +181,8 @@ struct state {
 	size_t			 markermax;
 	unsigned int		 reach[DERIVE_ORACLE_MAX];
 	unsigned int		 reachlen;
-	unsigned int		 passed;
-	unsigned int		 first;
+	unsigned int		 passed[PASS_COUNT];
+	unsigned int		 first[PASS_COUNT];
 	int			 state[DERIVE_ORACLE_MAX + 1];
 	unsigned char		*raw;	/* one sealed file */
 	unsigned char		*plain;	/* the plaintext of it */
@@ -211,7 +219,8 @@ static int		 marker_done(struct state *, uint32_t, unsigned int,
 static int		 marker_remove(const struct state *);
 static int		 read_twice(const char *, const char *, char *, size_t);
 static int		 pass_read(struct state *);
-static void		 canary_report(const struct state *, unsigned int);
+static void		 canary_report(const struct state *, unsigned int,
+			     int);
 static int		 canary_take(struct state *, unsigned int,
 			     unsigned char *, int *);
 static int		 canary_repair(struct state *, unsigned int);
@@ -779,9 +788,9 @@ marker_remove(const struct state *st)
  *	the two reads in constant time (ORC-ENROLL-8, SEC-MEMORY-2,
  *	SEC-MEMORY-4).
  *
- *	fugupass_passphrase_new() reads one new passphrase under the
- *	prompts of a creation. A change needs other prompts, so it
- *	names the pair here.
+ *	fugupass_passphrase_new() reads one new passphrase under one
+ *	pair of prompts. A change reads two passphrases, so it names
+ *	the prompts of each pair here.
  *
  *	A failed read and a mismatch each give -1, and each one clears
  *	buf.
@@ -819,18 +828,21 @@ out:
 /*
  * pass_read(st):
  *	The old passphrase and the new passphrase, to the state. The
- *	change reads the new one twice, and the pair must match
- *	(ORC-ENROLL-8). It reads the old one once, because the canary
- *	checks of verify() verify that one at each live oracle.
+ *	change reads each one twice, and each pair must match
+ *	(ORC-ENROLL-8, ORC-CANARY-6). The canary checks of verify()
+ *	verify the old one at each live oracle.
+ *
+ *	The two reads of the old passphrase are the reads of a canary
+ *	enrollment: canary_repair() can enroll a canary under that
+ *	passphrase (ORC-CANARY-6). A resume reads each pair again
+ *	(ORC-ENROLL-10).
  */
 static int
 pass_read(struct state *st)
 {
-	if (fugupass_passphrase("Old passphrase: ", st->oldpass,
-	    sizeof(st->oldpass)) != 0) {
-		warnx("the passphrase: the read fails");
+	if (read_twice("Old passphrase: ", "Old passphrase again: ",
+	    st->oldpass, sizeof(st->oldpass)) != 0)
 		return -1;
-	}
 	st->oldlen = strlen(st->oldpass);
 	if (read_twice("New passphrase: ", "New passphrase again: ",
 	    st->newpass, sizeof(st->newpass)) != 0)
@@ -840,23 +852,26 @@ pass_read(struct state *st)
 }
 
 /*
- * canary_report(st, oracle):
+ * canary_report(st, oracle, fresh):
  *	The report of one canary check failure (ORC-CANARY-4,
  *	ORC-CANARY-9). A junk answer names no cause, so the report
- *	names the cause set.
+ *	names the cause set. fresh states the passphrase of the
+ *	record, as ctx_of() takes it.
  *
- *	A failure at the first canary of the change holds the typo
- *	case. A failure after a pass at another oracle excludes the
- *	typo, because the passphrase opened the canary check seal of
- *	that other oracle.
+ *	A failure at the first canary of that passphrase holds the
+ *	typo case. A failure after a pass under the same passphrase
+ *	excludes the typo, because that passphrase opened the canary
+ *	check seal of the other oracle. A pass under the other
+ *	passphrase proves nothing of this one, so the report names an
+ *	oracle of the same passphrase (ORC-ENROLL-10).
  */
 static void
-canary_report(const struct state *st, unsigned int oracle)
+canary_report(const struct state *st, unsigned int oracle, int fresh)
 {
 	const char	*url = st->config.oracle[oracle - 1].url;
 
 	warnx("the canary of oracle %u (%s): the check fails", oracle, url);
-	if (st->passed == 0)
+	if (st->passed[fresh] == 0)
 		warnx("the cause is the passphrase, or, at oracle %u, a wiped "
 		    "canary record, a counter behind the record, or a stale "
 		    "canary check seal of this machine", oracle);
@@ -864,7 +879,7 @@ canary_report(const struct state *st, unsigned int oracle)
 		warnx("the passphrase passed at oracle %u, so the cause sits "
 		    "at oracle %u: a wiped canary record, a counter behind "
 		    "the record, or a stale canary check seal of this "
-		    "machine", st->first, oracle);
+		    "machine", st->first[fresh], oracle);
 }
 
 /*
@@ -876,24 +891,26 @@ canary_report(const struct state *st, unsigned int oracle)
  *
  *	The record takes the passphrase that it answers: the new one
  *	for a canary of the marker list, and the old one for every
- *	other canary (ORC-ENROLL-10).
+ *	other canary (ORC-ENROLL-10). A pass therefore counts under
+ *	that one passphrase (ORC-CANARY-4).
  */
 static int
 canary_take(struct state *st, unsigned int oracle, unsigned char *share,
     int *live)
 {
 	struct oracle_ctx	 ctx;
-	int			 rv;
+	int			 fresh, rv;
 
-	ctx_of(&ctx, st, oracle, migrated(st, 0, oracle, 1));
+	fresh = migrated(st, 0, oracle, 1);
+	ctx_of(&ctx, st, oracle, fresh);
 	rv = oracle_canary_check(&ctx, NULL, 0, share, DERIVE_KEYLEN, live);
 	st->state[oracle] = rv;
 	if (rv == ORACLE_EJUNK)
-		canary_report(st, oracle);
+		canary_report(st, oracle, fresh);
 	else if (rv == 0) {
-		if (st->passed == 0)
-			st->first = oracle;
-		st->passed++;
+		if (st->passed[fresh] == 0)
+			st->first[fresh] = oracle;
+		st->passed[fresh]++;
 	} else
 		warnx("the canary of oracle %u (%s): %s", oracle,
 		    st->config.oracle[oracle - 1].url, oracle_state_text(rv));
@@ -903,11 +920,16 @@ canary_take(struct state *st, unsigned int oracle, unsigned char *share,
 /*
  * canary_repair(st, oracle):
  *	The re-enrollment of one canary record that fails for a
- *	record-side cause (ORC-ENROLL-8, ORC-CANARY-5). The change
- *	takes this call before the first re-enrollment of the loop.
+ *	record-side cause (ORC-ENROLL-8, ORC-CANARY-5). A repair is a
+ *	re-enrollment, so the change takes this call after the
+ *	reachability gate of ORC-ENROLL-11. The call still comes
+ *	before the marker write, and before the first re-enrollment
+ *	of the loop.
  *
  *	The record takes the passphrase that it must answer, as
- *	canary_take() does. The change holds no index key here, so the
+ *	canary_take() does. pass_read() read that passphrase twice,
+ *	so the enrollment takes the matched value for both reads
+ *	(ORC-CANARY-6). The change holds no index key here, so the
  *	enrollment takes this machine's index wrap of that oracle away
  *	(ORC-CANARY-8). The canary loop of the change writes that wrap
  *	again, while the change holds K_idx (ORC-ENROLL-6).
@@ -983,9 +1005,10 @@ out:
 /*
  * reach_report(st):
  *	The report of a change with fewer than k reachable oracles
- *	(ORC-QUORUM-6). No quorum reconstructs an entry key, so the
- *	change sends no set_pin. The report names the state of each
- *	live position, and the states of a request stay apart
+ *	(ORC-ENROLL-11, ORC-QUORUM-6). The change stops here, before
+ *	the marker write and before the first re-enrollment, so it
+ *	sends no set_pin. The report names the state of each live
+ *	position, and the states of a request stay apart
  *	(ORC-REVEAL-6, ORC-REVEAL-8).
  */
 static void
@@ -1009,11 +1032,19 @@ reach_report(const struct state *st)
  *	The verification of ORC-ENROLL-8, before any re-enrollment.
  *	The walk checks one canary per live oracle, in list order.
  *
- *	A junk answer at the first canary holds the typo case, and it
- *	stops the change (ORC-CANARY-4). A junk answer after a pass
- *	excludes the typo, so that canary takes a re-enrollment
- *	(ORC-CANARY-5). Every other failure names an oracle that no
- *	request reaches, and the walk steps over it.
+ *	A junk answer at the first canary of a passphrase holds the
+ *	typo case, and it stops the change (ORC-CANARY-4). A junk
+ *	answer after a pass under the same passphrase excludes the
+ *	typo, so that canary takes a repair (ORC-CANARY-5). Every
+ *	other failure names an oracle that no request reaches, and
+ *	the walk steps over it.
+ *
+ *	A junk answer comes from an oracle that answered, so the walk
+ *	counts that oracle as reachable. The gate of ORC-ENROLL-11
+ *	therefore comes before each repair, because a repair is a
+ *	re-enrollment. A change below k sends no set_pin, and the
+ *	report of that stop stays true. A repair that fails stops the
+ *	change, before the marker write.
  *
  *	The same answers carry this machine's index shares, so K_idx
  *	reaches the state with no request of its own (ORC-CANARY-3).
@@ -1030,11 +1061,13 @@ verify(struct state *st)
 {
 	unsigned char	 shares[DERIVE_ORACLE_MAX * DERIVE_KEYLEN];
 	unsigned int	 point[DERIVE_ORACLE_MAX];
-	unsigned int	 i, count = 0;
+	unsigned int	 repair[DERIVE_ORACLE_MAX];
+	unsigned int	 i, j, count = 0, repairlen = 0;
 	int		 live, rv, ok = -1;
 
 	memset(shares, 0, sizeof(shares));
 	memset(point, 0, sizeof(point));
+	memset(repair, 0, sizeof(repair));
 	for (i = 1; i <= st->config.count; i++)
 		st->state[i] = STATE_UNTRIED;
 
@@ -1043,12 +1076,16 @@ verify(struct state *st)
 			continue;
 		rv = canary_take(st, i, &shares[count * DERIVE_KEYLEN], &live);
 		if (rv == ORACLE_EJUNK) {
-			if (st->passed == 0) {
+			/*
+			 * The typo case holds until one canary of that
+			 * passphrase passes (ORC-CANARY-4).
+			 */
+			if (st->passed[migrated(st, 0, i, 1)] == 0) {
 				warnx("the change sends no set_pin");
 				goto out;
 			}
-			if (canary_repair(st, i) == 0)
-				st->reach[st->reachlen++] = i;
+			st->reach[st->reachlen++] = i;
+			repair[repairlen++] = i;
 			continue;
 		}
 		if (rv != 0)
@@ -1062,6 +1099,15 @@ verify(struct state *st)
 		reach_report(st);
 		goto out;
 	}
+
+	/*
+	 * Each repair of a canary is a re-enrollment, so it follows
+	 * the gate above (ORC-CANARY-5, ORC-ENROLL-11).
+	 */
+	for (j = 0; j < repairlen; j++)
+		if (canary_repair(st, repair[j]) != 0)
+			goto out;
+
 	for (i = 1; i <= st->config.count; i++) {
 		if (st->config.oracle[i - 1].retired ||
 		    st->state[i] == STATE_PASS)
