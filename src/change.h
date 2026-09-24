@@ -32,8 +32,8 @@
  *
  * change_pending() gives the marker state of a vault. While the
  * marker exists, a session must refuse reveals and must name
- * CHANGE_RESUME_CMD (ORC-ENROLL-10). That refusal and the
- * subcommands of the tool are absent.
+ * CHANGE_RESUME_CMD (ORC-ENROLL-10). session.c holds that refusal,
+ * and fugupass.c holds the passwd and the resume subcommands.
  *
  * The steps come from the other files of the tree. oracle.c holds
  * each record, each mask and each wrap, share.c holds the

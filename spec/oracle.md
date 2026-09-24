@@ -229,9 +229,12 @@ is an accepted FuguOracle transport risk, and TLS mitigates it.
   with the old passphrase at every oracle whose canary is unmigrated.
 - **ORC-ENROLL-11** — A passphrase change needs every live oracle reachable.
   With a live oracle unreachable, the change stays incomplete, and the marker
-  stays. Sessions refuse reveals until the change completes, or until a plate
-  ceremony removes the marker (ORC-ENROLL-12). The quorum availability claim
-  covers reveals only ([OVW-RISKS](overview.md#ovw-risks)).
+  stays. A change that starts with fewer than `k` reachable oracles must stop
+  before the marker write and before the first re-enrollment
+  ([ORC-QUORUM](oracle.md#orc-quorum)). Sessions refuse reveals until the change
+  completes, or until a plate ceremony removes the marker (ORC-ENROLL-12). The
+  quorum availability claim covers reveals only
+  ([OVW-RISKS](overview.md#ovw-risks)).
 - **ORC-ENROLL-12** — A plate ceremony that re-enrolls every record of this
   machine under one passphrase must remove the change marker. The ceremony
   report must name the removal (CER-PROVISION-17). This ceremony is the recovery
@@ -472,8 +475,9 @@ detects a passphrase mistyped the same way twice.
   must also direct the owner to a passphrase change on every other machine when
   the passphrase may be known ([ORC-ENROLL](oracle.md#orc-enroll)).
 
-Each ceremony exports the kit of its machine
-([CER-PROVISION](ceremonies.md#cer-provision)). An attacker who first raises a
+The creation ceremony and the provisioning ceremony each export the kit of their
+machine ([CER-CREATE](ceremonies.md#cer-create),
+[CER-PROVISION](ceremonies.md#cer-provision)). An attacker who first raises a
 record's stored counter to `0xFFFFFFFF` locks that record for every caller. A
 locked record denies its mask to the attacker too. The revocation paths destroy
 or deny records, never data: every entry recovers from the plate

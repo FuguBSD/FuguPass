@@ -2,8 +2,7 @@
 
 ## Status
 
-Proposed. It waits on plan 008 for the change marker. It completes the quorum
-leg of the harness.
+Proposed. It waits on no other plan. It completes the quorum leg of the harness.
 
 Implements: REC-WIPE, TEST-HARNESS, CER-PROVISION. Implements: VAULT-INDEX,
 KEY-MASK. Implements: ORC-REVOKE without ORC-REVOKE-7 and ORC-REVOKE-9.
