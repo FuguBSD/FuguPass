@@ -58,6 +58,12 @@
 .Op Fl m Ar machine
 .Nm
 .Op Fl d Ar directory
+.Cm revoke
+.Op Fl r
+.Fl m Ar machine
+.Op Ar position ...
+.Nm
+.Op Fl d Ar directory
 .Cm ls
 .Nm
 .Op Fl d Ar directory
@@ -121,9 +127,10 @@ Every subcommand but
 .Cm passwd ,
 .Cm resume ,
 .Cm refill ,
-.Cm provision
-and
+.Cm provision ,
 .Cm kit
+and
+.Cm revoke
 opens a session of the vault first.
 The session reads the passphrase once.
 It takes the quorum of
@@ -490,6 +497,96 @@ oracle.
 A plate of another vault does not open the index, and the
 subcommand stops with a report.
 .El
+.It Xo
+.Cm revoke
+.Op Fl r
+.Fl m Ar machine
+.Op Ar position ...
+.Xc
+Revoke the records of the machine
+.Ar machine
+at each chosen oracle, from the plate.
+Run it on a surviving machine after the loss of that machine.
+The subcommand takes the master from a plate scan of
+.Xr fugupass-scan 1 ,
+it derives the client keys of that machine, and it opens the index
+under the index key of that plate.
+It opens no session, it reads no passphrase, and it needs no file
+of the lost machine.
+The records of the machine at one oracle are one record of each
+slot of the vault, and the canary record, as
+.Cm kit
+lists them.
+.Pp
+Each
+.Ar position
+argument names one live position of the config file.
+A run without an argument takes every live position.
+A retired position holds no oracle, so it takes no request, and the
+report says so.
+.Pp
+A run without the
+.Fl r
+option sends the lock: one wrong attempt per record, at the
+counter value 4294967295.
+That value passes the replay check against every lower stored
+counter, so a raised counter cannot block the lock.
+The attempt burns one strike, and the stored counter of the record
+takes the highest value.
+No later request of that record passes the replay check.
+The record then answers junk to every caller, and every later
+enrollment of it fails with an HTTP error.
+The record keeps its file at the oracle.
+.Pp
+The lock retires the machine name at that oracle, because no
+enrollment under that name passes there again.
+The subcommand marks the name retired in the machine registry of
+the index, and the mark never clears.
+A run of
+.Cm provision
+under that name refuses, and a replacement machine takes a new
+name.
+.Pp
+To deny the lost machine a quorum, lock its records at enough
+oracles.
+With
+.Ar n
+live oracles and the threshold
+.Ar k ,
+locks at
+.Ar n No \- Ar k No + 1
+of them deny every quorum.
+The report states that count.
+.Bl -tag -width Ds
+.It Fl r
+Send the replacement in place of the lock: one enrollment per
+record, under fresh key material and a random pin secret, at the
+same counter value.
+The oracle replaces the key material of the record and resets the
+stored counter.
+Every wrap of the lost machine is then dead.
+The replacement retires no name.
+.El
+.Pp
+The report names each oracle where the lock or the replacement
+landed, with the record count.
+It names each oracle where a request failed, with the state of the
+last failure, and the subcommand then exits 1.
+It names each position that got no complete lock, so the owner
+locks or deletes the remaining records of the machine there.
+.Cm kit
+names each record file for an operator.
+The passphrase of a lost machine may be known, so the report
+directs the owner to
+.Cm passwd
+on every other machine.
+.Pp
+No oracle operation freezes a record, and no oracle operation
+reverses a lock or a replacement.
+An operator of a self-hosted oracle can stop the service, and can
+delete the record files that
+.Cm kit
+names.
 .It Cm ls
 Print the name of each entry of the index, one name on each line.
 The subcommand reads the open index, and it sends no entry request.
@@ -759,6 +856,33 @@ no round count.
 A list change that breaks the position rule, a list change under a
 marker, and a change of the list and the threshold in one run each
 stop the ceremony as well, and the report names the cause.
+.El
+.Pp
+The reports below name a state of a revocation.
+.Bl -tag -width Ds
+.It the lock landed on Ar c No records of the machine Ar m No at oracle Ar i
+Every request of the machine at that oracle got an answer, and the
+records of it there answer junk from now on.
+A replacement reports the same line with the word
+.Dq replacement .
+.It the lock reached Ar c No of Ar t No records of the machine Ar m No at oracle Ar i
+A request failed at that oracle, and the next line names the state
+of the last failure.
+The records that no request reached stay as they were.
+Run the subcommand again for that position.
+.It the machine Ar m No is retired, and the registry of the index marks it
+A lock landed at one oracle at least.
+A replacement machine provisions under a new name.
+.It the records of the machine Ar m No remain at oracle Ar i
+That position got no complete lock.
+Lock or delete the records there, and
+.Cm kit
+names each record file.
+.It the registry of the index marks the machine Ar m No retired
+The
+.Cm provision
+subcommand refuses a retired name.
+Give a new machine name.
 .El
 .Sh SEE ALSO
 .Xr fugupass-qr 1 ,

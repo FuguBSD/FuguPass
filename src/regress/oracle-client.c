@@ -26,15 +26,20 @@
  * file adds the arguments, the report, and the caller of the
  * decrypt.
  *
- * The three commands are:
+ * The four commands are:
  *
  *	oracle-client enroll <vault> <oracle> <slot>
  *	oracle-client reveal <vault> <oracle> <slot>
  *	oracle-client canary <vault> <oracle>
+ *	oracle-client lock <vault> <oracle> <slot>
  *
  * <vault> is the vault directory, <oracle> is the 1-based position
  * of the oracle list, and <slot> is the slot index of the entry. A
- * canary record takes no slot index (ORC-RECORDS-2).
+ * canary record takes no slot index (ORC-RECORDS-2). lock sends the
+ * one wrong attempt of a revocation at the revocation counter, and
+ * it reads no passphrase (ORC-REVOKE-8, TEST-HARNESS-3). The leg
+ * then proves junk on every get_pin and an HTTP error on every
+ * set_pin of that record.
  *
  * The URL and the static public key of the position come from
  * <vault>/machine/config, because the record client reads the two
@@ -160,7 +165,7 @@ static int	 reveal(const struct oracle_ctx *, uint32_t,
 
 /*
  * usage():
- *	The three commands, to the standard error, and exit 1. A
+ *	The four commands, to the standard error, and exit 1. A
  *	wrong argument prints no state line.
  */
 static void
@@ -169,7 +174,8 @@ usage(void)
 	fprintf(stderr,
 	    "usage: oracle-client enroll <vault> <oracle> <slot>\n"
 	    "       oracle-client reveal <vault> <oracle> <slot>\n"
-	    "       oracle-client canary <vault> <oracle>\n");
+	    "       oracle-client canary <vault> <oracle>\n"
+	    "       oracle-client lock <vault> <oracle> <slot>\n");
 	exit(1);
 }
 
@@ -351,7 +357,7 @@ main(int argc, char *argv[])
 	size_t			 passlen = 0, againlen = 0;
 	uint32_t		 slot = 0;
 	unsigned int		 oracle;
-	int			 canary, state;
+	int			 canary, lock, state;
 
 	memset(key, 0, sizeof(key));
 	memset(share, 0, sizeof(share));
@@ -362,9 +368,10 @@ main(int argc, char *argv[])
 	if (argc < 4)
 		usage();
 	canary = (strcmp(argv[1], "canary") == 0);
+	lock = (strcmp(argv[1], "lock") == 0);
 	if (canary ? argc != 4 : argc != 5)
 		usage();
-	if (!canary && strcmp(argv[1], "enroll") != 0 &&
+	if (!canary && !lock && strcmp(argv[1], "enroll") != 0 &&
 	    strcmp(argv[1], "reveal") != 0)
 		usage();
 
@@ -408,7 +415,12 @@ main(int argc, char *argv[])
 	/* root reaches its last use here (SEC-MEMORY-6). */
 	explicit_bzero(root, sizeof(root));
 
-	if (pass_line(pass, sizeof(pass), &passlen) != 0) {
+	/*
+	 * A lock takes no passphrase: the revocation sends a random
+	 * pin secret, and the owner of the plate types none
+	 * (ORC-REVOKE-4).
+	 */
+	if (!lock && pass_line(pass, sizeof(pass), &passlen) != 0) {
 		fail = "the standard input holds no passphrase line";
 		goto out;
 	}
@@ -422,12 +434,15 @@ main(int argc, char *argv[])
 	ctx.config = cfg;
 	ctx.factor = factor;
 	ctx.factorlen = sizeof(factor);
-	ctx.pass = pass;
+	ctx.pass = lock ? NULL : pass;
 	ctx.passlen = passlen;
 	ctx.oracle = oracle;
 
 	if (canary) {
 		state = oracle_canary_enroll(&ctx, again, againlen);
+		report(state, NULL, NULL);
+	} else if (lock) {
+		state = oracle_revoke(&ctx, slot, 0, 0);
 		report(state, NULL, NULL);
 	} else if (strcmp(argv[1], "enroll") == 0) {
 		state = oracle_enroll(&ctx, slot, key, sizeof(key));

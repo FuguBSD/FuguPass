@@ -174,10 +174,12 @@ enum canary_state {
  * config of this machine before the ceremony, or NULL for a machine
  * with none. name is the machine name that index_line() looks up in
  * the registry, and NULL looks up none. registered and retired hold
- * the result of that lookup (VAULT-INDEX-2). verifier is 1 while a
- * canary check seal of a live oracle exists on this machine
- * (ORC-CANARY-6), and canary holds the state of each canary
- * (CER-PROVISION-12).
+ * the result of that lookup (VAULT-INDEX-2). retire is 1 for the
+ * rewrite of ceremony_retire(): the machine line of name then stays
+ * out of the text, and the marked line replaces it (VAULT-INDEX-7).
+ * verifier is 1 while a canary check seal of a live oracle exists
+ * on this machine (ORC-CANARY-6), and canary holds the state of
+ * each canary (CER-PROVISION-12).
  */
 struct state {
 	const struct ceremony_create	*arg;
@@ -201,6 +203,7 @@ struct state {
 	const char			*name;
 	int				 registered;
 	int				 retired;
+	int				 retire;
 	int				 verifier;
 	int				 full;		/* every pair, CER-PROVISION-15/17 */
 	int				 threshold_change; /* write the marker */
@@ -231,7 +234,7 @@ static int		 step_slots(struct state *);
 static int		 step_index(const struct state *);
 static int		 refill_config(struct state *);
 static int		 refill_factor(struct state *);
-static void		 registry_note(struct state *, const char *, size_t);
+static int		 registry_note(struct state *, const char *, size_t);
 static int		 index_line(const struct vault_line *, void *);
 static int		 index_read(struct state *);
 static int		 refill_reserve(struct state *);
@@ -982,21 +985,27 @@ out:
  *	value is one machine name, or one machine name, one space
  *	and the word retired (VAULT-INDEX-2, VAULT-FORMAT). A match
  *	sets registered, and a match with the mark sets retired as
- *	well (VAULT-INDEX-7).
+ *	well (VAULT-INDEX-7). The call gives 1 for a match, and 0
+ *	for a line of another name.
  */
-static void
+static int
 registry_note(struct state *st, const char *value, size_t valuelen)
 {
 	static const char	 mark[] = " retired";
 	size_t			 namelen = strlen(st->name);
 
 	if (valuelen < namelen || memcmp(value, st->name, namelen) != 0)
-		return;
-	if (valuelen == namelen)
+		return 0;
+	if (valuelen == namelen) {
 		st->registered = 1;
-	else if (valuelen == namelen + sizeof(mark) - 1 &&
-	    memcmp(&value[namelen], mark, sizeof(mark) - 1) == 0)
+		return 1;
+	}
+	if (valuelen == namelen + sizeof(mark) - 1 &&
+	    memcmp(&value[namelen], mark, sizeof(mark) - 1) == 0) {
 		st->registered = st->retired = 1;
+		return 1;
+	}
+	return 0;
 }
 
 /*
@@ -1005,11 +1014,13 @@ registry_note(struct state *st, const char *value, size_t valuelen)
  *	lines give the pool state of it, and they stay out of the
  *	text of the write. index_write() writes the new state of the
  *	two (VAULT-INDEX-2). A machine line of the name of the state
- *	sets the registry members (CER-PROVISION-3).
+ *	sets the registry members (CER-PROVISION-3). The rewrite of
+ *	ceremony_retire() keeps that one line out of the text, and
+ *	the marked line takes its place (VAULT-INDEX-7).
  *
- *	Every other line reaches that text again, so the refill and
- *	the provisioning change no entry and no other machine of the
- *	registry (CER-REFILL-4, CER-PROVISION-8).
+ *	Every other line reaches that text again, so the refill, the
+ *	provisioning and the retirement change no entry and no other
+ *	machine of the registry (CER-REFILL-4, CER-PROVISION-8).
  */
 static int
 index_line(const struct vault_line *line, void *arg)
@@ -1018,8 +1029,9 @@ index_line(const struct vault_line *line, void *arg)
 	const char	*name = line->field->name;
 	int		 n;
 
-	if (strcmp(name, "machine") == 0 && st->name != NULL)
-		registry_note(st, line->value, line->valuelen);
+	if (strcmp(name, "machine") == 0 && st->name != NULL &&
+	    registry_note(st, line->value, line->valuelen) && st->retire)
+		return 0;
 	if (strcmp(name, "pool-free") == 0) {
 		if (line->valuelen >= sizeof(st->free))
 			return -1;
@@ -2073,6 +2085,79 @@ out:
 		free(st->text);
 	}
 	free(st->old);
+	explicit_bzero(st, sizeof(*st));
+	free(st);
+	return rv;
+}
+
+int
+ceremony_retire(const char *vault, const unsigned char *root, size_t rootlen,
+    const char *machine)
+{
+	struct state	*st;
+	int		 n, rv = -1;
+
+	if (vault == NULL || root == NULL || rootlen != DERIVE_ROOTLEN ||
+	    machine == NULL ||
+	    derive_machine_check(machine, strlen(machine)) != 0) {
+		warnx("the retirement takes an incomplete argument set");
+		return -1;
+	}
+	if ((st = calloc(1, sizeof(*st))) == NULL) {
+		warn("the retirement");
+		return -1;
+	}
+	st->vault = vault;
+	st->name = machine;
+	st->retire = 1;
+	memcpy(st->root, root, sizeof(st->root));
+
+	/* The three buffers of the index (struct state). */
+	st->raw = malloc(INDEX_RAW_MAX);
+	st->plain = malloc(SESSION_INDEX_MAX);
+	st->text = malloc(SESSION_INDEX_MAX);
+	if (st->raw == NULL || st->plain == NULL || st->text == NULL) {
+		warn("the retirement");
+		goto out;
+	}
+
+	/*
+	 * The read keeps every line of the index but the machine line
+	 * of the name, and the marked line takes its place
+	 * (ORC-REVOKE-11, VAULT-INDEX-7). A name that the registry
+	 * does not hold takes the marked line as well, so the name
+	 * never provisions (CER-PROVISION-3). The write takes the
+	 * pool state as the read gave it, with no new slot.
+	 */
+	if (index_read(st) != 0)
+		goto out;
+	n = snprintf(&st->text[st->textlen], SESSION_INDEX_MAX - st->textlen,
+	    "machine: %s retired\n", machine);
+	if (n < 0 || (size_t)n >= SESSION_INDEX_MAX - st->textlen) {
+		warnx("the index: the text does not fit");
+		goto out;
+	}
+	st->textlen += (size_t)n;
+	if (index_write(st) != 0)
+		goto out;
+	rv = 0;
+out:
+	/*
+	 * root, K_idx and the plaintext of the index leave memory
+	 * here, on the pass and on every failure path (SEC-MEMORY-5).
+	 */
+	if (st->raw != NULL) {
+		explicit_bzero(st->raw, INDEX_RAW_MAX);
+		free(st->raw);
+	}
+	if (st->plain != NULL) {
+		explicit_bzero(st->plain, SESSION_INDEX_MAX);
+		free(st->plain);
+	}
+	if (st->text != NULL) {
+		explicit_bzero(st->text, SESSION_INDEX_MAX);
+		free(st->text);
+	}
 	explicit_bzero(st, sizeof(*st));
 	free(st);
 	return rv;

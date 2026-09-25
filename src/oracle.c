@@ -18,11 +18,16 @@
  * The record client: one enrollment, one reveal, one canary, and the
  * counters file. oracle.h states the interface and the states.
  *
- * request() holds the one request of this file. It derives the
- * client key and the pin secret of the record, takes the counter,
- * draws the ephemeral values, and sends one POST. Each public
- * function reaches it. canary() calls it twice, and every other
+ * request_at() holds the one request of this file. It derives the
+ * client key of the record, draws the ephemeral values, and sends
+ * one POST under a given pin secret at a given counter. request()
+ * gives it the pin secret of the passphrase and the next counter
+ * of the record, and each public function of an ordinary request
+ * reaches it that way. canary() calls it twice, and every other
  * path sends one request for one record (ORC-CANARY-7).
+ * oracle_revoke() gives it a random pin secret at the counter
+ * COUNTER_REVOKE, and it is the one caller that does
+ * (ORC-COUNTER-5, ORC-REVOKE-8).
  *
  * canary() carries the two canary enrollments, and
  * oracle_canary_check() is the canary check of one oracle. The
@@ -77,6 +82,15 @@
 #define URL_MAX		(VAULT_URL_MAX + sizeof(PATH_SET))
 
 /*
+ * The counter of a revocation request (ORC-REVOKE-8). It passes
+ * anti-replay against every lower stored counter, and no later
+ * request of that record passes it. oracle_revoke() is the one
+ * function that sends it, and counter_take() stops every ordinary
+ * request at it (ORC-COUNTER-5).
+ */
+#define COUNTER_REVOKE	UINT32_MAX
+
+/*
  * One record name: 10 digits of a slot, a hyphen, 3 digits of an
  * oracle index, and a terminator. The canary form is shorter
  * (ORC-COUNTER-2).
@@ -102,7 +116,7 @@ struct counter_state {
 	uint32_t	 stored;	/* the counter of this record */
 };
 
-static int	ctx_ok(const struct oracle_ctx *);
+static int	ctx_ok(const struct oracle_ctx *, int);
 static int	hex_digit(char);
 static int	key_bytes(const char *, unsigned char *, size_t);
 static int	request_url(const struct vault_oracle *, const char *, char *,
@@ -113,6 +127,9 @@ static int	counter_take(const char *, uint32_t, int, unsigned int,
 		    uint32_t *);
 static int	wrap_path(const struct oracle_ctx *, uint32_t, char *, size_t);
 static int	wrap_index_drop(const struct oracle_ctx *);
+static int	request_at(const struct oracle_ctx *, uint32_t, int,
+		    const unsigned char *, const unsigned char *, uint32_t,
+		    unsigned char *);
 static int	request(const struct oracle_ctx *, uint32_t, int,
 		    const unsigned char *, unsigned char *);
 static int	canary(const struct oracle_ctx *, const char *, size_t,
@@ -136,19 +153,23 @@ oracle_state_text(int state)
 }
 
 /*
- * ctx_ok(ctx):
+ * ctx_ok(ctx, pass):
  *	0 when the context names one live position of the config, and
  *	-1 for every other context. The oracle index is the 1-based
  *	position of the ordered list, and a retired position holds no
- *	oracle (ORC-PROVISION-5, ORC-PROVISION-9).
+ *	oracle (ORC-PROVISION-5, ORC-PROVISION-9). pass takes 1 for a
+ *	request that derives its pin secret from the passphrase, and
+ *	0 for a revocation, which takes none (ORC-REVOKE-8).
  */
 static int
-ctx_ok(const struct oracle_ctx *ctx)
+ctx_ok(const struct oracle_ctx *ctx, int pass)
 {
 	if (ctx == NULL || ctx->vault == NULL || ctx->config == NULL ||
-	    ctx->factor == NULL || ctx->pass == NULL)
+	    ctx->factor == NULL)
 		return -1;
-	if (ctx->factorlen != DERIVE_KEYLEN || ctx->passlen == 0)
+	if (ctx->factorlen != DERIVE_KEYLEN)
+		return -1;
+	if (pass && (ctx->pass == NULL || ctx->passlen == 0))
 		return -1;
 	if (ctx->oracle == 0 || ctx->oracle > ctx->config->count)
 		return -1;
@@ -308,11 +329,11 @@ counter_line(const struct vault_line *line, void *arg)
  *	before the request, so a crash after the request never sends
  *	this value again (ORC-COUNTER-2).
  *
- *	No request of this file sends the value 0xFFFFFFFF, and the
+ *	No ordinary request sends the value COUNTER_REVOKE, and the
  *	call stops at that value. A revocation is the one request
- *	that sends it, and this file holds no revocation
- *	(ORC-COUNTER-5, ORC-REVOKE-8). The Unix-seconds term stays
- *	below that value until 2106.
+ *	that sends it, and oracle_revoke() takes no counter from
+ *	this call (ORC-COUNTER-5, ORC-REVOKE-8). The Unix-seconds
+ *	term stays below that value until 2106.
  */
 static int
 counter_take(const char *vault, uint32_t slot, int canary,
@@ -350,7 +371,7 @@ counter_take(const char *vault, uint32_t slot, int canary,
 	next = (uint64_t)now;
 	if (next < (uint64_t)st.stored + 1)
 		next = (uint64_t)st.stored + 1;
-	if (next >= VAULT_COUNTER_MAX)
+	if (next >= COUNTER_REVOKE)
 		goto out;
 
 	n = snprintf(&lines[st.outlen], st.outsize - st.outlen,
@@ -413,11 +434,13 @@ wrap_index_drop(const struct oracle_ctx *ctx)
 }
 
 /*
- * request(ctx, slot, canary, entropy, mask):
- *	One request of one record, and the mask of the answer to the
- *	ENVELOPE_MASKLEN bytes at mask. canary takes the canary
- *	record of the oracle in place of the record of the slot index
- *	slot (ORC-RECORDS-1, ORC-RECORDS-2).
+ * request_at(ctx, slot, canary, entropy, pin, counter, mask):
+ *	One request of one record, under the pin secret of
+ *	PIN_SECRETLEN bytes at pin and at the counter value counter,
+ *	and the mask of the answer to the ENVELOPE_MASKLEN bytes at
+ *	mask. canary takes the canary record of the oracle in place
+ *	of the record of the slot index slot (ORC-RECORDS-1,
+ *	ORC-RECORDS-2).
  *
  *	entropy holds the ENVELOPE_ENTROPYLEN fresh bytes of a
  *	set_pin request, and a NULL entropy makes a get_pin request.
@@ -425,11 +448,13 @@ wrap_index_drop(const struct oracle_ctx *ctx)
  *	(ORC-CONFORM-2, ORC-PROVISION-4).
  *
  *	The client key of a record takes the device factor alone, so
- *	no passphrase enters it (KEY-CLIENT-1, KEY-CLIENT-4). The
- *	passphrase enters the request as the pin secret alone
- *	(ORC-CONFORM-3, KEY-PIN-3). Each record holds its own key and
- *	its own salt, so the oracle sees an independent client
- *	(ORC-RECORDS-3).
+ *	no passphrase enters it (KEY-CLIENT-1, KEY-CLIENT-4). Each
+ *	record holds its own key, so the oracle sees an independent
+ *	client (ORC-RECORDS-3). The pin and the counter come from
+ *	the caller: request() gives the pin of the passphrase and
+ *	the next counter of the record, and oracle_revoke() gives a
+ *	random pin at COUNTER_REVOKE. This function reads no
+ *	counters file, and it writes none.
  *
  *	The call gives 0, or one of the four states of oracle.h. A
  *	failure after the URL gate and the key gate clears mask, and
@@ -438,20 +463,18 @@ wrap_index_drop(const struct oracle_ctx *ctx)
  *	ctx directly.
  */
 static int
-request(const struct oracle_ctx *ctx, uint32_t slot, int canary,
-    const unsigned char *entropy, unsigned char *mask)
+request_at(const struct oracle_ctx *ctx, uint32_t slot, int canary,
+    const unsigned char *entropy, const unsigned char *pin, uint32_t counter,
+    unsigned char *mask)
 {
 	const struct vault_oracle	*pos;
 	unsigned char			 body[ENVELOPE_RESPONSE_LEN];
 	unsigned char			 req[ENVELOPE_REQUEST_MAX];
 	unsigned char			 pub[ENVELOPE_PUBKEYLEN];
 	unsigned char			 client[DERIVE_KEYLEN];
-	unsigned char			 salt[DERIVE_KEYLEN];
-	unsigned char			 pin[PIN_SECRETLEN];
 	unsigned char			 ckepriv[ENVELOPE_KEYLEN];
 	unsigned char			 iv[ENVELOPE_IVLEN];
 	char				 url[URL_MAX];
-	uint32_t			 counter;
 	size_t				 bodylen = 0, reqlen = 0;
 	int				 n, status = 0, rv = -1;
 
@@ -469,19 +492,6 @@ request(const struct oracle_ctx *ctx, uint32_t slot, int canary,
 		n = derive_client_key(ctx->factor, ctx->factorlen, ctx->oracle,
 		    slot, client, sizeof(client));
 	if (n != 0)
-		goto out;
-	if (canary)
-		n = derive_pin_salt_canary(ctx->factor, ctx->factorlen,
-		    ctx->oracle, salt, sizeof(salt));
-	else
-		n = derive_pin_salt(ctx->factor, ctx->factorlen, ctx->oracle,
-		    slot, salt, sizeof(salt));
-	if (n != 0)
-		goto out;
-	if (pin_secret(ctx->pass, ctx->passlen, salt, sizeof(salt),
-	    ctx->config->rounds, pin, sizeof(pin)) != 0)
-		goto out;
-	if (counter_take(ctx->vault, slot, canary, ctx->oracle, &counter) != 0)
 		goto out;
 
 	/*
@@ -518,12 +528,55 @@ request(const struct oracle_ctx *ctx, uint32_t slot, int canary,
 		rv = -1;
 out:
 	explicit_bzero(client, sizeof(client));
-	explicit_bzero(salt, sizeof(salt));
-	explicit_bzero(pin, sizeof(pin));
 	explicit_bzero(ckepriv, sizeof(ckepriv));
 	explicit_bzero(iv, sizeof(iv));
 	explicit_bzero(req, sizeof(req));
 	explicit_bzero(body, sizeof(body));
+	if (rv != 0)
+		explicit_bzero(mask, ENVELOPE_MASKLEN);
+	return rv;
+}
+
+/*
+ * request(ctx, slot, canary, entropy, mask):
+ *	One ordinary request of one record: request_at() under the
+ *	pin secret of the passphrase, at the next counter of the
+ *	record. The passphrase enters the request as the pin secret
+ *	alone (ORC-CONFORM-3, KEY-PIN-3), and each record holds its
+ *	own salt (KEY-PIN-2). counter_take() gives the counter, and
+ *	it persists that value before the send (ORC-COUNTER-1,
+ *	ORC-COUNTER-2). It stops at COUNTER_REVOKE, so no ordinary
+ *	request sends that value (ORC-COUNTER-5).
+ *
+ *	The call gives the value of request_at(), and -1 for a
+ *	failure before the request. A failure clears mask.
+ */
+static int
+request(const struct oracle_ctx *ctx, uint32_t slot, int canary,
+    const unsigned char *entropy, unsigned char *mask)
+{
+	unsigned char	 salt[DERIVE_KEYLEN];
+	unsigned char	 pin[PIN_SECRETLEN];
+	uint32_t	 counter;
+	int		 n, rv = -1;
+
+	if (canary)
+		n = derive_pin_salt_canary(ctx->factor, ctx->factorlen,
+		    ctx->oracle, salt, sizeof(salt));
+	else
+		n = derive_pin_salt(ctx->factor, ctx->factorlen, ctx->oracle,
+		    slot, salt, sizeof(salt));
+	if (n != 0)
+		goto out;
+	if (pin_secret(ctx->pass, ctx->passlen, salt, sizeof(salt),
+	    ctx->config->rounds, pin, sizeof(pin)) != 0)
+		goto out;
+	if (counter_take(ctx->vault, slot, canary, ctx->oracle, &counter) != 0)
+		goto out;
+	rv = request_at(ctx, slot, canary, entropy, pin, counter, mask);
+out:
+	explicit_bzero(salt, sizeof(salt));
+	explicit_bzero(pin, sizeof(pin));
 	if (rv != 0)
 		explicit_bzero(mask, ENVELOPE_MASKLEN);
 	return rv;
@@ -541,7 +594,7 @@ oracle_enroll(const struct oracle_ctx *ctx, uint32_t slot,
 	size_t		 i;
 	int		 rv;
 
-	if (ctx_ok(ctx) != 0 || key == NULL || keylen != DERIVE_KEYLEN ||
+	if (ctx_ok(ctx, 1) != 0 || key == NULL || keylen != DERIVE_KEYLEN ||
 	    slot > VAULT_SLOT_MAX)
 		return -1;
 
@@ -604,7 +657,7 @@ oracle_reveal(const struct oracle_ctx *ctx, uint32_t slot, unsigned char *out,
 	size_t		 i, wraplen = 0;
 	int		 rv;
 
-	if (ctx_ok(ctx) != 0 || out == NULL || outlen != DERIVE_KEYLEN ||
+	if (ctx_ok(ctx, 1) != 0 || out == NULL || outlen != DERIVE_KEYLEN ||
 	    slot > VAULT_SLOT_MAX)
 		return -1;
 	if ((rv = request(ctx, slot, 0, NULL, mask)) != 0)
@@ -676,7 +729,7 @@ canary(const struct oracle_ctx *ctx, const char *again, size_t againlen,
 	size_t		 i;
 	int		 enrolled = 0, wrapped = 0, rv;
 
-	if (ctx_ok(ctx) != 0 || again == NULL)
+	if (ctx_ok(ctx, 1) != 0 || again == NULL)
 		return -1;
 
 	/*
@@ -817,7 +870,7 @@ oracle_canary_check(const struct oracle_ctx *ctx, const unsigned char *idxkey,
 	size_t		 i, len = 0;
 	int		 rv;
 
-	if (ctx_ok(ctx) != 0 || share == NULL || sharelen != DERIVE_KEYLEN ||
+	if (ctx_ok(ctx, 1) != 0 || share == NULL || sharelen != DERIVE_KEYLEN ||
 	    live == NULL)
 		return -1;
 	if (idxkey != NULL && idxkeylen != DERIVE_KEYLEN)
@@ -928,5 +981,40 @@ out:
 	explicit_bzero(wrap, sizeof(wrap));
 	if (rv != 0 || *live == 0)
 		explicit_bzero(share, sharelen);
+	return rv;
+}
+
+int
+oracle_revoke(const struct oracle_ctx *ctx, uint32_t slot, int canary,
+    int replace)
+{
+	unsigned char	 entropy[ENVELOPE_ENTROPYLEN];
+	unsigned char	 pin[PIN_SECRETLEN];
+	unsigned char	 mask[ENVELOPE_MASKLEN];
+	int		 rv;
+
+	if (ctx_ok(ctx, 0) != 0 || slot > VAULT_SLOT_MAX)
+		return -1;
+
+	/*
+	 * The pin secret of a revocation is random, so the attempt
+	 * is wrong, and the owner types no passphrase of the revoked
+	 * machine (ORC-REVOKE-3). A replacement carries the fresh
+	 * entropy of every set_pin (ORC-CONFORM-5). Both values are
+	 * request ephemerals, and no file stores one (SEC-ENTROPY-4).
+	 */
+	arc4random_buf(pin, sizeof(pin));
+	arc4random_buf(entropy, sizeof(entropy));
+	rv = request_at(ctx, slot, canary, replace ? entropy : NULL, pin,
+	    COUNTER_REVOKE, mask);
+
+	/*
+	 * The answer of a lock is junk, and the answer of a
+	 * replacement is a mask that no machine wraps. Neither one
+	 * leaves this call (KEY-MASK-2).
+	 */
+	explicit_bzero(entropy, sizeof(entropy));
+	explicit_bzero(pin, sizeof(pin));
+	explicit_bzero(mask, sizeof(mask));
 	return rv;
 }

@@ -34,6 +34,11 @@
  * existing slot with the enrollment loop of the two other
  * ceremonies, and a re-run covers the pairs with no wrap alone
  * (CER-PROVISION-12).
+ *
+ * ceremony_retire() is the retired mark of the machine registry.
+ * A revocation lock retires a machine name, and the index rewrite
+ * of this file marks it under the index key of the plate
+ * (ORC-REVOKE-11, VAULT-INDEX-7).
  */
 
 #ifndef CEREMONY_H
@@ -185,5 +190,29 @@ int	ceremony_refill(const char *);
  *	SEC-MEMORY-5).
  */
 int	ceremony_provision(const struct ceremony_create *);
+
+/*
+ * ceremony_retire(vault, root, rootlen, machine):
+ *	Mark the machine name machine retired in the machine registry
+ *	of the index of the vault directory vault (ORC-REVOKE-11,
+ *	VAULT-INDEX-7). root is the root of the plate, of rootlen
+ *	bytes, and rootlen must be DERIVE_ROOTLEN. K_idx derives from
+ *	it, so the call takes no session and sends no request
+ *	(VAULT-INDEX-4).
+ *
+ *	The rewrite keeps every other line of the index, as a
+ *	provisioning keeps it. The machine line of the name takes the
+ *	mark, and a name that the registry does not hold takes a
+ *	marked line. The mark never clears: no function of this file
+ *	removes it, and a later ceremony writes the line again as it
+ *	stands. The provisioning ceremony then refuses the name
+ *	(CER-PROVISION-3).
+ *
+ *	The call gives 0, and -1 with a report on the standard error.
+ *	K_idx and the plaintext of the index leave memory on every
+ *	path (SEC-MEMORY-5).
+ */
+int	ceremony_retire(const char *, const unsigned char *, size_t,
+	    const char *);
 
 #endif /* CEREMONY_H */

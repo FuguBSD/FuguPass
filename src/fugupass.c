@@ -35,8 +35,8 @@
  * over two tables (PROG-ONESHOT-4). The table below holds the
  * subcommands of this file: the vault creation, the canary
  * re-enrollment, the passphrase change, the resume of an incomplete
- * change, the pool refill, the machine provisioning, and the
- * revocation kit. commands_table of commands.h holds the six
+ * change, the pool refill, the machine provisioning, the revocation
+ * kit, and the revocation. commands_table of commands.h holds the six
  * commands of the session, and commands_oneshot() runs one of them
  * (PROG-ONESHOT-1, PROG-ONESHOT-2). A name that neither table holds
  * gives the usage and the status 2. A run with no subcommand starts
@@ -97,6 +97,7 @@ static int	 cmd_resume(int, char *[], const char *);
 static int	 cmd_refill(int, char *[], const char *);
 static int	 cmd_provision(int, char *[], const char *);
 static int	 cmd_kit(int, char *[], const char *);
+static int	 cmd_revoke(int, char *[], const char *);
 static void	 usage(void);
 static int	 vault_dir(const char *, char *, size_t);
 
@@ -114,7 +115,8 @@ static const struct subcommand commands[] = {
 	{ "refill",	"", cmd_refill },
 	{ "provision",	"[-a] -k threshold -m machine -r rounds oracle ...",
 	    cmd_provision },
-	{ "kit",	"[-m machine]", cmd_kit }
+	{ "kit",	"[-m machine]", cmd_kit },
+	{ "revoke",	"[-r] -m machine [position ...]", cmd_revoke }
 };
 
 /*
@@ -477,6 +479,77 @@ cmd_kit(int argc, char *argv[], const char *vault)
 		usage();
 	}
 	return revoke_kit(vault, machine) == 0 ? 0 : 1;
+}
+
+/*
+ * cmd_revoke(argc, argv, vault):
+ *	The revocation of the records of one machine of the vault
+ *	directory vault, from the plate (ORC-REVOKE-3, ORC-REVOKE-4,
+ *	PROG-ONESHOT-4). The -m option names the machine, and it is
+ *	mandatory: the client keys of the machine derive from a plate
+ *	scan, and the retired mark of a lock takes the index key of
+ *	that plate (KEY-DEVICE-4, VAULT-INDEX-4). The subcommand opens
+ *	no session and reads no passphrase.
+ *
+ *	The two revocation paths are one subcommand. A run without
+ *	the -r option sends the lock, and the -r option sends the
+ *	set_pin replacement (ORC-REVOKE-8). Each argument names one
+ *	position of the oracle set, and a run without an argument
+ *	takes every live position (ORC-REVOKE-3, ORC-REVOKE-10).
+ *	revoke.c holds the loop and the report.
+ *
+ *	getopt(3) already ran over the options of the program, so
+ *	this second pass resets it.
+ */
+static int
+cmd_revoke(int argc, char *argv[], const char *vault)
+{
+	unsigned int	 position[DERIVE_ORACLE_MAX];
+	const char	*errstr, *machine = NULL;
+	size_t		 count = 0;
+	int		 ch, replace = 0;
+
+	optreset = 1;
+	optind = 1;
+	while ((ch = getopt(argc, argv, "m:r")) != -1) {
+		switch (ch) {
+		case 'm':
+			machine = optarg;
+			break;
+		case 'r':
+			replace = 1;
+			break;
+		default:
+			usage();
+		}
+	}
+	argc -= optind;
+	argv += optind;
+	if (machine == NULL) {
+		warnx("the -m option is mandatory");
+		usage();
+	}
+	if (derive_machine_check(machine, strlen(machine)) != 0) {
+		warnx("the machine name takes lowercase letters, digits "
+		    "and hyphens, 1 to %d bytes", DERIVE_MACHINE_MAX);
+		usage();
+	}
+	if (argc > (int)nitems(position)) {
+		warnx("the oracle set takes %d positions at the most",
+		    DERIVE_ORACLE_MAX);
+		usage();
+	}
+	for (; argc > 0; argc--, argv++) {
+		position[count++] = (unsigned int)strtonum(argv[0], 1,
+		    DERIVE_ORACLE_MAX, &errstr);
+		if (errstr != NULL) {
+			warnx("the oracle position is %s: %s", errstr,
+			    argv[0]);
+			usage();
+		}
+	}
+	return revoke_run(vault, machine, replace, position, count) == 0 ?
+	    0 : 1;
 }
 
 int
