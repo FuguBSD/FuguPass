@@ -65,6 +65,7 @@
 .Nm
 .Op Fl d Ar directory
 .Cm recover
+.Op Fl w
 .Op Fl \-ceiling Ar ceiling
 .Nm
 .Op Fl d Ar directory
@@ -621,6 +622,7 @@ delete the record files that
 names.
 .It Xo
 .Cm recover
+.Op Fl w
 .Op Fl \-ceiling Ar ceiling
 .Xc
 Recover the entries of the vault from the plate.
@@ -640,6 +642,9 @@ It opens the index of the shared set under the index key of the plate,
 and it names each recovered entry from the index.
 It prints each entry name on the standard output, and each secret on
 the terminal, in slot order.
+A mnemonic entry prints as one QR code, in the UTF-8 half blocks of
+.Xr fugupass-qr 1 .
+A signer scans that code from the screen.
 .Pp
 A copy of the shared set restores by a file copy onto a machine that
 keeps its own machine-local set.
@@ -668,11 +673,15 @@ ceiling, and it re-materializes the two derived candidates of each
 slot: a password and a child mnemonic.
 It prints the two candidates of each slot on the terminal, and it
 reports the scanned range on the standard output.
+Each candidate prints as text, because a candidate is no entry.
 A scan past the last used slot is safe and costs nothing, because the
 derivation is deterministic.
 Without the vault files, the entry names and the metadata are gone,
 and a stored secret does not return.
 .Bl -tag -width Ds
+.It Fl w
+Print the words of a mnemonic entry as text, in place of the QR
+code.
 .It Fl \-ceiling Ar ceiling
 The highest slot of the scan, above the default of 1024 slots.
 The plate-alone path materializes the candidates of each slot up to

@@ -44,6 +44,9 @@ Plate-alone recovery starts from the plate and nothing else.
 - **REC-PLATE-5** — Without vault files, the entry names and the metadata are
   gone, and a stored secret does not return. The documentation must state this
   limit.
+- **REC-PLATE-6** — The plate-alone scan must print each candidate as text. A
+  candidate is no entry, and the QR default of PROG-OUTPUT-2
+  ([PROG-OUTPUT](programs.md#prog-output)) applies to an entry.
 
 The ceiling of 1024 slots covers sixteen ceremonies at the default pool size of
 64 slots ([ENTRY-POOL](entries.md#entry-pool)). The paper QR export and the

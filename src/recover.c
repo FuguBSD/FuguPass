@@ -41,9 +41,13 @@
  *
  * A recovered secret prints to the terminal through tty_secret(),
  * one entry at a time, and no secret reaches a file (PROG-OUTPUT-1,
- * PROG-OUTPUT-4). The master, root, each entry key, each candidate,
- * and the plaintext of the index leave memory on every path
- * (SEC-MEMORY-1, SEC-MEMORY-5).
+ * PROG-OUTPUT-4). A mnemonic entry takes the QR code of the render
+ * helper through commands_qr() of commands.c, the one render of
+ * the tree, and the words flag takes the words as text
+ * (PROG-OUTPUT-2). A candidate of the plate-alone path is no entry,
+ * so it prints as text (REC-PLATE-6). The master, root, each entry
+ * key, each candidate, and the plaintext of the index leave memory
+ * on every path (SEC-MEMORY-1, SEC-MEMORY-5).
  */
 
 #include <sys/types.h>
@@ -62,6 +66,7 @@
 #include <unistd.h>
 
 #include "bip85.h"
+#include "commands.h"
 #include "derive.h"
 #include "entry.h"
 #include "helper.h"
@@ -90,6 +95,7 @@ struct idx_find {
 
 /* The state of one secret print of an entry file. */
 struct print_state {
+	int	 code;			/* the QR code, not the text */
 	int	 fail;
 };
 
@@ -105,9 +111,9 @@ static int	 idx_find_line(const struct vault_line *, void *);
 static int	 print_secret(const struct vault_line *, void *);
 static char	*index_open(const char *, const unsigned char *, size_t *);
 static int	 emit_entry(const char *, size_t, const char *, const char *,
-		     size_t);
+		     size_t, int);
 static int	 recover_vault(const char *, const unsigned char *,
-		     unsigned int);
+		     unsigned int, int);
 static int	 recover_plate(const unsigned char *, unsigned int);
 
 /*
@@ -357,16 +363,23 @@ idx_find_line(const struct vault_line *line, void *arg)
  * print_secret(line, arg):
  *	Print each secret field of an entry file to the terminal
  *	(VAULT-FORMAT-4, PROG-OUTPUT-1). A metadata field takes no
- *	print, and a shadow entry holds no secret field. A failed
- *	write sets the fail of arg and stops the scan.
+ *	print, and a shadow entry holds no secret field. The code of
+ *	arg takes the QR code of the render helper in place of the
+ *	text, and emit_entry() sets it for a mnemonic entry without
+ *	the words flag (PROG-OUTPUT-2). A failed write or a failed
+ *	render sets the fail of arg and stops the scan.
  */
 static int
 print_secret(const struct vault_line *line, void *arg)
 {
 	struct print_state	*p = arg;
+	int			 rv;
 
-	if ((line->field->flags & VAULT_FIELD_SECRET) != 0 &&
-	    tty_secret(line->value) != 0) {
+	if ((line->field->flags & VAULT_FIELD_SECRET) == 0)
+		return 0;
+	rv = p->code != 0 ? commands_qr(line->value) :
+	    tty_secret(line->value);
+	if (rv != 0) {
 		p->fail = 1;
 		return -1;
 	}
@@ -433,7 +446,7 @@ out:
 }
 
 /*
- * emit_entry(idx, idxlen, name, plain, plainlen):
+ * emit_entry(idx, idxlen, name, plain, plainlen, words):
  *	One recovered entry file, on the standard output and the
  *	terminal (REC-VAULT-2, PROG-OUTPUT-1). name is the file name
  *	H(K_e), and plain is the plaintext of the file. The index of
@@ -441,13 +454,16 @@ out:
  *	NULL idx names the entry by its file name (REC-RESTORE-5).
  *
  *	The call prints the entry name on the standard output, and
- *	each secret field on the terminal. A free pool slot file maps
- *	to no entry, so the call skips it and gives 0 (ENTRY-POOL-9).
- *	The call gives -1 for a malformed file and for a failed write.
+ *	each secret field on the terminal. A mnemonic entry takes the
+ *	QR code of the render helper, and words takes the words as
+ *	text, the way show does (PROG-OUTPUT-2). A free pool slot file
+ *	maps to no entry, so the call skips it and gives 0
+ *	(ENTRY-POOL-9). The call gives -1 for a malformed file, for a
+ *	failed render, and for a failed write.
  */
 static int
 emit_entry(const char *idx, size_t idxlen, const char *name,
-    const char *plain, size_t plainlen)
+    const char *plain, size_t plainlen, int words)
 {
 	struct idx_find		 find;
 	struct print_state	 ps;
@@ -478,6 +494,7 @@ emit_entry(const char *idx, size_t idxlen, const char *name,
 		return -1;
 	}
 	memset(&ps, 0, sizeof(ps));
+	ps.code = type == ENTRY_TYPE_MNEMONIC && words == 0;
 	if (vault_scan(plain, plainlen, entry_types[type].fields, print_secret,
 	    &ps) != 0 || ps.fail != 0) {
 		if (ps.fail == 0)
@@ -488,13 +505,15 @@ emit_entry(const char *idx, size_t idxlen, const char *name,
 }
 
 /*
- * recover_vault(vault, root, ceiling):
+ * recover_vault(vault, root, ceiling, words):
  *	The plate-plus-files path (REC-VAULT). For each slot from 0 to
  *	the ceiling, the call re-derives K_e, names the file with
  *	H(K_e), and opens the file of that name under K_e (REC-VAULT-1,
  *	REC-VAULT-2). It opens the index once for the entry names, and
  *	a stale or absent index degrades the names alone (REC-VAULT-3,
- *	REC-RESTORE-5).
+ *	REC-RESTORE-5). words prints the words of a mnemonic entry as
+ *	text, and 0 takes the QR code of the render helper
+ *	(PROG-OUTPUT-2).
  *
  *	The call gives 0 when each present file recovers, and -1 when
  *	one file does not open or one write fails. A slot with no file
@@ -504,7 +523,8 @@ emit_entry(const char *idx, size_t idxlen, const char *name,
  *	(SEC-MEMORY-6).
  */
 static int
-recover_vault(const char *vault, const unsigned char *root, unsigned int ceiling)
+recover_vault(const char *vault, const unsigned char *root,
+    unsigned int ceiling, int words)
 {
 	unsigned char	 key[DERIVE_KEYLEN];
 	char		 name[VAULT_NAMELEN];
@@ -561,8 +581,8 @@ recover_vault(const char *vault, const unsigned char *root, unsigned int ceiling
 			rv = -1;
 			continue;
 		}
-		if (emit_entry(idx, idxlen, name, plain, len - SEAL_OVERHEAD)
-		    != 0)
+		if (emit_entry(idx, idxlen, name, plain, len - SEAL_OVERHEAD,
+		    words) != 0)
 			rv = -1;
 	}
 	if (fflush(stdout) != 0 || ferror(stdout)) {
@@ -590,10 +610,12 @@ out:
  * recover_plate(root, ceiling):
  *	The plate-alone path (REC-PLATE). The call re-materializes the
  *	two BIP85 candidates of every slot from 0 to the ceiling, and
- *	it prints each candidate on the terminal (REC-PLATE-1,
- *	KEY-BIP85). It reports the scanned range on the standard
- *	output (REC-PLATE-2). A scan past the last used slot is safe,
- *	because the derivation is deterministic (REC-PLATE-3).
+ *	it prints each candidate on the terminal as text (REC-PLATE-1,
+ *	KEY-BIP85). A candidate is no entry, so the QR default of an
+ *	entry applies to none of them (REC-PLATE-6). It reports the
+ *	scanned range on the standard output (REC-PLATE-2). A scan
+ *	past the last used slot is safe, because the derivation is
+ *	deterministic (REC-PLATE-3).
  *
  *	The call gives 0 when each candidate materializes and each
  *	write passes, and -1 otherwise. Each candidate leaves memory
@@ -638,7 +660,7 @@ out:
 }
 
 int
-recover_run(const char *vault, unsigned int ceiling)
+recover_run(const char *vault, unsigned int ceiling, int words)
 {
 	unsigned char	 root[DERIVE_ROOTLEN];
 	int		 rv;
@@ -650,7 +672,7 @@ recover_run(const char *vault, unsigned int ceiling)
 	if (scan_plate(root) != 0)
 		return -1;
 	if (has_shared_set(vault))
-		rv = recover_vault(vault, root, ceiling);
+		rv = recover_vault(vault, root, ceiling, words);
 	else
 		rv = recover_plate(root, ceiling);
 	explicit_bzero(root, sizeof(root));

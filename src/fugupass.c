@@ -121,7 +121,7 @@ static const struct subcommand commands[] = {
 	    "oracle ...", cmd_provision },
 	{ "kit",	"[-m machine]", cmd_kit },
 	{ "revoke",	"[-r] -m machine [position ...]", cmd_revoke },
-	{ "recover",	"[--ceiling ceiling]", cmd_recover },
+	{ "recover",	"[-w] [--ceiling ceiling]", cmd_recover },
 	{ "verify",	"", cmd_verify }
 };
 
@@ -595,17 +595,24 @@ cmd_revoke(int argc, char *argv[], const char *vault)
  *	and a directory with none takes the plate-alone path.
  *
  *	The optional --ceiling option raises the scan ceiling above the
- *	default of RECOVER_CEILING slots (REC-PLATE-2). recover.c holds
- *	the derivation loop of each path.
+ *	default of RECOVER_CEILING slots (REC-PLATE-2). The -w option
+ *	prints the words of a mnemonic entry as text, in place of the
+ *	QR code of the render helper, the way show does
+ *	(PROG-OUTPUT-2). recover.c holds the derivation loop of each
+ *	path.
  */
 static int
 cmd_recover(int argc, char *argv[], const char *vault)
 {
 	unsigned int	 ceiling = RECOVER_CEILING;
 	const char	*errstr;
-	int		 i;
+	int		 i, words = 0;
 
 	for (i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "-w") == 0) {
+			words = 1;
+			continue;
+		}
 		if (strcmp(argv[i], "--ceiling") != 0)
 			usage();
 		if (++i >= argc)
@@ -617,7 +624,7 @@ cmd_recover(int argc, char *argv[], const char *vault)
 			usage();
 		}
 	}
-	return recover_run(vault, ceiling) == 0 ? 0 : 1;
+	return recover_run(vault, ceiling, words) == 0 ? 0 : 1;
 }
 
 /*

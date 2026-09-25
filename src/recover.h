@@ -35,8 +35,11 @@
  * RECOVER_CEILING slots, and the caller raises it (REC-PLATE-2).
  *
  * A recovered secret prints to the terminal, one entry at a time,
- * and it reaches no file (PROG-OUTPUT-1, PROG-OUTPUT-4). The master
- * and root leave memory before the return (SEC-MEMORY-5).
+ * and it reaches no file (PROG-OUTPUT-1, PROG-OUTPUT-4). A mnemonic
+ * entry takes the QR code of the render helper, and the words flag
+ * takes the words as text (PROG-OUTPUT-2). A candidate of the
+ * plate-alone path is no entry, so it prints as text (REC-PLATE-6).
+ * The master and root leave memory before the return (SEC-MEMORY-5).
  */
 
 #ifndef RECOVER_H
@@ -46,21 +49,24 @@
 #define RECOVER_CEILING	1024
 
 /*
- * recover_run(vault, ceiling):
+ * recover_run(vault, ceiling, words):
  *	Recover the entries of the vault directory vault from the
  *	plate (REC-PLATE, REC-VAULT). The call scans the plate, and a
  *	vault directory with a shared set takes the plate-plus-files
  *	path, and a directory with none takes the plate-alone path.
  *	ceiling bounds the slot scan of each path, and it must be 1 or
- *	more (REC-PLATE-2).
+ *	more (REC-PLATE-2). words prints the words of a mnemonic entry
+ *	as text, and 0 takes the QR code of the render helper
+ *	(PROG-OUTPUT-2).
  *
  *	The plate-plus-files path prints each recovered entry name on
  *	the standard output, and each secret on the terminal, in slot
  *	order (PROG-ONESHOT-3, PROG-OUTPUT-1). It skips a free pool
  *	slot file, and it names an entry by its file name when the
  *	index does not open (REC-RESTORE-5). The plate-alone path
- *	prints the two BIP85 candidates of each slot on the terminal,
- *	and it reports the scanned range on the standard output.
+ *	prints the two BIP85 candidates of each slot on the terminal
+ *	as text (REC-PLATE-6), and it reports the scanned range on the
+ *	standard output.
  *
  *	The call reads no passphrase, opens no session, and sends no
  *	request (REC-PRINCIPLE-4). It writes no file of the vault. The
@@ -69,6 +75,6 @@
  *	The call gives 0 when each scanned slot recovers, and -1 with
  *	a report on the standard error otherwise.
  */
-int	recover_run(const char *, unsigned int);
+int	recover_run(const char *, unsigned int, int);
 
 #endif /* RECOVER_H */
