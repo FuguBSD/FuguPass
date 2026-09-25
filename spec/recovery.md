@@ -85,10 +85,10 @@ of the oracle static key.
   ([REC-PLATE](recovery.md#rec-plate), [REC-VAULT](recovery.md#rec-vault)).
 - **REC-WIPE-2** — The reveal flow of an affected record returns by a plate
   ceremony. The tool re-enrolls this machine's records at the affected position,
-  or at a replacement oracle in that position. It recomputes the wraps, in the
-  loop of [CER-PROVISION](ceremonies.md#cer-provision). A record locked by
-  revocation is outside this unit: its machine name is retired at that oracle,
-  and it never re-enrolls ([ORC-REVOKE](oracle.md#orc-revoke)).
+  or at a replacement oracle in that position (CER-PROVISION-16). It recomputes
+  the wraps, in the loop of [CER-PROVISION](ceremonies.md#cer-provision). A
+  record locked by revocation is outside this unit: its machine name is retired
+  at that oracle, and it never re-enrolls ([ORC-REVOKE](oracle.md#orc-revoke)).
 - **REC-WIPE-3** — A fresh `set_pin` creates a fresh record with fresh key
   material, and no old mask returns (FuguOracle OPS-SET-3 and FuguOracle
   OPS-SET-4).

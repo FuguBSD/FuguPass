@@ -160,6 +160,35 @@ return sub ($t)
 	my $pool = $t->program( '-d', $dir, 'provision', '-p', 3, @line );
 	is( $pool->{exit}, 2, 'the -p option of create exits 2 here' );
 
+	#
+	# The two -x gates of the command line (CER-PROVISION-16,
+	# CER-PROVISION-17). The full run takes no -x option, and a
+	# position above the count of the set names no oracle. Each
+	# refusal stops before the plate scan, so no request went out,
+	# and the counters file stays absent.
+	#
+	# The mutations: a line reader without the -a gate, or without
+	# the count gate, starts the ceremony. The ceremony then stops
+	# at the absent index with an exit of 1 and no usage line.
+	#
+	my $both = $t->program( '-d', $dir, 'provision', '-a', '-x', 1, @line );
+	is( $both->{exit}, 2,
+		'the -a full run with a -x option exits 2 (CER-PROVISION-17)' );
+	like( $both->{error}, qr/takes no -x option/,
+		'the -a and -x refusal gives the reason (CER-PROVISION-17)' );
+	like( $both->{error}, qr/^usage: /m,
+		'the -a and -x refusal gives a usage line' );
+	my $over  = $ORACLES + 1;
+	my $above = $t->program( '-d', $dir, 'provision', '-x', $over, @line );
+	is( $above->{exit}, 2,
+		'a -x position above the oracle count exits 2 (CER-PROVISION-16)' );
+	like( $above->{error}, qr/the lost position $over is above the count/,
+		'the -x count refusal names the position (CER-PROVISION-16)' );
+	like( $above->{error}, qr/^usage: /m,
+		'the -x count refusal gives a usage line' );
+	is( $t->file_exists( $t->counters($second) ),
+		0, 'the two -x refusals sent no request: no counters file exists' );
+
 	$t->copy_shared( $first->{dir}, $dir );
 	$t->make_dir("$dir/machine");
 	$t->write_file( "$dir/machine/change", 'kind: passphrase' );

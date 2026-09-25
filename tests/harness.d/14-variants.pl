@@ -210,11 +210,19 @@ sub added_oracle_case ($t)
 #	the console with the scan helper, so a run that passes the
 #	gate reaches the ceremony and the assertions see it.
 #
+#	A -x option names a live position, so a -x option at the
+#	retired position 3 stops the ceremony at its first gate, and
+#	the report names the retired position (CER-PROVISION-16). That
+#	run goes over the console too, for the same reason.
+#
 #	The mutations: a retirement that skips the deletion leaves the
 #	wrap files, the canary seal, and the index wrap of position 3.
 #	A position rule that passes the retired-to-live change enrolls
 #	the records of this machine at position 3 again, so the run
-#	passes, the counters move, and the config names an oracle.
+#	passes, the counters move, and the config names an oracle. A
+#	ceremony without the retired-position gate deletes nothing
+#	(the files are gone), skips the retired position in the loop,
+#	and passes: the exit is 0, and the report names a deletion.
 sub retirement_case ($t)
 {
 	my $secret = $t->answer('secret');
@@ -272,6 +280,25 @@ sub retirement_case ($t)
 	is( $t->digest( $t->counters($v) ),
 		$counters, 'the refused run sent no request: the counters '
 		    . 'file stays (ORC-PROVISION-6)' );
+
+	my @lost3 = prov_argv( $v, lost => [3],
+		oracle => [ oracle_arg( $t, 1 ), oracle_arg( $t, 2 ),
+			'retired' ] );
+	my ($retired) = $t->console( $v,
+		{ argv => \@lost3, answers => [ 'right', 'right' ] } );
+	isnt( $retired->{exit}, 0,
+		'a -x option at a retired position stops the ceremony '
+		    . '(CER-PROVISION-16)' )
+	    or diag( $retired->{error} );
+	like( $retired->{error},
+		qr/position 3 is retired, and -x names a live position/,
+		'the refusal names the retired position (CER-PROVISION-16)' );
+	is( $t->digest("$v->{dir}/machine/config"),
+		$config, 'the refused -x run left the config as it was '
+		    . '(CER-PROVISION-16)' );
+	is( $t->digest( $t->counters($v) ),
+		$counters, 'the refused -x run sent no request: the counters '
+		    . 'file stays (CER-PROVISION-16)' );
 	return;
 }
 

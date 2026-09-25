@@ -174,9 +174,12 @@ run these steps in rule order.
   machine's wrap files, canary check seal, and index wrap of that position
   (ORC-PROVISION-6). The same deletion must precede a re-enrollment of this
   machine's records at a position. This holds after a replacement, a static-key
-  rotation, or a record loss at that oracle. The loop of CER-PROVISION-12 then
-  covers exactly the affected pairs. The shares re-derive from the plate, so
-  nothing is lost ([KEY-SHARE](keys.md#key-share)). At a retirement, the
+  rotation, or a record loss at that oracle. The tool cannot detect a record
+  loss at a live position from its own files, because the wraps of that position
+  stay. The owner must name each lost position to the ceremony, and the ceremony
+  then deletes this machine's files of it first. The loop of CER-PROVISION-12
+  then covers exactly the affected pairs. The shares re-derive from the plate,
+  so nothing is lost ([KEY-SHARE](keys.md#key-share)). At a retirement, the
   ceremony report must direct the owner to destroy this vault's records at the
   departing oracle. The owner derives the revocation kit
   ([ORC-REVOKE](oracle.md#orc-revoke)) to name those records.
