@@ -4,10 +4,13 @@
 
 Proposed. It waits on no other plan. It completes the quorum leg of the harness.
 
-Implements: REC-WIPE, TEST-HARNESS, CER-PROVISION. Implements: VAULT-INDEX,
-KEY-MASK. Implements: ORC-REVOKE without ORC-REVOKE-6, ORC-REVOKE-7 and
-ORC-REVOKE-9. Implements: ORC-PROVISION without ORC-PROVISION-3 and
-ORC-PROVISION-8. Implements: ORC-COUNTER without ORC-COUNTER-7.
+Implements: TEST-HARNESS, CER-PROVISION, VAULT-INDEX. Implements: ORC-REVOKE
+without ORC-REVOKE-6, ORC-REVOKE-7 and ORC-REVOKE-9. Implements: ORC-PROVISION
+without ORC-PROVISION-3 and ORC-PROVISION-8. Implements: ORC-COUNTER without
+ORC-COUNTER-7.
+
+Package 2 landed REC-WIPE and KEY-MASK. The citations above drop the two done
+units.
 
 Of ORC-PROVISION, this plan lands ORC-PROVISION-6 and ORC-PROVISION-7, the list
 changes. Of VAULT-INDEX, this plan lands VAULT-INDEX-7, the retirement mark. It
@@ -18,7 +21,8 @@ documentation statement, and plan 013 lands it. CER-PROVISION stays partial on
 that sentence. ORC-PROVISION-3, ORC-PROVISION-8, ORC-COUNTER-7, ORC-REVOKE-7,
 and ORC-REVOKE-9 are statements of plan 013 too. It completes TEST-HARNESS-5
 with the provisioning loop. CER-PROVISION-15 re-enrolls every record with a
-fresh mask, so this plan completes KEY-MASK-10.
+fresh mask, so package 2 completed KEY-MASK-10. REC-WIPE-2 heals a lost record
+in the loop, so package 2 completed REC-WIPE.
 
 ## Purpose
 

@@ -209,8 +209,9 @@ int	session_slot_ready(const struct session *, uint32_t);
  *	names the slot and the oracle of the record.
  *
  *	The call gives -1 before the first request while the change
- *	marker of the vault exists, and the report names
- *	CHANGE_RESUME_CMD of change.h (ORC-ENROLL-10).
+ *	marker of the vault exists, and the report names the resume
+ *	of a passphrase change or the re-run of a threshold change
+ *	(ORC-ENROLL-10, CER-PROVISION-15).
  *
  *	The entry key leaves memory directly after the decrypt
  *	(SEC-MEMORY-6). The plaintext belongs to the session, and the

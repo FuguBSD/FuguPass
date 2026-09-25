@@ -112,7 +112,7 @@ static const struct subcommand commands[] = {
 	{ "passwd",	"", cmd_passwd },
 	{ "resume",	"", cmd_resume },
 	{ "refill",	"", cmd_refill },
-	{ "provision",	"-k threshold -m machine -r rounds oracle ...",
+	{ "provision",	"[-a] -k threshold -m machine -r rounds oracle ...",
 	    cmd_provision },
 	{ "kit",	"[-m machine]", cmd_kit }
 };
@@ -182,7 +182,9 @@ vault_dir(const char *opt, char *buf, size_t bufsize)
  *	The command line of a ceremony that takes the oracle set, to
  *	arg (PROG-ONESHOT-5, PROG-ONESHOT-6). The creation and the
  *	provisioning take this one form, and pool takes 1 for the
- *	creation: that subcommand alone takes the -p option.
+ *	creation: that subcommand alone takes the -p option. The
+ *	provisioning alone takes the -a option of the full run
+ *	(CER-PROVISION-17).
  *
  *	The threshold comes from -k, the machine name from -m, and
  *	the round count of bcrypt_pbkdf(3) from -r. Each argument
@@ -192,7 +194,9 @@ vault_dir(const char *opt, char *buf, size_t bufsize)
  *	ORC-PROVISION-5).
  *
  *	The slots of the pool come from -p, and a run without that
- *	option takes CEREMONY_POOL_SIZE slots (ENTRY-POOL-2).
+ *	option takes CEREMONY_POOL_SIZE slots (ENTRY-POOL-2). The -a
+ *	flag of a provisioning re-enrolls every record of this machine
+ *	(CER-PROVISION-17, ORC-ENROLL-12).
  *
  *	The config reader holds the full bounds of the threshold and
  *	of the oracle set (VAULT-CONFIG-6). This function holds the
@@ -216,8 +220,11 @@ ceremony_line(int argc, char *argv[], const char *vault, int pool,
 
 	optreset = 1;
 	optind = 1;
-	while ((ch = getopt(argc, argv, pool ? "k:m:p:r:" : "k:m:r:")) != -1) {
+	while ((ch = getopt(argc, argv, pool ? "k:m:p:r:" : "ak:m:r:")) != -1) {
 		switch (ch) {
+		case 'a':
+			arg->full = 1;
+			break;
 		case 'k':
 			arg->threshold = (unsigned int)strtonum(optarg, 1,
 			    DERIVE_ORACLE_MAX, &errstr);
@@ -405,11 +412,17 @@ cmd_refill(int argc, char *argv[], const char *vault)
  *	and the threshold come from the command line, as create
  *	takes them (VAULT-LAYOUT-4, VAULT-CONFIG). Every machine of a
  *	vault must record the same list and the same threshold
- *	(ORC-PROVISION-8), and the manual page says so.
+ *	(ORC-PROVISION-8), and the manual page says so. A command line
+ *	that changes the list or the threshold is a ceremony variant
+ *	(CER-PROVISION-13 to CER-PROVISION-16).
  *
- *	The ceremony takes the master from a plate scan, and it
- *	refuses to start while the change marker exists
- *	(CER-PROVISION-1, CER-PROVISION-18).
+ *	The -a flag re-enrolls every record of this machine under one
+ *	passphrase, and it removes a stopped passphrase change's marker
+ *	(CER-PROVISION-17, ORC-ENROLL-12).
+ *
+ *	The ceremony takes the master from a plate scan (CER-PROVISION-1).
+ *	While the change marker exists, it refuses to start, unless it
+ *	is the threshold re-run or the -a full run (CER-PROVISION-18).
  */
 static int
 cmd_provision(int argc, char *argv[], const char *vault)

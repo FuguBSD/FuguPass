@@ -368,20 +368,21 @@ return sub ($t)
 		    . 'the entry' )
 	    or diag( $healed->{error} );
 
-	# A command line that changes the threshold, and a command
+	# A command line that changes the round count, and a command
 	# line of another machine name, each stop before the plate
-	# scan. The two answers guard the console: a run that starts
-	# reads them as the two passphrases, and the empty second one
-	# fails the read.
-	my $changed = $t->provision( $second, threshold => 3,
+	# scan. A change of the list or of the threshold is a variant
+	# of the ceremony, and 14-variants.pl drives each one. The two
+	# answers guard the console: a run that starts reads them as
+	# the two passphrases, and the empty second one fails the read.
+	my $changed = $t->provision( $second, rounds => 2,
 		answers => [ 'none', 'none' ] );
 	is( $changed->{exit}, 1,
-		'a re-run under another threshold stops (CER-PROVISION-12)' );
-	like( $changed->{error}, qr/differs from the command line/,
+		'a re-run under another round count stops (CER-PROVISION-12)' );
+	like( $changed->{error}, qr/the round count of this machine differs/,
 		'the refusal names the difference from the config' );
 	like( $t->read_file("$dir/machine/config") // '',
-		qr/^threshold: $THRESHOLD$/m,
-		'the refused re-run left the threshold of the config' );
+		qr/^kdf-rounds: 16$/m,
+		'the refused re-run left the round count of the config' );
 	my $clone = $t->provision( $second, machine => 'create-prov-clone',
 		answers => [ 'none', 'none' ] );
 	is( $clone->{exit}, 1,

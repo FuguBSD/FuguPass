@@ -59,9 +59,12 @@
  * at each sealed canary, heals a dead index wrap under the answer,
  * and enrolls a canary again after a junk answer that follows a
  * pass at another oracle. A change of the oracle list or of the
- * threshold is a variant of this ceremony (CER-PROVISION-13 to
- * CER-PROVISION-17), and provision_old() refuses it: no variant
- * runs here.
+ * threshold is a variant (CER-PROVISION-13 to CER-PROVISION-17).
+ * provision_old() classifies the command line, step_config() writes
+ * the new config first, provision_retire() deletes the files of a
+ * retired or replaced position, and full of the state drives the
+ * loop over every pair. A threshold change and the -a full run
+ * carry the change marker (CER-PROVISION-15, CER-PROVISION-17).
  *
  * The steps come from the other files of the tree. helper.c runs
  * the scan helper, derive.c holds each label and the master gate,
@@ -199,6 +202,11 @@ struct state {
 	int				 registered;
 	int				 retired;
 	int				 verifier;
+	int				 full;		/* every pair, CER-PROVISION-15/17 */
+	int				 threshold_change; /* write the marker */
+	int				 clear_marker;	/* remove it after the wraps */
+	int				 had_marker;	/* a marker stood at the start */
+	int				 threshold_marker; /* that marker is a threshold one */
 	unsigned char			 canary[DERIVE_ORACLE_MAX + 1];
 };
 
@@ -234,8 +242,13 @@ static int		 index_write(struct state *);
 static int		 provision_shared(const struct state *);
 static int		 config_same(const struct vault_config *,
 			    const struct vault_config *);
+static int		 config_lists_same(const struct vault_config *,
+			    const struct vault_config *);
 static int		 provision_old(struct state *);
 static int		 provision_name(const struct state *);
+static int		 provision_delete_position(const struct state *,
+			    unsigned int);
+static int		 provision_retire(struct state *);
 static int		 provision_seals(struct state *);
 static int		 provision_canaries(struct state *);
 static int		 provision_slot(struct state *, uint32_t);
@@ -1277,7 +1290,7 @@ int
 ceremony_refill(const char *vault)
 {
 	struct state	*st;
-	int		 n, rv = -1;
+	int		 rv = -1;
 
 	if (vault == NULL) {
 		warnx("the refill takes no vault directory");
@@ -1285,17 +1298,13 @@ ceremony_refill(const char *vault)
 	}
 
 	/*
-	 * CER-REFILL-8. A marker names an incomplete change, and this
-	 * ceremony enrolls a record, so it refuses to start
-	 * (CER-PROVISION-18, ORC-ENROLL-10).
+	 * CER-REFILL-8. A marker names an incomplete change of either
+	 * kind, and this ceremony enrolls a record, so it refuses to
+	 * start and it names the resume or the re-run (CER-PROVISION-18,
+	 * ORC-ENROLL-10).
 	 */
-	if ((n = change_pending(vault)) != 0) {
-		if (n == 1)
-			warnx("this vault holds an incomplete passphrase "
-			    "change, and \"%s\" completes it",
-			    CHANGE_RESUME_CMD);
+	if (change_refuse(vault) != 0)
 		return -1;
-	}
 
 	if ((st = calloc(1, sizeof(*st))) == NULL) {
 		warn("the refill");
@@ -1409,21 +1418,53 @@ config_same(const struct vault_config *a, const struct vault_config *b)
 }
 
 /*
+ * config_lists_same(a, b):
+ *	1 when the two configs hold one oracle list, and 0 when the
+ *	list differs. The count and the value of each position count,
+ *	and the threshold and the round count do not (VAULT-CONFIG-6).
+ *	A threshold change of one machine keeps the list.
+ */
+static int
+config_lists_same(const struct vault_config *a, const struct vault_config *b)
+{
+	unsigned int	 i;
+
+	if (a->count != b->count)
+		return 0;
+	for (i = 0; i < a->count; i++) {
+		if (a->oracle[i].retired != b->oracle[i].retired)
+			return 0;
+		if (!a->oracle[i].retired &&
+		    (strcmp(a->oracle[i].key, b->oracle[i].key) != 0 ||
+		    strcmp(a->oracle[i].url, b->oracle[i].url) != 0))
+			return 0;
+	}
+	return 1;
+}
+
+/*
  * provision_old(st):
  *	The config that this machine holds, to the old member of st,
- *	and the gate of the command line against it. A machine with
- *	no config file is a new machine of the vault, and old stays
- *	NULL.
+ *	and the classification of the command line against it. A
+ *	machine with no config file is a new machine of the vault, and
+ *	old stays NULL.
  *
  *	A config of another machine name refuses the ceremony: two
- *	machines must not run from one machine-local set, and a
- *	clone under a new name takes an empty machine directory
- *	(CER-PROVISION-19). A config of the same name is the re-run
- *	of CER-PROVISION-12, and the re-run takes the oracle list,
- *	the threshold and the round count of that file. A command
- *	line that differs in one of them is a change of the list or
- *	of the threshold, or a change of every pin of this machine,
- *	and this ceremony refuses it (CER-PROVISION-13).
+ *	machines must not run from one machine-local set, and a clone
+ *	under a new name takes an empty machine directory
+ *	(CER-PROVISION-19). A config of the same name and the same
+ *	command line is the re-run of CER-PROVISION-12.
+ *
+ *	A command line that changes the config is a variant. A round
+ *	count change refuses, because this ceremony does not change it.
+ *	A threshold change sets threshold_change and full: the ceremony
+ *	re-splits every share and re-enrolls every record
+ *	(CER-PROVISION-15). A list change validates against the
+ *	position rule of vault_config_change(): a position must not
+ *	disappear, and two positions must not exchange values
+ *	(CER-PROVISION-14, CER-PROVISION-16, VAULT-CONFIG-6). A change
+ *	while a marker stands refuses, because one incomplete change
+ *	comes first.
  *
  *	The gate parses the command line without the plate check
  *	value, so it runs before the plate scan.
@@ -1481,10 +1522,49 @@ provision_old(struct state *st)
 		warnx("the config: an oracle value or the threshold is wrong");
 		goto out;
 	}
-	if (!config_same(st->old, new)) {
-		warnx("%s: the oracle list, the threshold or the round count "
-		    "of this machine differs from the command line, and this "
-		    "ceremony changes none of them", path);
+	if (config_same(st->old, new)) {
+		rv = 0;
+		goto out;
+	}
+
+	/*
+	 * The command line changes the config (CER-PROVISION-13). One
+	 * incomplete change comes first, so a change under a marker
+	 * refuses. The one exception is a threshold change under the
+	 * threshold marker: the marker reaches the disk before the
+	 * config write, so a stop between the two leaves the old
+	 * threshold in the config, and the re-run writes it
+	 * (CER-PROVISION-15). The full run takes the matching command
+	 * line above, so it never reaches here.
+	 */
+	if (st->old->rounds != new->rounds) {
+		warnx("%s: the round count of this machine differs from the "
+		    "command line, and this ceremony does not change it", path);
+		goto out;
+	}
+	if (st->old->threshold != new->threshold) {
+		if (!config_lists_same(st->old, new)) {
+			warnx("%s: change the oracle list and the threshold in "
+			    "separate ceremonies", path);
+			goto out;
+		}
+		if (st->had_marker && !st->threshold_marker) {
+			warnx("%s: this vault holds an incomplete passphrase "
+			    "change, and it completes before a threshold "
+			    "change", path);
+			goto out;
+		}
+		st->threshold_change = 1;
+		st->full = 1;
+		st->clear_marker = 1;
+	} else if (st->had_marker) {
+		warnx("%s: this vault holds an incomplete change, and it "
+		    "completes before a list change", path);
+		goto out;
+	} else if (vault_config_change(st->old, new) != 0) {
+		warnx("%s: the oracle list change is not allowed: a position "
+		    "must not disappear, and two positions must not exchange "
+		    "values", path);
 		goto out;
 	}
 	rv = 0;
@@ -1536,12 +1616,118 @@ provision_name(const struct state *st)
 }
 
 /*
+ * provision_delete_position(st, oracle):
+ *	Delete this machine's wrap files, canary check seal, and index
+ *	wrap of the oracle index oracle (CER-PROVISION-16,
+ *	ORC-PROVISION-6, REC-WIPE-2). A retirement, a replacement, a
+ *	static-key rotation, and a record loss each precede a
+ *	re-enrollment of that position with this deletion. An absent
+ *	file passes, because the shares re-derive from the plate and
+ *	nothing is lost (KEY-SHARE-8).
+ *
+ *	The existing slots run below the pool-next line of the index,
+ *	so the walk of the wrap files takes each slot below st->next.
+ */
+static int
+provision_delete_position(const struct state *st, unsigned int oracle)
+{
+	struct vault_at	 at;
+	char		 path[PATH_MAX];
+	uint32_t	 slot;
+	unsigned int	 j;
+	enum vault_file	 kind[2];
+
+	for (slot = 0; slot < st->next; slot++) {
+		memset(&at, 0, sizeof(at));
+		at.slot = slot;
+		at.oracle = oracle;
+		if (vault_path(path, sizeof(path), st->vault, VAULT_FILE_WRAP,
+		    &at) != 0) {
+			warnx("%s: a path of the vault does not fit", st->vault);
+			return -1;
+		}
+		if (unlink(path) == -1 && errno != ENOENT) {
+			warn("%s", path);
+			return -1;
+		}
+	}
+
+	kind[0] = VAULT_FILE_CANARY;
+	kind[1] = VAULT_FILE_WRAP_INDEX;
+	for (j = 0; j < 2; j++) {
+		memset(&at, 0, sizeof(at));
+		at.oracle = oracle;
+		if (vault_path(path, sizeof(path), st->vault, kind[j],
+		    &at) != 0) {
+			warnx("%s: a path of the vault does not fit", st->vault);
+			return -1;
+		}
+		if (unlink(path) == -1 && errno != ENOENT) {
+			warn("%s", path);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+/*
+ * provision_retire(st):
+ *	The deletion of this machine's files of each position that the
+ *	config change retires or replaces (CER-PROVISION-16,
+ *	ORC-PROVISION-6). step_config() wrote the new config, so this
+ *	step compares the config on disk before the ceremony (old)
+ *	with it. A live position that becomes retired is a retirement,
+ *	and a live position that takes a new value is a replacement.
+ *	The no-wrap loop then re-enrolls a replacement, and it enrolls
+ *	nothing of a retirement (CER-PROVISION-12, REC-WIPE-2).
+ *
+ *	The report directs the owner to the departing oracle. The
+ *	revocation kit names this vault's records there
+ *	(CER-PROVISION-16, ORC-REVOKE).
+ *
+ *	A machine with no config before the ceremony (old == NULL) is
+ *	a first provisioning, and it retires no position.
+ */
+static int
+provision_retire(struct state *st)
+{
+	const struct vault_config	*old = st->old;
+	unsigned int			 i, n;
+
+	if (old == NULL)
+		return 0;
+	n = old->count < st->config.count ? old->count : st->config.count;
+	for (i = 1; i <= n; i++) {
+		int	was_live = !old->oracle[i - 1].retired;
+		int	now_retired = st->config.oracle[i - 1].retired;
+		int	replaced = was_live && !now_retired &&
+		    (strcmp(old->oracle[i - 1].key,
+		    st->config.oracle[i - 1].key) != 0 ||
+		    strcmp(old->oracle[i - 1].url,
+		    st->config.oracle[i - 1].url) != 0);
+
+		if (!((was_live && now_retired) || replaced))
+			continue;
+		if (provision_delete_position(st, i) != 0)
+			return -1;
+		warnx("this machine's records at oracle %u are orphaned: "
+		    "derive the revocation kit with \"fugupass kit\" to name "
+		    "them, and destroy them at that oracle", i);
+	}
+	return 0;
+}
+
+/*
  * provision_seals(st):
  *	The canary check seal of each live oracle on this machine, to
  *	the canary state of that position. A seal takes the check of
  *	provision_canaries(), and no seal takes the enrollment. A
  *	seal is a verifier of the passphrase, so a machine with one
  *	takes no warning at the read (ORC-CANARY-6).
+ *
+ *	A full run re-enrolls every record, so it seals every live
+ *	canary again and verifies no passphrase first (CER-PROVISION-15,
+ *	CER-PROVISION-17). Each live oracle then takes the enrollment.
  */
 static int
 provision_seals(struct state *st)
@@ -1553,6 +1739,10 @@ provision_seals(struct state *st)
 	for (i = 1; i <= st->config.count; i++) {
 		if (st->config.oracle[i - 1].retired)
 			continue;
+		if (st->full) {
+			st->canary[i] = CANARY_ENROLL;
+			continue;
+		}
 		memset(&at, 0, sizeof(at));
 		at.oracle = i;
 		if ((n = file_exists(st, VAULT_FILE_CANARY, &at)) < 0)
@@ -1654,12 +1844,14 @@ out:
 /*
  * provision_slot(st, slot):
  *	One existing slot of the vault (CER-PROVISION-7). K_e derives
- *	from root, slot_enroll() enrolls the pairs with no wrap of
- *	this machine, and K_e leaves memory at each exit
- *	(KEY-ENTRY-2, CER-PROVISION-12, CER-PROVISION-10). The slot
- *	file of the shared set stays as it is: it holds the slot or
- *	the entry of that slot under K_e, and the ceremony writes no
- *	file of the shared set but the index.
+ *	from root, slot_enroll() enrolls the pairs of the slot, and K_e
+ *	leaves memory at each exit (KEY-ENTRY-2, CER-PROVISION-12,
+ *	CER-PROVISION-10). A re-run and a list change enroll the pairs
+ *	with no wrap of this machine alone, and a full run enrolls
+ *	every pair with a fresh set_pin (CER-PROVISION-15,
+ *	CER-PROVISION-17). The slot file of the shared set stays as it
+ *	is: it holds the slot or the entry of that slot under K_e, and
+ *	the ceremony writes no file of the shared set but the index.
  */
 static int
 provision_slot(struct state *st, uint32_t slot)
@@ -1672,7 +1864,7 @@ provision_slot(struct state *st, uint32_t slot)
 		warnx("slot %" PRIu32 ": the entry key fails", slot);
 		goto out;
 	}
-	rv = slot_enroll(st, slot, key, sizeof(key), 0);
+	rv = slot_enroll(st, slot, key, sizeof(key), st->full);
 out:
 	explicit_bzero(key, sizeof(key));
 	return rv;
@@ -1742,19 +1934,6 @@ ceremony_provision(const struct ceremony_create *arg)
 		return -1;
 	}
 
-	/*
-	 * CER-PROVISION-18. A marker names an incomplete change, and
-	 * this ceremony enrolls a record, so it refuses to start
-	 * (ORC-ENROLL-10).
-	 */
-	if ((n = change_pending(arg->vault)) != 0) {
-		if (n == 1)
-			warnx("this vault holds an incomplete passphrase "
-			    "change, and \"%s\" completes it",
-			    CHANGE_RESUME_CMD);
-		return -1;
-	}
-
 	if ((st = calloc(1, sizeof(*st))) == NULL) {
 		warn("the provisioning");
 		return -1;
@@ -1762,6 +1941,37 @@ ceremony_provision(const struct ceremony_create *arg)
 	st->arg = arg;
 	st->vault = arg->vault;
 	st->name = arg->machine;
+
+	/*
+	 * CER-PROVISION-18. A marker names an incomplete change, and
+	 * this ceremony enrolls a record. A threshold marker is the
+	 * re-run of an interrupted threshold change, and it is exempt:
+	 * it covers every pair, and it removes the marker at the end
+	 * (CER-PROVISION-15). A passphrase marker is exempt only for
+	 * the -a full run, which re-enrolls every record and removes
+	 * the marker (CER-PROVISION-17, ORC-ENROLL-12). Every other
+	 * run refuses, and it names the resume or the re-run.
+	 */
+	n = change_kind(arg->vault);
+	if (n == CHANGE_THRESHOLD) {
+		st->had_marker = st->threshold_marker = 1;
+		st->full = st->clear_marker = 1;
+	} else if (n == CHANGE_PASSPHRASE) {
+		st->had_marker = 1;
+		if (!arg->full) {
+			warnx("this vault holds an incomplete passphrase change, "
+			    "and \"%s\" completes it, or \"fugupass provision "
+			    "-a\" re-enrolls every record", CHANGE_RESUME_CMD);
+			goto out;
+		}
+		st->full = st->clear_marker = 1;
+	} else if (n != CHANGE_NONE) {
+		warnx("%s: the change marker holds no kind that this ceremony "
+		    "reads", arg->vault);
+		goto out;
+	} else if (arg->full) {
+		st->full = 1;
+	}
 
 	/* The three buffers of the index (struct state). */
 	st->raw = malloc(INDEX_RAW_MAX);
@@ -1791,18 +2001,55 @@ ceremony_provision(const struct ceremony_create *arg)
 		goto out;
 	if (step_factor(st) != 0)
 		goto out;
+
+	/*
+	 * The threshold marker reaches the disk before the config
+	 * write, so it stands before the first set_pin and before any
+	 * later stop of this run (CER-PROVISION-15). A stop after the
+	 * config write and before the marker would leave a config of
+	 * the new threshold over wraps of the old one, with no marker
+	 * to name the re-run. A re-run of an interrupted change finds
+	 * the marker already there, and the write is the same text.
+	 */
+	if (st->threshold_change &&
+	    change_marker_write(st->vault, CHANGE_KIND_THRESHOLD) != 0)
+		goto out;
+
+	/*
+	 * The config change writes the new config before any
+	 * enrollment, so a stopped ceremony leaves a config that names
+	 * the target state (CER-PROVISION-13). The retirement and the
+	 * replacement then delete this machine's files of the changed
+	 * positions (CER-PROVISION-16).
+	 */
 	if (step_config(st) != 0)
+		goto out;
+	if (provision_retire(st) != 0)
 		goto out;
 	if (provision_seals(st) != 0)
 		goto out;
 	if (step_passphrase(st) != 0)
 		goto out;
+
 	if (provision_canaries(st) != 0)
 		goto out;
 	if (provision_slots(st) != 0)
 		goto out;
 	if (provision_index_write(st) != 0)
 		goto out;
+
+	/*
+	 * The threshold change and the full run remove the marker
+	 * after the last wrap, and the report names the removal
+	 * (CER-PROVISION-15, CER-PROVISION-17, ORC-ENROLL-12).
+	 */
+	if (st->clear_marker) {
+		if (change_marker_remove(st->vault) != 0)
+			goto out;
+		if (st->had_marker)
+			warnx("this ceremony re-enrolled every record of this "
+			    "machine and removed the change marker");
+	}
 	rv = 0;
 out:
 	/*

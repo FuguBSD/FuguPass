@@ -302,7 +302,8 @@ my @COUNTERPARTY = (
 		start   => \&upstream_start,
 		stop    => \&upstream_stop,
 		release => \&upstream_release,
-		records => \&upstream_records
+		records => \&upstream_records,
+		wipe    => \&upstream_wipe
 	} );
 
 # The counterparties that run now. The end block stops each one, so
@@ -718,6 +719,18 @@ sub upstream_records ( $, $in )
 	return map { basename($_) } glob "$in->{store}/pins/*.pin";
 }
 
+# upstream_wipe($cp, $in, $name):
+#	Remove the record file $name of the store of this instance
+#	(REC-WIPE-6). The store holds one file of each record in the
+#	pins directory, and $name is one file name of
+#	upstream_records().
+sub upstream_wipe ( $, $in, $name )
+{
+	my $path = "$in->{store}/pins/$name";
+	unlink $path or die "the harness removed no record $path: $!\n";
+	return;
+}
+
 sub upstream_stop ( $, $in )
 {
 	return if !defined $in->{pid};
@@ -816,6 +829,18 @@ sub records ( $self, $oracle = 1 )
 {
 	my $in = $self->_instance($oracle);
 	return $self->{recipe}{records}->( $self, $in );
+}
+
+# $cp->wipe($oracle, $name):
+#	Remove the record file $name from the store of one instance
+#	(REC-WIPE-6). $name is one name of records($oracle). The leg
+#	proves that a wiped record blocks no reveal while two records
+#	remain.
+sub wipe ( $self, $oracle, $name )
+{
+	my $in = $self->_instance($oracle);
+	$self->{recipe}{wipe}->( $self, $in, $name );
+	return;
 }
 
 # $cp->url($oracle), $cp->pubkey($oracle):
@@ -1307,15 +1332,16 @@ sub create ( $self, $vault, %opt )
 #
 #	%opt takes 'answers', an array reference of answer names for
 #	the prompts of the run, and the default is the correct
-#	passphrase twice. It takes 'machine' and 'threshold', and
-#	each one replaces the value of the vault. The oracle set is
-#	the set of the vault, as create() gives it.
+#	passphrase twice. It takes 'machine', 'threshold' and
+#	'rounds', and each one replaces the value of the vault or of
+#	the run. The oracle set is the set of the vault, as create()
+#	gives it.
 sub provision ( $self, $vault, %opt )
 {
 	my @argv = (
 		'provision', '-k', $opt{threshold} // $vault->{threshold},
 		'-m', $opt{machine} // $vault->{machine},
-		'-r', $main::ROUNDS );
+		'-r', $opt{rounds} // $main::ROUNDS );
 	for my $oracle ( 1 .. $vault->{oracles} ) {
 		push @argv,
 		    $self->pubkey($oracle) . ' ' . $self->url($oracle);

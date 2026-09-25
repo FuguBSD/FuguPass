@@ -62,6 +62,7 @@ struct ceremony_create {
 	unsigned int		 threshold;	/* k */
 	unsigned int		 rounds;	/* kdf-rounds, KEY-PIN-5 */
 	unsigned int		 pool;		/* pool-size, ENTRY-POOL-2 */
+	int			 full;		/* provision -a, CER-PROVISION-17 */
 };
 
 /*
@@ -154,16 +155,30 @@ int	ceremony_refill(const char *);
  *
  *	A run on a provisioned machine is a re-run (CER-PROVISION-12).
  *	It takes the config of this machine as the gate of the
- *	command line: the same list, the same threshold, and the same
- *	round count. It verifies the passphrase at each sealed canary
- *	before any set_pin, heals each dead index wrap, seals each
- *	stale canary check value again, and enrolls the pairs with no
- *	wrap of this machine alone. A command line that changes the
- *	list or the threshold is a variant of the ceremony
- *	(CER-PROVISION-13), and the call refuses it.
+ *	command line. A command line that matches verifies the
+ *	passphrase at each sealed canary before any set_pin, heals each
+ *	dead index wrap, seals each stale canary check value again, and
+ *	enrolls the pairs with no wrap of this machine alone.
  *
- *	While the change marker exists, the call refuses to start and
- *	it names the resume command (CER-PROVISION-18).
+ *	A command line that changes the config is a variant. The
+ *	ceremony writes the new config before any enrollment
+ *	(CER-PROVISION-13). An added oracle takes the next free
+ *	position, and the loop enrolls the new pairs (CER-PROVISION-14).
+ *	A retirement or a replacement deletes this machine's files of
+ *	that position first, and the report directs the owner to the
+ *	revocation kit (CER-PROVISION-16, ORC-PROVISION-6, REC-WIPE-2).
+ *	A threshold change re-splits every share and re-enrolls every
+ *	record under a threshold marker, and it re-runs from the start
+ *	(CER-PROVISION-15).
+ *
+ *	The -a run of full of arg re-enrolls every record of this
+ *	machine under one passphrase, and it removes a passphrase marker
+ *	at the end (CER-PROVISION-17, ORC-ENROLL-12).
+ *
+ *	While the change marker exists, the call refuses to start,
+ *	unless it is the threshold re-run or the full run
+ *	(CER-PROVISION-18). A refused call names the resume or the
+ *	re-run.
  *
  *	The call erases M, root, K_idx, every K_e, every share, and
  *	every mask before it exits, on every path (CER-PROVISION-10,
