@@ -5,8 +5,8 @@
 Proposed. It waits on plan 009 for the other subcommands of PROG-ONESHOT-4. Its
 harness legs need the second machine of plan 009.
 
-Implements: REC-PLATE, REC-VAULT, REC-RESTORE, CER-VERIFY, PROG-ONESHOT.
-Implements: PROG-REPL. Defers: PROG-SCAN, ORC-ENROLL.
+Implements: CER-VERIFY, PROG-ONESHOT. Implements: PROG-REPL. Defers: PROG-SCAN,
+ORC-ENROLL.
 
 Of PROG-REPL, this plan lands PROG-REPL-6, the one absent rule. Of PROG-ONESHOT,
 it lands the recovery and the verification subcommands of PROG-ONESHOT-4. Plan

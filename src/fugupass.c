@@ -36,7 +36,7 @@
  * subcommands of this file: the vault creation, the canary
  * re-enrollment, the passphrase change, the resume of an incomplete
  * change, the pool refill, the machine provisioning, the revocation
- * kit, and the revocation. commands_table of commands.h holds the six
+ * kit, the revocation, and the recovery. commands_table of commands.h holds the six
  * commands of the session, and commands_oneshot() runs one of them
  * (PROG-ONESHOT-1, PROG-ONESHOT-2). A name that neither table holds
  * gives the usage and the status 2. A run with no subcommand starts
@@ -73,6 +73,7 @@
 #include "derive.h"
 #include "fugupass.h"
 #include "iface.h"
+#include "recover.h"
 #include "revoke.h"
 #include "sandbox.h"
 #include "session.h"
@@ -98,6 +99,7 @@ static int	 cmd_refill(int, char *[], const char *);
 static int	 cmd_provision(int, char *[], const char *);
 static int	 cmd_kit(int, char *[], const char *);
 static int	 cmd_revoke(int, char *[], const char *);
+static int	 cmd_recover(int, char *[], const char *);
 static void	 usage(void);
 static int	 vault_dir(const char *, char *, size_t);
 
@@ -116,7 +118,8 @@ static const struct subcommand commands[] = {
 	{ "provision",	"[-a] [-x position] -k threshold -m machine -r rounds "
 	    "oracle ...", cmd_provision },
 	{ "kit",	"[-m machine]", cmd_kit },
-	{ "revoke",	"[-r] -m machine [position ...]", cmd_revoke }
+	{ "revoke",	"[-r] -m machine [position ...]", cmd_revoke },
+	{ "recover",	"[--ceiling ceiling]", cmd_recover }
 };
 
 /*
@@ -577,6 +580,41 @@ cmd_revoke(int argc, char *argv[], const char *vault)
 	}
 	return revoke_run(vault, machine, replace, position, count) == 0 ?
 	    0 : 1;
+}
+
+/*
+ * cmd_recover(argc, argv, vault):
+ *	The recovery of the entries of the vault directory vault from
+ *	the plate (REC-PLATE, REC-VAULT, PROG-ONESHOT-4). The
+ *	subcommand takes the master from a plate scan, and it opens no
+ *	session and reads no passphrase (REC-PRINCIPLE-4). A vault
+ *	directory with a shared set takes the plate-plus-files path,
+ *	and a directory with none takes the plate-alone path.
+ *
+ *	The optional --ceiling option raises the scan ceiling above the
+ *	default of RECOVER_CEILING slots (REC-PLATE-2). recover.c holds
+ *	the derivation loop of each path.
+ */
+static int
+cmd_recover(int argc, char *argv[], const char *vault)
+{
+	unsigned int	 ceiling = RECOVER_CEILING;
+	const char	*errstr;
+	int		 i;
+
+	for (i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "--ceiling") != 0)
+			usage();
+		if (++i >= argc)
+			usage();
+		ceiling = (unsigned int)strtonum(argv[i], 1, VAULT_SLOT_MAX,
+		    &errstr);
+		if (errstr != NULL) {
+			warnx("the ceiling is %s", errstr);
+			usage();
+		}
+	}
+	return recover_run(vault, ceiling) == 0 ? 0 : 1;
 }
 
 int
