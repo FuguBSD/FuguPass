@@ -14,7 +14,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: September 24 2026 $
+.Dd $Mdocdate: September 25 2026 $
 .Dt FUGUPASS 1
 .Os
 .Sh NAME
@@ -44,6 +44,13 @@
 .Nm
 .Op Fl d Ar directory
 .Cm refill
+.Nm
+.Op Fl d Ar directory
+.Cm provision
+.Fl k Ar threshold
+.Fl m Ar machine
+.Fl r Ar rounds
+.Ar oracle ...
 .Nm
 .Op Fl d Ar directory
 .Cm kit
@@ -112,7 +119,8 @@ Every subcommand but
 .Cm create ,
 .Cm passwd ,
 .Cm resume ,
-.Cm refill
+.Cm refill ,
+.Cm provision
 and
 .Cm kit
 opens a session of the vault first.
@@ -233,7 +241,9 @@ The re-enrollment kills this machine's index wrap of that oracle.
 A session that holds the index key wraps the index share again at
 once.
 A session without that key deletes the dead wrap file, and it names
-the provisioning ceremony.
+the
+.Cm provision
+subcommand.
 .It Cm passwd
 Change the passphrase of this machine.
 The change re-enrolls every record of this machine at every live
@@ -312,6 +322,73 @@ writes no file of an existing entry.
 The index takes the new pool state after the last new slot.
 An interrupted refill therefore leaves the index as it was, and a
 second run is safe.
+The ceremony refuses to start while the change marker exists, and
+the report names the
+.Cm resume
+subcommand.
+.It Xo
+.Cm provision
+.Fl k Ar threshold
+.Fl m Ar machine
+.Fl r Ar rounds
+.Ar oracle ...
+.Xc
+Add this machine to an existing vault.
+Copy the shared set of the vault into the vault directory first:
+the index, and each entry file.
+Any transport serves, because every file of the set is ciphertext.
+The ceremony takes the master from a plate scan of
+.Xr fugupass-scan 1 ,
+and it opens the index under the index key of that plate.
+It writes the device factor and the config file, and it reads the
+passphrase twice, as
+.Cm create
+reads it.
+It then enrolls a canary record of this machine at each live oracle.
+For each slot of the vault, it enrolls one record of this machine at
+each live oracle, and it writes the wrap of that record.
+It registers the machine name in the index last.
+Every entry then reveals on this machine through its own records.
+.Pp
+The config file is local to this machine, so the options and the
+.Ar oracle
+arguments take the form of
+.Cm create .
+Every machine of a vault must record the same ordered oracle list
+and the same threshold.
+A revocation from the plate derives the client keys of a machine
+from this list, so a divergent list breaks it.
+The config file takes the default pool size, and the ceremony makes
+no pool.
+.Pp
+The registry of the index holds each provisioned machine name.
+A name that the registry marks retired stops the ceremony, and the
+report names a new machine name as the path.
+A name of the registry with no config of that name in the vault
+directory names another machine.
+The ceremony then warns that it replaces the records of that
+machine, and it reads a confirmation at the prompt
+.Dq Replace the records of that machine? Type yes: .
+The word
+.Dq yes
+alone confirms.
+A config of another machine name in the vault directory stops the
+ceremony, because two machines must not run from one machine-local
+set.
+.Pp
+The ceremony can run again on a provisioned machine.
+The re-run takes the oracle list, the threshold and the round count
+of the config file, and a command line that differs stops it.
+It verifies the passphrase at the canary record of each live oracle
+that holds a seal on this machine, before any enrollment.
+A canary that fails after a pass at another oracle enrolls again,
+with a fresh seal and a fresh index wrap.
+A failure at every canary names the passphrase and the record-side
+causes, and the ceremony sends no enrollment.
+The re-run writes a dead index wrap again.
+It enrolls the record of each slot that holds no wrap of this
+machine at an oracle, and a record with a wrap stays as it is.
+.Pp
 The ceremony refuses to start while the change marker exists, and
 the report names the
 .Cm resume
@@ -578,7 +655,9 @@ The index file or one index wrap of this machine is wrong.
 This failure is no junk answer, and the report names both causes.
 .It the index stays closed: the quorum covers fewer than Ar k No live index wraps
 The report names each dead or unreachable index wrap, and it names
-the provisioning ceremony.
+the
+.Cm provision
+subcommand.
 The session opens no entry name until the wraps come back.
 .It slot Ar e : the entry of this quorum does not open
 The reconstructed key does not open the entry file.
@@ -611,7 +690,9 @@ The
 subcommand adds slots to the pool.
 .It no free slot of the pool holds the wraps of this machine at Ar k No live oracles
 Free slots remain, and no one of them reveals on this machine.
-The provisioning ceremony writes the wraps of this machine.
+The
+.Cm provision
+subcommand writes the wraps of this machine.
 .El
 .Sh SEE ALSO
 .Xr fugupass-qr 1 ,

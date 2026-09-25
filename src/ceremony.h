@@ -27,6 +27,13 @@
  * one vault on one machine (CER-REFILL). It runs the slot loop of
  * CER-CREATE-6 for each new slot, so the two ceremonies hold one
  * slot loop.
+ *
+ * ceremony_provision() is machine provisioning. It adds this machine
+ * to an existing vault, from a copy of the shared set and a plate
+ * scan (CER-PROVISION). It enrolls this machine's records for each
+ * existing slot with the enrollment loop of the two other
+ * ceremonies, and a re-run covers the pairs with no wrap alone
+ * (CER-PROVISION-12).
  */
 
 #ifndef CEREMONY_H
@@ -116,5 +123,52 @@ int	ceremony_create(const struct ceremony_create *);
  *	SEC-MEMORY-5).
  */
 int	ceremony_refill(const char *);
+
+/*
+ * ceremony_provision(arg):
+ *	The machine provisioning ceremony, in the vault directory of
+ *	arg (CER-PROVISION). The call gives 0 when each step passes,
+ *	and -1 when one step fails.
+ *
+ *	arg holds the command line form of a creation: the machine
+ *	name, the ordered oracle set, the threshold and the round
+ *	count (PROG-ONESHOT-6). The config file is machine-local, so
+ *	the list comes from the command line, and every machine of a
+ *	vault records the same list and the same threshold
+ *	(VAULT-LAYOUT-4, ORC-PROVISION-8). The pool of arg is the
+ *	pool size of the config file of this machine, and the
+ *	ceremony makes no pool.
+ *
+ *	The shared set must stand in the vault directory before the
+ *	call (CER-PROVISION-2). The call refuses a directory with no
+ *	index, and it names the copy as the path.
+ *
+ *	The call reads the master from the scan helper, and it opens
+ *	the index under K_idx of that plate (CER-PROVISION-1,
+ *	VAULT-INDEX-4). It refuses a machine name that the registry
+ *	marks retired, and it names a new machine name as the path.
+ *	It takes an explicit confirmation from the terminal before it
+ *	replaces the records of a registered name that this machine
+ *	holds no config of (CER-PROVISION-3). It reads the passphrase
+ *	twice from the terminal (CER-PROVISION-5).
+ *
+ *	A run on a provisioned machine is a re-run (CER-PROVISION-12).
+ *	It takes the config of this machine as the gate of the
+ *	command line: the same list, the same threshold, and the same
+ *	round count. It verifies the passphrase at each sealed canary
+ *	before any set_pin, heals each dead index wrap, seals each
+ *	stale canary check value again, and enrolls the pairs with no
+ *	wrap of this machine alone. A command line that changes the
+ *	list or the threshold is a variant of the ceremony
+ *	(CER-PROVISION-13), and the call refuses it.
+ *
+ *	While the change marker exists, the call refuses to start and
+ *	it names the resume command (CER-PROVISION-18).
+ *
+ *	The call erases M, root, K_idx, every K_e, every share, and
+ *	every mask before it exits, on every path (CER-PROVISION-10,
+ *	SEC-MEMORY-5).
+ */
+int	ceremony_provision(const struct ceremony_create *);
 
 #endif /* CEREMONY_H */

@@ -207,11 +207,17 @@ our %VECTOR = vectors("$RealBin/vectors/derive.h");
 # The answer 'none' is the empty line. The core process takes an
 # empty read of readpassphrase(3) as a failed read, so a step names
 # this answer to stop a terminal read.
+#
+# The answers 'yes' and 'no' are the two answers of a confirmation.
+# The core process takes the word yes alone, so 'no' stops a
+# ceremony at the confirmation (CER-PROVISION-3).
 our %ANSWER = (
 	right    => 'correct horse battery staple',
 	wrong    => 'wrong horse battery staple',
 	other    => 'other horse battery staple',
 	none     => '',
+	yes      => 'yes',
+	no       => 'no',
 	secret   => 'the stored secret of one entry',
 	secret2  => 'the second stored secret of one entry',
 	totp_key => '3132333435363738393031323334353637383930' );
@@ -1120,6 +1126,25 @@ sub copy_dir ( $, $from, $to )
 	return;
 }
 
+# $cp->copy_shared($from, $to):
+#	The shared set of the vault directory $from of the guest,
+#	into the vault directory $to: the index, and each entry or
+#	slot file (VAULT-LAYOUT-3). The machine-local set stays
+#	behind, so $to is a second machine of the vault
+#	(CER-PROVISION-2, VAULT-BACKUP-2). The name of an entry file
+#	is the hex of a hash, and the glob takes each one. The call
+#	makes $to, because the core process makes a vault directory
+#	at its first run alone.
+sub copy_shared ( $, $from, $to )
+{
+	main::guest_ok( "the copy of the shared set of $from",
+		'mkdir -p ' . main::_shq($to) . ' && cp '
+		    . main::_shq("$from/index") . ' '
+		    . main::_shq($from) . '/[0-9a-f]* '
+		    . main::_shq($to) . '/' );
+	return;
+}
+
 # $cp->digest($path):
 #	The SHA-256 of the file $path of the guest, in lowercase hex,
 #	and undef for an absent file. A leg holds two states of a
@@ -1271,6 +1296,34 @@ sub create ( $self, $vault, %opt )
 
 	my ($run) = $self->console( $vault,
 		{ argv => \@argv, answers => \@pass } );
+	return $run;
+}
+
+# $cp->provision($vault, %opt):
+#	The machine provisioning ceremony in the vault $vault
+#	(CER-PROVISION). The hash of the call holds 'exit', 'out' and
+#	'error', as create() gives them, and the run goes over the
+#	console as well (TEST-HARNESS-8).
+#
+#	%opt takes 'answers', an array reference of answer names for
+#	the prompts of the run, and the default is the correct
+#	passphrase twice. It takes 'machine' and 'threshold', and
+#	each one replaces the value of the vault. The oracle set is
+#	the set of the vault, as create() gives it.
+sub provision ( $self, $vault, %opt )
+{
+	my @argv = (
+		'provision', '-k', $opt{threshold} // $vault->{threshold},
+		'-m', $opt{machine} // $vault->{machine},
+		'-r', $main::ROUNDS );
+	for my $oracle ( 1 .. $vault->{oracles} ) {
+		push @argv,
+		    $self->pubkey($oracle) . ' ' . $self->url($oracle);
+	}
+
+	my ($run) = $self->console( $vault,
+		{ argv => \@argv,
+			answers => $opt{answers} // [ 'right', 'right' ] } );
 	return $run;
 }
 
