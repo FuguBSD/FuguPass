@@ -398,7 +398,8 @@ int	vault_config_read(const char *, size_t, struct vault_config *);
  *	(VAULT-CONFIG-6). A position must not disappear, and two
  *	positions must not exchange values. A position takes a
  *	replacement oracle or the retired state, and a change adds
- *	a position at the end of the list.
+ *	a position at the end of the list. A retired position takes
+ *	no oracle again (ORC-PROVISION-6).
  *
  *	One file cannot show this half of the rule, so the caller of
  *	a config change reads both files and calls this function.

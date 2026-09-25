@@ -113,8 +113,8 @@ static const struct subcommand commands[] = {
 	{ "passwd",	"", cmd_passwd },
 	{ "resume",	"", cmd_resume },
 	{ "refill",	"", cmd_refill },
-	{ "provision",	"[-a] -k threshold -m machine -r rounds oracle ...",
-	    cmd_provision },
+	{ "provision",	"[-a] [-x position] -k threshold -m machine -r rounds "
+	    "oracle ...", cmd_provision },
 	{ "kit",	"[-m machine]", cmd_kit },
 	{ "revoke",	"[-r] -m machine [position ...]", cmd_revoke }
 };
@@ -186,7 +186,8 @@ vault_dir(const char *opt, char *buf, size_t bufsize)
  *	provisioning take this one form, and pool takes 1 for the
  *	creation: that subcommand alone takes the -p option. The
  *	provisioning alone takes the -a option of the full run
- *	(CER-PROVISION-17).
+ *	(CER-PROVISION-17), and the -x option of a lost position
+ *	(CER-PROVISION-16).
  *
  *	The threshold comes from -k, the machine name from -m, and
  *	the round count of bcrypt_pbkdf(3) from -r. Each argument
@@ -198,7 +199,11 @@ vault_dir(const char *opt, char *buf, size_t bufsize)
  *	The slots of the pool come from -p, and a run without that
  *	option takes CEREMONY_POOL_SIZE slots (ENTRY-POOL-2). The -a
  *	flag of a provisioning re-enrolls every record of this machine
- *	(CER-PROVISION-17, ORC-ENROLL-12).
+ *	(CER-PROVISION-17, ORC-ENROLL-12). Each -x option names one
+ *	live position where this machine's records are lost, and the
+ *	ceremony enrolls the records of it again (CER-PROVISION-16,
+ *	REC-WIPE-2). The full run covers every position, so -a takes
+ *	no -x.
  *
  *	The config reader holds the full bounds of the threshold and
  *	of the oracle set (VAULT-CONFIG-6). This function holds the
@@ -214,6 +219,7 @@ ceremony_line(int argc, char *argv[], const char *vault, int pool,
     struct ceremony_create *arg)
 {
 	const char	*errstr;
+	unsigned int	 i, lost = 0;
 	int		 ch;
 
 	memset(arg, 0, sizeof(*arg));
@@ -222,7 +228,8 @@ ceremony_line(int argc, char *argv[], const char *vault, int pool,
 
 	optreset = 1;
 	optind = 1;
-	while ((ch = getopt(argc, argv, pool ? "k:m:p:r:" : "ak:m:r:")) != -1) {
+	while ((ch = getopt(argc, argv, pool ? "k:m:p:r:" : "ak:m:r:x:")) !=
+	    -1) {
 		switch (ch) {
 		case 'a':
 			arg->full = 1;
@@ -254,6 +261,16 @@ ceremony_line(int argc, char *argv[], const char *vault, int pool,
 				usage();
 			}
 			break;
+		case 'x':
+			i = (unsigned int)strtonum(optarg, 1,
+			    DERIVE_ORACLE_MAX, &errstr);
+			if (errstr != NULL) {
+				warnx("the lost position is %s", errstr);
+				usage();
+			}
+			arg->lost[i] = 1;
+			lost = i > lost ? i : lost;
+			break;
 		default:
 			usage();
 		}
@@ -264,6 +281,11 @@ ceremony_line(int argc, char *argv[], const char *vault, int pool,
 	    arg->rounds == 0) {
 		warnx("the -k, -m and -r options and the oracle set are "
 		    "mandatory");
+		usage();
+	}
+	if (lost > 0 && arg->full) {
+		warnx("the -a full run covers every position, and it takes "
+		    "no -x option");
 		usage();
 	}
 
@@ -280,6 +302,11 @@ ceremony_line(int argc, char *argv[], const char *vault, int pool,
 	}
 	if (arg->threshold > (unsigned int)argc) {
 		warnx("the threshold is above the count of the oracle set");
+		usage();
+	}
+	if (lost > (unsigned int)argc) {
+		warnx("the lost position %u is above the count of the oracle "
+		    "set", lost);
 		usage();
 	}
 

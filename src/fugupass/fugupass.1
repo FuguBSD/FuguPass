@@ -341,6 +341,7 @@ subcommand.
 .It Xo
 .Cm provision
 .Op Fl a
+.Op Fl x Ar position
 .Fl k Ar threshold
 .Fl m Ar machine
 .Fl r Ar rounds
@@ -393,10 +394,12 @@ The ceremony can run again on a provisioned machine.
 A re-run of the same command line verifies the passphrase at the
 canary record of each live oracle that holds a seal on this machine,
 before any enrollment.
+The check walks the canaries one oracle at a time, in list order.
+A canary that fails before any pass names the passphrase and the
+record-side causes of that oracle, and the ceremony stops there.
+It sends no request to a later canary, and no enrollment.
 A canary that fails after a pass at another oracle enrolls again,
 with a fresh seal and a fresh index wrap.
-A failure at every canary names the passphrase and the record-side
-causes, and the ceremony sends no enrollment.
 The re-run writes a dead index wrap again.
 It enrolls the record of each slot that holds no wrap of this
 machine at an oracle, and a record with a wrap stays as it is.
@@ -419,7 +422,27 @@ The report then names the
 .Cm kit
 subcommand, so the owner destroys this vault's records at the
 departing oracle.
+A retired position keeps its index, and no oracle takes it again.
 The threshold must not exceed the count of the live positions.
+.Pp
+A record loss at a live position shows in no list change, because
+the static public key and the URL of the position stay.
+The three causes are a store wipe, a third strike at a record, and
+a host restore from a backup.
+A ceremony report that names a junk canary at one oracle after a
+pass at another names the position to give.
+The
+.Fl x
+option names such a position, and the option repeats for each one.
+The ceremony deletes this machine's wrap files, canary seal, and
+index wrap of each named position before any enrollment.
+The loop then enrolls the records of that position again, and every
+other position stays as it is.
+A retired position stops the ceremony, and the
+.Fl a
+full run takes no
+.Fl x
+option, because it covers every position.
 .Pp
 A threshold change re-splits every share with the new threshold, and
 it re-enrolls every record of this machine with a fresh mask.

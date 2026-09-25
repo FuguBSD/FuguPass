@@ -16,8 +16,8 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 # The provisioning variants leg (CER-PROVISION-13 to CER-PROVISION-18,
-# ORC-ENROLL-12, ORC-PROVISION-6, ORC-PROVISION-7, REC-WIPE-2,
-# REC-WIPE-6, KEY-MASK-10, TEST-HARNESS-5).
+# ORC-ENROLL-12, ORC-PROVISION-6, ORC-PROVISION-7, VAULT-CONFIG-6,
+# REC-WIPE-2, REC-WIPE-6, KEY-MASK-10, TEST-HARNESS-5).
 #
 # Each case creates one vault against the example topology of three
 # oracles with a threshold of two, and it drives one variant of the
@@ -58,12 +58,14 @@ sub oracle_arg ( $t, $o )
 # prov_argv($vault, %opt):
 #	The command line of one provisioning run. 'oracle' is the
 #	array of oracle arguments, 'threshold' and 'machine' each
-#	replace the value of the vault, and 'full' adds the -a flag
-#	(CER-PROVISION-17).
+#	replace the value of the vault, 'full' adds the -a flag
+#	(CER-PROVISION-17), and 'lost' is the array of the positions
+#	of the -x options (CER-PROVISION-16).
 sub prov_argv ( $vault, %opt )
 {
 	my @argv = ('provision');
 	push @argv, '-a' if $opt{full};
+	push @argv, map { ( '-x', $_ ) } @{ $opt{lost} // [] };
 	push @argv, '-k', $opt{threshold} // $vault->{threshold},
 	    '-m', $opt{machine} // $vault->{machine}, '-r', $main::ROUNDS;
 	push @argv, @{ $opt{oracle} };
@@ -201,8 +203,18 @@ sub added_oracle_case ($t)
 #	names the kit (CER-PROVISION-16, ORC-PROVISION-6). A reveal
 #	still works on the two live oracles (REC-WIPE-6).
 #
-#	The mutation: a retirement that skips the deletion leaves the
+#	A retired position keeps its index, and no oracle takes it
+#	again (ORC-PROVISION-6, VAULT-CONFIG-6). A run whose list gives
+#	position 3 a value again refuses before the plate scan, sends
+#	no request, and leaves the config as it was. The run goes over
+#	the console with the scan helper, so a run that passes the
+#	gate reaches the ceremony and the assertions see it.
+#
+#	The mutations: a retirement that skips the deletion leaves the
 #	wrap files, the canary seal, and the index wrap of position 3.
+#	A position rule that passes the retired-to-live change enrolls
+#	the records of this machine at position 3 again, so the run
+#	passes, the counters move, and the config names an oracle.
 sub retirement_case ($t)
 {
 	my $secret = $t->answer('secret');
@@ -243,6 +255,23 @@ sub retirement_case ($t)
 		'the config names position 3 retired (ORC-PROVISION-6)' );
 
 	reveals( $t, $v, $secret, 'the retirement' );
+
+	my $config   = $t->digest("$v->{dir}/machine/config");
+	my $counters = $t->digest( $t->counters($v) );
+	my @live3 = prov_argv( $v,
+		oracle => [ map { oracle_arg( $t, $_ ) } 1 .. 3 ] );
+	my ($again) = $t->console( $v,
+		{ argv => \@live3, answers => [ 'right', 'right' ] } );
+	isnt( $again->{exit}, 0,
+		'a retired position takes no oracle again (ORC-PROVISION-6)' );
+	like( $again->{error}, qr/a retired position takes no oracle again/,
+		'the refusal names the position rule (VAULT-CONFIG-6)' );
+	is( $t->digest("$v->{dir}/machine/config"),
+		$config, 'the refused run left the config as it was '
+		    . '(ORC-PROVISION-6)' );
+	is( $t->digest( $t->counters($v) ),
+		$counters, 'the refused run sent no request: the counters '
+		    . 'file stays (ORC-PROVISION-6)' );
 	return;
 }
 
@@ -360,11 +389,22 @@ sub full_run_case ($t)
 
 # wipe_case($t):
 #	A wiped record at one oracle blocks no reveal while two records
-#	remain, and the ceremony restores the third (REC-WIPE-6). The
-#	wipe removes one record file from the store of oracle 3. The
-#	deletion of this machine's local files of position 3, and the
-#	stop of oracle 2, then prove the loss, and the ceremony heals
-#	it (REC-WIPE-2).
+#	remain, and the -x option of the ceremony restores the third
+#	(REC-WIPE-2, REC-WIPE-6, CER-PROVISION-16). The wipe removes
+#	every record file from the store of oracle 3, and the static
+#	key and the URL of the position stay, so the list shows no
+#	change. The stop of oracle 2 proves the loss before the
+#	ceremony, and the heal after it.
+#
+#	The ceremony deletes this machine's wrap files, canary seal,
+#	and index wrap of position 3 before it enrolls the records of
+#	the position again, so each digest of position 3 moves, and
+#	each wrap of position 1 and position 2 keeps its digest.
+#
+#	The mutation: a -x run that skips the deletion keeps the wrap
+#	files of position 3, so the no-wrap loop enrolls no slot there.
+#	The wrap digests of position 3 then stay, and the reveal by
+#	oracle 3 fails after the ceremony.
 sub wipe_case ($t)
 {
 	my $secret = $t->answer('secret');
@@ -374,37 +414,61 @@ sub wipe_case ($t)
 
 	reveals( $t, $v, $secret, 'before the wipe' );
 
-	my ($rec3) = sort $t->records(3);
-	ok( defined $rec3, 'the store of oracle 3 holds a record to wipe' );
-	$t->wipe( 3, $rec3 );
+	my @rec3 = sort $t->records(3);
+	ok( scalar @rec3 > 0, 'the store of oracle 3 holds records to wipe' );
+	$t->wipe( 3, $_ ) for @rec3;
 	reveals( $t, $v, $secret,
 		'a wiped record blocks no reveal while two remain (REC-WIPE-6)' );
-
-	$t->remove_file(
-		$t->seal( $v, oracle => 3 ),
-		$t->index_wrap( $v, oracle => 3 ),
-		map { $t->wrap( $v, slot => $_, oracle => 3 ) } 0 .. $POOL - 1 );
 
 	$t->stop_oracle(2);
 	my ($lost) = $t->console( $v,
 		{ argv => [ 'show', 'a1' ], answers => ['right'] } );
 	$t->start_oracle(2);
 	isnt( $lost->{exit}, 0,
-		'the reveal by oracle 3 fails while its local files are gone '
+		'the reveal by oracle 3 fails while its records are wiped '
 		    . '(REC-WIPE-6)' );
 
-	my @argv = prov_argv( $v,
+	my $wbefore = wraps_of( $t, $v );
+	my $seal3   = $t->digest( $t->seal( $v, oracle => 3 ) );
+	my $index3  = $t->digest( $t->index_wrap( $v, oracle => 3 ) );
+
+	my @argv = prov_argv( $v, lost => [3],
 		oracle => [ map { oracle_arg( $t, $_ ) } 1 .. 3 ] );
 	my ($run) = $t->console( $v,
 		{ argv => \@argv, answers => [ 'right', 'right' ] } );
-	is( $run->{exit}, 0, 'the ceremony restores position 3 (REC-WIPE-2)' )
+	is( $run->{exit}, 0,
+		'the -x ceremony restores position 3 (REC-WIPE-2, '
+		    . 'CER-PROVISION-16)' )
 	    or diag( $run->{error} );
-	is( $t->file_exists( $t->index_wrap( $v, oracle => 3 ) ),
-		1, 'the ceremony wrote the index wrap of position 3 again '
-		    . '(REC-WIPE-2)' );
-	is( $t->file_exists( $t->seal( $v, oracle => 3 ) ),
-		1, 'the ceremony sealed the canary of position 3 again '
-		    . '(REC-WIPE-2)' );
+	like( $run->{error}, qr/files of position 3 are deleted/,
+		'the report names the deletion of position 3 '
+		    . '(CER-PROVISION-16)' );
+
+	my $wafter = wraps_of( $t, $v );
+	for my $slot ( 0 .. $POOL - 1 ) {
+		isnt( $wafter->{"$slot.3"}, $wbefore->{"$slot.3"},
+			"the ceremony deleted the wrap of slot $slot at "
+			    . 'position 3 and wrote it again '
+			    . '(CER-PROVISION-16)' );
+		for my $o ( 1, 2 ) {
+			is( $wafter->{"$slot.$o"}, $wbefore->{"$slot.$o"},
+				"the wrap of slot $slot at oracle $o keeps its "
+				    . 'digest (CER-PROVISION-16)' );
+		}
+	}
+	isnt( $t->digest( $t->seal( $v, oracle => 3 ) ),
+		$seal3, 'the ceremony deleted the canary seal of position 3 '
+		    . 'and sealed the canary again (CER-PROVISION-16)' );
+	isnt( $t->digest( $t->index_wrap( $v, oracle => 3 ) ),
+		$index3, 'the ceremony deleted the index wrap of position 3 '
+		    . 'and wrote it again (CER-PROVISION-16)' );
+	my %e_run = %{ entry_counters($run) };
+	my %e_run12 = map { $_ => $e_run{$_} } grep { !/-3\z/ } keys %e_run;
+	my %e_lost = %{ entry_counters($lost) };
+	my %e_lost12 = map { $_ => $e_lost{$_} } grep { !/-3\z/ } keys %e_lost;
+	is_deeply( \%e_run12, \%e_lost12,
+		'the -x ceremony sent no set_pin to oracle 1 or oracle 2 '
+		    . '(CER-PROVISION-16)' );
 
 	$t->stop_oracle(2);
 	my ($healed) = $t->console( $v,

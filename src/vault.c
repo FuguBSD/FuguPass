@@ -1060,7 +1060,9 @@ vault_config_change(const struct vault_config *from,
 	 * position that takes the live value of another position is
 	 * that exchange, and the move of one value is the same
 	 * failure. A replacement oracle and the retired state each
-	 * pass, because no other position held that value.
+	 * pass, because no other position held that value. A retired
+	 * position keeps its index, and no oracle takes it again
+	 * (ORC-PROVISION-6).
 	 */
 	for (i = 1; i <= to->count; i++) {
 		if (i <= from->count &&
@@ -1068,6 +1070,8 @@ vault_config_change(const struct vault_config *from,
 			continue;
 		if (to->oracle[i - 1].retired)
 			continue;
+		if (i <= from->count && from->oracle[i - 1].retired)
+			return -1;
 		for (j = 1; j <= from->count; j++) {
 			if (j == i || from->oracle[j - 1].retired)
 				continue;

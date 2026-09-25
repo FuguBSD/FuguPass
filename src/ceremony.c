@@ -1473,8 +1473,9 @@ config_lists_same(const struct vault_config *a, const struct vault_config *b)
  *	re-splits every share and re-enrolls every record
  *	(CER-PROVISION-15). A list change validates against the
  *	position rule of vault_config_change(): a position must not
- *	disappear, and two positions must not exchange values
- *	(CER-PROVISION-14, CER-PROVISION-16, VAULT-CONFIG-6). A change
+ *	disappear, two positions must not exchange values, and a
+ *	retired position takes no oracle again (CER-PROVISION-14,
+ *	CER-PROVISION-16, VAULT-CONFIG-6, ORC-PROVISION-6). A change
  *	while a marker stands refuses, because one incomplete change
  *	comes first.
  *
@@ -1575,8 +1576,9 @@ provision_old(struct state *st)
 		goto out;
 	} else if (vault_config_change(st->old, new) != 0) {
 		warnx("%s: the oracle list change is not allowed: a position "
-		    "must not disappear, and two positions must not exchange "
-		    "values", path);
+		    "must not disappear, two positions must not exchange "
+		    "values, and a retired position takes no oracle again "
+		    "(VAULT-CONFIG-6, ORC-PROVISION-6)", path);
 		goto out;
 	}
 	rv = 0;
@@ -1685,13 +1687,21 @@ provision_delete_position(const struct state *st, unsigned int oracle)
 /*
  * provision_retire(st):
  *	The deletion of this machine's files of each position that the
- *	config change retires or replaces (CER-PROVISION-16,
- *	ORC-PROVISION-6). step_config() wrote the new config, so this
- *	step compares the config on disk before the ceremony (old)
- *	with it. A live position that becomes retired is a retirement,
- *	and a live position that takes a new value is a replacement.
- *	The no-wrap loop then re-enrolls a replacement, and it enrolls
- *	nothing of a retirement (CER-PROVISION-12, REC-WIPE-2).
+ *	config change retires or replaces, and of each lost position
+ *	of the command line (CER-PROVISION-16, ORC-PROVISION-6).
+ *	step_config() wrote the new config, so this step compares the
+ *	config on disk before the ceremony (old) with it. A live
+ *	position that becomes retired is a retirement, and a live
+ *	position that takes a new value is a replacement. The no-wrap
+ *	loop then re-enrolls a replacement, and it enrolls nothing of
+ *	a retirement (CER-PROVISION-12, REC-WIPE-2).
+ *
+ *	A record loss at a live position whose value stays shows in
+ *	no list change, so the -x option names it (lost of arg). The
+ *	deletion of its files puts the position before the no-wrap
+ *	loop as a replacement is: the canary and the index wrap of it
+ *	enroll again, and so does each pair of it (CER-PROVISION-6,
+ *	REC-WIPE-2). ceremony_provision() refused a retired position.
  *
  *	The report directs the owner to the departing oracle. The
  *	revocation kit names this vault's records there
@@ -1706,6 +1716,14 @@ provision_retire(struct state *st)
 	const struct vault_config	*old = st->old;
 	unsigned int			 i, n;
 
+	for (i = 1; i <= st->config.count; i++) {
+		if (!st->arg->lost[i])
+			continue;
+		if (provision_delete_position(st, i) != 0)
+			return -1;
+		warnx("this machine's files of position %u are deleted, and "
+		    "the ceremony enrolls the records of it again", i);
+	}
 	if (old == NULL)
 		return 0;
 	n = old->count < st->config.count ? old->count : st->config.count;
@@ -1774,18 +1792,20 @@ provision_seals(struct state *st)
  *	get_pin, the seal, and this machine's index wrap
  *	(ORC-CANARY-7, ORC-CANARY-11, KEY-MASK-7).
  *
- *	A live oracle with a seal takes the canary check first, and
- *	that check heals a dead index wrap under the canary mask of
- *	the answer (ORC-CANARY-1, ORC-CANARY-8). A pass keeps the
- *	record, the seal and the wrap. A junk answer after a pass at
- *	another oracle names a record-side cause: a wiped record, a
- *	counter behind the record, or a stale seal of this machine
- *	(ORC-CANARY-4). That oracle then takes the enrollment above,
- *	and the fresh mask seals the check value and wraps the index
- *	share again. A junk answer at every sealed canary keeps the
- *	typo case, and the ceremony stops before any set_pin
- *	(ORC-CANARY-9). Every other state of a request stops the
- *	ceremony, because the loops need every live oracle
+ *	A live oracle with a seal takes the canary check first, one
+ *	oracle at a time in list order, and that check heals a dead
+ *	index wrap under the canary mask of the answer (ORC-CANARY-1,
+ *	ORC-CANARY-4, ORC-CANARY-8). A pass keeps the record, the seal
+ *	and the wrap. A junk answer after a pass at another oracle
+ *	names a record-side cause: a wiped record, a counter behind
+ *	the record, or a stale seal of this machine (ORC-CANARY-4).
+ *	That oracle then takes the enrollment above, and the fresh
+ *	mask seals the check value and wraps the index share again. A
+ *	junk answer before any pass keeps the typo case: the walk
+ *	stops there, the later canaries take no request, and the
+ *	ceremony sends no set_pin (ORC-CANARY-9). canary_take() of
+ *	change.c holds the same rule. Every other state of a request
+ *	stops the ceremony, because the loops need every live oracle
  *	(ORC-REVEAL-6, ORC-REVEAL-8).
  *
  *	K_idx came from the plate at the index read, so the check
@@ -1798,34 +1818,39 @@ provision_canaries(struct state *st)
 	struct oracle_ctx	 ctx;
 	unsigned char		 share[DERIVE_KEYLEN];
 	const char		*url;
-	unsigned int		 i, checked = 0, passed = 0;
+	unsigned int		 i, first = 0;
 	int			 live, rv, ok = -1;
 
 	for (i = 1; i <= st->config.count; i++) {
 		if (st->canary[i] != CANARY_CHECK)
 			continue;
-		checked++;
 		url = st->config.oracle[i - 1].url;
 		ctx_of(&ctx, st, i);
 		rv = oracle_canary_check(&ctx, st->idxkey, sizeof(st->idxkey),
 		    share, sizeof(share), &live);
 		if (rv == 0) {
 			st->canary[i] = CANARY_KEEP;
-			passed++;
+			if (first == 0)
+				first = i;
 			continue;
 		}
 		warnx("the canary of oracle %u (%s): %s", i, url,
 		    oracle_state_text(rv));
 		if (rv != ORACLE_EJUNK)
 			goto out;
+		if (first == 0) {
+			warnx("the cause is the passphrase, or, at oracle %u, "
+			    "a wiped canary record, a counter behind the "
+			    "record, or a stale canary check seal of this "
+			    "machine", i);
+			warnx("the ceremony sends no set_pin");
+			goto out;
+		}
+		warnx("the passphrase passed at oracle %u, so the cause sits "
+		    "at oracle %u: a wiped canary record, a counter behind "
+		    "the record, or a stale canary check seal of this "
+		    "machine", first, i);
 		st->canary[i] = CANARY_STALE;
-	}
-	if (checked > 0 && passed == 0) {
-		warnx("the cause is the passphrase, or, at each oracle, a "
-		    "wiped canary record, a counter behind the record, or a "
-		    "stale canary check seal of this machine");
-		warnx("the ceremony sends no set_pin");
-		goto out;
 	}
 
 	for (i = 1; i <= st->config.count; i++) {
@@ -1932,6 +1957,7 @@ int
 ceremony_provision(const struct ceremony_create *arg)
 {
 	struct state	*st;
+	unsigned int	 i;
 	int		 n, rv = -1;
 
 	if (arg == NULL || arg->vault == NULL || arg->machine == NULL ||
@@ -1943,6 +1969,19 @@ ceremony_provision(const struct ceremony_create *arg)
 	if (arg->count > DERIVE_ORACLE_MAX) {
 		warnx("the oracle set takes %d positions at the most",
 		    DERIVE_ORACLE_MAX);
+		return -1;
+	}
+
+	/*
+	 * A lost position is a live position: a retired position keeps
+	 * its index, and no oracle takes it, so no record enrolls
+	 * there again (ORC-PROVISION-6, CER-PROVISION-16).
+	 */
+	for (i = 1; i <= arg->count; i++) {
+		if (!arg->lost[i] || strcmp(arg->oracle[i - 1], "retired") != 0)
+			continue;
+		warnx("position %u is retired, and -x names a live position",
+		    i);
 		return -1;
 	}
 

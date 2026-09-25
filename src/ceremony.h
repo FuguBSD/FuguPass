@@ -44,6 +44,8 @@
 #ifndef CEREMONY_H
 #define CEREMONY_H
 
+#include "derive.h"
+
 /*
  * The slots of a new pool, and the low watermark of it. The pool
  * size is tunable, and CEREMONY_POOL_SIZE is the default of it
@@ -68,6 +70,7 @@ struct ceremony_create {
 	unsigned int		 rounds;	/* kdf-rounds, KEY-PIN-5 */
 	unsigned int		 pool;		/* pool-size, ENTRY-POOL-2 */
 	int			 full;		/* provision -a, CER-PROVISION-17 */
+	unsigned char		 lost[DERIVE_ORACLE_MAX + 1]; /* provision -x */
 };
 
 /*
@@ -175,6 +178,13 @@ int	ceremony_refill(const char *);
  *	A threshold change re-splits every share and re-enrolls every
  *	record under a threshold marker, and it re-runs from the start
  *	(CER-PROVISION-15).
+ *
+ *	A record loss at a live position whose value stays shows in
+ *	no list change. Each position i with lost[i] of arg set names
+ *	such a loss: the ceremony deletes this machine's files of
+ *	that position first, and the loop enrolls the pairs of it
+ *	again (CER-PROVISION-16, REC-WIPE-2). A retired position
+ *	refuses, and so does a position above the count.
  *
  *	The -a run of full of arg re-enrolls every record of this
  *	machine under one passphrase, and it removes a passphrase marker

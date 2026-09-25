@@ -308,12 +308,14 @@ return sub ($t)
 			"the re-run kept the index wrap of oracle $oracle" );
 	}
 
-	# A mistyped passphrase fails at every sealed canary, and the
-	# re-run then sends no set_pin (ORC-CANARY-9). The mutation:
-	# a run that enrolls each failed canary again poisons the
-	# three canaries under the typo, and the store keeps its
-	# records, so the seals catch it: an enrollment writes a fresh
-	# seal, and a check writes none.
+	# A mistyped passphrase fails at the first sealed canary, and
+	# the walk stops there: the later canaries take no request, and
+	# the re-run sends no set_pin (ORC-CANARY-4, ORC-CANARY-9). The
+	# mutations: a walk that goes on past the first junk answer
+	# moves the canary counter of oracle 2 and of oracle 3, and a
+	# run that enrolls each failed canary again poisons the canaries
+	# under the typo, so the seals catch it: an enrollment writes a
+	# fresh seal, and a check writes none.
 	my ($typo) = $t->provision( $second, answers => [ 'wrong', 'wrong' ] );
 	isnt( $typo->{exit}, 0,
 		'a mistyped passphrase stops the re-run (ORC-CANARY-9)' );
@@ -321,11 +323,17 @@ return sub ($t)
 		'the report names the typo case (ORC-CANARY-9)' );
 	like( $typo->{error}, qr/the ceremony sends no set_pin/,
 		'the report states that no set_pin ran (ORC-CANARY-9)' );
-	for my $oracle ( 1 .. $ORACLES ) {
-		ok( $typo->{counters}{"canary-$oracle"} >
+	ok( $typo->{counters}{'canary-1'} > $rerun->{counters}{'canary-1'},
+		'the mistyped re-run sent the check to the canary of oracle 1 '
+		    . '(ORC-CANARY-4)' );
+	for my $oracle ( 2 .. $ORACLES ) {
+		is( $typo->{counters}{"canary-$oracle"},
 			$rerun->{counters}{"canary-$oracle"},
-			"the mistyped re-run sent the check to the canary of "
-			    . "oracle $oracle" );
+			"the mistyped re-run sent no check to the canary of "
+			    . "oracle $oracle: the walk stopped at oracle 1 "
+			    . '(ORC-CANARY-4)' );
+	}
+	for my $oracle ( 1 .. $ORACLES ) {
 		is( $t->digest( $t->seal( $second, oracle => $oracle ) ),
 			$seal{$oracle},
 			"the mistyped re-run enrolled the canary of oracle "

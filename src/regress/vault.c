@@ -968,7 +968,9 @@ test_config(void)
 		{ "a position that disappears", change_ab, change_a, 0 },
 		{ "a position that retires", change_ab, change_ar, 1 },
 		{ "a position at the end", change_ab, change_abc, 1 },
-		{ "a replacement oracle", change_ab, change_cb, 1 }
+		{ "a replacement oracle", change_ab, change_cb, 1 },
+		{ "a retired position that takes an oracle again", change_ar,
+		    change_ab, 0 }
 	};
 	static struct vault_config	 cfg, from, to;
 	size_t				 i;
@@ -999,9 +1001,10 @@ test_config(void)
 		}
 
 	/*
-	 * A position must not disappear, and two positions must not
-	 * exchange values (VAULT-CONFIG-6). One file cannot show
-	 * this half of the rule, so the two configs of a change
+	 * A position must not disappear, two positions must not
+	 * exchange values, and a retired position takes no oracle
+	 * again (VAULT-CONFIG-6, ORC-PROVISION-6). One file cannot
+	 * show this half of the rule, so the two configs of a change
 	 * reach the rule together.
 	 */
 	for (i = 0; i < nitems(changes); i++) {
