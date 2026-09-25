@@ -36,8 +36,9 @@
  * subcommands of this file: the vault creation, the canary
  * re-enrollment, the passphrase change, the resume of an incomplete
  * change, the pool refill, the machine provisioning, the revocation
- * kit, the revocation, and the recovery. commands_table of commands.h holds the six
- * commands of the session, and commands_oneshot() runs one of them
+ * kit, the revocation, the recovery, and the plate verification.
+ * commands_table of commands.h holds the six commands of the
+ * session, and commands_oneshot() runs one of them
  * (PROG-ONESHOT-1, PROG-ONESHOT-2). A name that neither table holds
  * gives the usage and the status 2. A run with no subcommand starts
  * the interactive session of iface.h, and that session runs each
@@ -100,6 +101,7 @@ static int	 cmd_provision(int, char *[], const char *);
 static int	 cmd_kit(int, char *[], const char *);
 static int	 cmd_revoke(int, char *[], const char *);
 static int	 cmd_recover(int, char *[], const char *);
+static int	 cmd_verify(int, char *[], const char *);
 static void	 usage(void);
 static int	 vault_dir(const char *, char *, size_t);
 
@@ -119,7 +121,8 @@ static const struct subcommand commands[] = {
 	    "oracle ...", cmd_provision },
 	{ "kit",	"[-m machine]", cmd_kit },
 	{ "revoke",	"[-r] -m machine [position ...]", cmd_revoke },
-	{ "recover",	"[--ceiling ceiling]", cmd_recover }
+	{ "recover",	"[--ceiling ceiling]", cmd_recover },
+	{ "verify",	"", cmd_verify }
 };
 
 /*
@@ -615,6 +618,24 @@ cmd_recover(int argc, char *argv[], const char *vault)
 		}
 	}
 	return recover_run(vault, ceiling) == 0 ? 0 : 1;
+}
+
+/*
+ * cmd_verify(argc, argv, vault):
+ *	The plate verification of the vault directory vault
+ *	(CER-VERIFY, PROG-ONESHOT-4). The subcommand takes no option
+ *	and no argument. It takes the master from a plate scan, it
+ *	opens no session, it reads no passphrase, and it sends no
+ *	request (CER-VERIFY-2, PROG-REPL-6). ceremony.c holds the
+ *	compare and the date of a match.
+ */
+static int
+cmd_verify(int argc, char *argv[], const char *vault)
+{
+	(void)argv;
+	if (argc != 1)
+		usage();
+	return ceremony_verify(vault) == 0 ? 0 : 1;
 }
 
 int

@@ -15,7 +15,8 @@
  */
 
 /*
- * Vault creation, the pool refill, and machine provisioning.
+ * Vault creation, the pool refill, machine provisioning, and plate
+ * verification.
  * ceremony.h states the interface. CER-CREATE holds eight rules,
  * the rules are the steps, and ceremony_create() calls one function
  * of each step in rule order.
@@ -66,6 +67,16 @@
  * loop over every pair. A threshold change and the -a full run
  * carry the change marker (CER-PROVISION-15, CER-PROVISION-17).
  *
+ * ceremony_verify() is plate verification, the fourth ceremony of
+ * this file (CER-VERIFY). refill_config() reads the config of this
+ * machine, step_master() scans the plate, and verify_check() is
+ * CER-VERIFY-1: it re-derives the plate check value and compares it
+ * with the plate-check line. A match records the date of the day in
+ * the index through index_read() and index_write(), under K_idx
+ * from root (CER-VERIFY-5). The erasure of CER-VERIFY-4 sits in
+ * ceremony_verify(). No step of it reaches oracle.c, so the
+ * verification touches no record (CER-VERIFY-2).
+ *
  * The steps come from the other files of the tree. helper.c runs
  * the scan helper, derive.c holds each label and the master gate,
  * bip85.c holds the two candidates, oracle.c holds each record and
@@ -100,6 +111,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "bip85.h"
@@ -177,6 +189,9 @@ enum canary_state {
  * the result of that lookup (VAULT-INDEX-2). retire is 1 for the
  * rewrite of ceremony_retire(): the machine line of name then stays
  * out of the text, and the marked line replaces it (VAULT-INDEX-7).
+ * verify is 1 for the rewrite of ceremony_verify(): the verified line
+ * of the read then stays out of the text, and the date of the day
+ * takes its place (CER-VERIFY-5).
  * verifier is 1 while a canary check seal of a live oracle exists
  * on this machine (ORC-CANARY-6), and canary holds the state of
  * each canary (CER-PROVISION-12).
@@ -204,6 +219,7 @@ struct state {
 	int				 registered;
 	int				 retired;
 	int				 retire;
+	int				 verify;
 	int				 verifier;
 	int				 full;		/* every pair, CER-PROVISION-15/17 */
 	int				 threshold_change; /* write the marker */
@@ -257,6 +273,7 @@ static int		 provision_canaries(struct state *);
 static int		 provision_slot(struct state *, uint32_t);
 static int		 provision_slots(struct state *);
 static int		 provision_index_write(struct state *);
+static int		 verify_check(const struct state *);
 
 /*
  * hex(in, inlen, out):
@@ -1016,11 +1033,14 @@ registry_note(struct state *st, const char *value, size_t valuelen)
  *	two (VAULT-INDEX-2). A machine line of the name of the state
  *	sets the registry members (CER-PROVISION-3). The rewrite of
  *	ceremony_retire() keeps that one line out of the text, and
- *	the marked line takes its place (VAULT-INDEX-7).
+ *	the marked line takes its place (VAULT-INDEX-7). The rewrite of
+ *	ceremony_verify() keeps the verified line out of the text as
+ *	well, and the date of the day takes its place (CER-VERIFY-5).
  *
  *	Every other line reaches that text again, so the refill, the
- *	provisioning and the retirement change no entry and no other
- *	machine of the registry (CER-REFILL-4, CER-PROVISION-8).
+ *	provisioning, the retirement and the verification change no
+ *	entry and no other machine of the registry (CER-REFILL-4,
+ *	CER-PROVISION-8).
  */
 static int
 index_line(const struct vault_line *line, void *arg)
@@ -1031,6 +1051,8 @@ index_line(const struct vault_line *line, void *arg)
 
 	if (strcmp(name, "machine") == 0 && st->name != NULL &&
 	    registry_note(st, line->value, line->valuelen) && st->retire)
+		return 0;
+	if (strcmp(name, "verified") == 0 && st->verify)
 		return 0;
 	if (strcmp(name, "pool-free") == 0) {
 		if (line->valuelen >= sizeof(st->free))
@@ -2184,6 +2206,134 @@ out:
 	/*
 	 * root, K_idx and the plaintext of the index leave memory
 	 * here, on the pass and on every failure path (SEC-MEMORY-5).
+	 */
+	if (st->raw != NULL) {
+		explicit_bzero(st->raw, INDEX_RAW_MAX);
+		free(st->raw);
+	}
+	if (st->plain != NULL) {
+		explicit_bzero(st->plain, SESSION_INDEX_MAX);
+		free(st->plain);
+	}
+	if (st->text != NULL) {
+		explicit_bzero(st->text, SESSION_INDEX_MAX);
+		free(st->text);
+	}
+	explicit_bzero(st, sizeof(*st));
+	free(st);
+	return rv;
+}
+
+/*
+ * verify_check(st):
+ *	CER-VERIFY-1. The plate check value of root, against the
+ *	plate-check line of the config file of this machine
+ *	(KEY-MASTER-5, VAULT-CONFIG-1). The value is one-way, so the
+ *	compare leaks nothing about the master, and a config with no
+ *	such line names no plate.
+ *
+ *	The call gives 0 for a match, and -1 with a report for every
+ *	other case. The report of a mismatch names a wrong plate or
+ *	a damaged plate, and it holds no value of either side.
+ */
+static int
+verify_check(const struct state *st)
+{
+	unsigned char	 check[DERIVE_KEYLEN];
+	char		 plate[VAULT_NAMELEN];
+	int		 rv = -1;
+
+	if (st->config.plate_check[0] == '\0') {
+		warnx("the config file holds no plate check value");
+		return -1;
+	}
+	if (derive_plate_check(st->root, sizeof(st->root), check,
+	    sizeof(check)) != 0) {
+		warnx("the plate check value fails");
+		goto out;
+	}
+	hex(check, sizeof(check), plate);
+	if (strlen(st->config.plate_check) != sizeof(plate) - 1 ||
+	    timingsafe_bcmp(plate, st->config.plate_check,
+	    sizeof(plate) - 1) != 0) {
+		warnx("the plate check value differs from the config file: "
+		    "a wrong plate, or a damaged plate");
+		goto out;
+	}
+	rv = 0;
+out:
+	explicit_bzero(check, sizeof(check));
+	explicit_bzero(plate, sizeof(plate));
+	return rv;
+}
+
+int
+ceremony_verify(const char *vault)
+{
+	struct state	*st;
+	char		 date[ENTRY_DATE_MAX];
+	int		 n, rv = -1;
+
+	if (vault == NULL) {
+		warnx("the verification takes an incomplete argument set");
+		return -1;
+	}
+	if ((st = calloc(1, sizeof(*st))) == NULL) {
+		warn("the verification");
+		return -1;
+	}
+	st->vault = vault;
+	st->verify = 1;
+
+	/* The three buffers of the index (struct state). */
+	st->raw = malloc(INDEX_RAW_MAX);
+	st->plain = malloc(SESSION_INDEX_MAX);
+	st->text = malloc(SESSION_INDEX_MAX);
+	if (st->raw == NULL || st->plain == NULL || st->text == NULL) {
+		warn("the verification");
+		goto out;
+	}
+
+	/*
+	 * CER-VERIFY-1. The config of this machine gives the stored
+	 * check value, the plate gives root, and verify_check()
+	 * compares the two. No step reaches oracle.c, and no step
+	 * reads the passphrase, so the verification touches no
+	 * record and reveals no secret (CER-VERIFY-2, PROG-REPL-6).
+	 * A mismatch stops here, and the index stays as it was.
+	 */
+	if (refill_config(st) != 0 || step_master(st) != 0 ||
+	    verify_check(st) != 0)
+		goto out;
+
+	/*
+	 * CER-VERIFY-5. The read keeps every line of the index but
+	 * the verified line, and the date of the day takes its place
+	 * (VAULT-INDEX-2). K_idx derives from root in index_read()
+	 * (VAULT-INDEX-4, KEY-MASK-8). The write takes the pool state
+	 * as the read gave it, with no new slot.
+	 */
+	if (index_read(st) != 0)
+		goto out;
+	if (entry_audit_cutoff(0, time(NULL), date, sizeof(date)) != 0) {
+		warnx("the date of the day fails");
+		goto out;
+	}
+	n = snprintf(&st->text[st->textlen], SESSION_INDEX_MAX - st->textlen,
+	    "verified: %s\n", date);
+	if (n < 0 || (size_t)n >= SESSION_INDEX_MAX - st->textlen) {
+		warnx("the index: the text does not fit");
+		goto out;
+	}
+	st->textlen += (size_t)n;
+	if (index_write(st) != 0)
+		goto out;
+	rv = 0;
+out:
+	/*
+	 * CER-VERIFY-4. M, root and K_idx leave memory here, on the
+	 * pass and on every failure path (SEC-MEMORY-5). The three
+	 * buffers hold vault data, and they leave with it.
 	 */
 	if (st->raw != NULL) {
 		explicit_bzero(st->raw, INDEX_RAW_MAX);

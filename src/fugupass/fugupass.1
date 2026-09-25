@@ -68,6 +68,9 @@
 .Op Fl \-ceiling Ar ceiling
 .Nm
 .Op Fl d Ar directory
+.Cm verify
+.Nm
+.Op Fl d Ar directory
 .Cm ls
 .Nm
 .Op Fl d Ar directory
@@ -133,9 +136,10 @@ Every subcommand but
 .Cm refill ,
 .Cm provision ,
 .Cm kit ,
-.Cm revoke
-and
+.Cm revoke ,
 .Cm recover
+and
+.Cm verify
 opens a session of the vault first.
 The session reads the passphrase once.
 It takes the quorum of
@@ -674,6 +678,26 @@ The highest slot of the scan, above the default of 1024 slots.
 The plate-alone path materializes the candidates of each slot up to
 this bound, so a large ceiling takes a long scan.
 .El
+.It Cm verify
+Verify that a plate decodes to the master of this vault.
+The subcommand takes the master from a plate scan of
+.Xr fugupass-scan 1 .
+It re-derives the plate check value of that master, and it compares
+the value with the
+.Ic plate-check
+line of the config file of this machine.
+The check value is one-way, so the config file leaks nothing about
+the master.
+.Pp
+The subcommand opens no session, it reads no passphrase, and it sends
+no oracle request.
+It touches no oracle record, and it reveals no secret.
+On a match, it records the date of the day in the index, under the
+index key of the plate, and
+.Cm audit
+reports that date.
+A mismatch names a wrong plate or a damaged plate, and it writes no
+file.
 .It Cm ls
 Print the name of each entry of the index, one name on each line.
 The subcommand reads the open index, and it sends no entry request.
@@ -768,7 +792,10 @@ own.
 Print the state of the plate verification and of the shadow entries.
 The first line holds
 .Dq verified ,
-a colon, one space, and the date of the last plate verification.
+a colon, one space, and the date of the last plate verification of
+.Cm verify .
+A vault with no verification prints no such line, and the report
+names the absent date.
 The subcommand then prints one line of each stale shadow entry: the
 verification date of it, one space, and the entry name.
 A shadow entry is stale when its verification date is older than the
@@ -970,6 +997,14 @@ The
 .Cm provision
 subcommand refuses a retired name.
 Give a new machine name.
+.El
+.Pp
+The report below names the state of a plate verification.
+.Bl -tag -width Ds
+.It the plate check value differs from the config file
+The plate is a wrong plate, or a damaged plate.
+The config file of this machine holds the check value of the plate of
+this vault, and the subcommand wrote no date.
 .El
 .Sh SEE ALSO
 .Xr fugupass-qr 1 ,

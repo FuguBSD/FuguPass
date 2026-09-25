@@ -39,6 +39,10 @@
  * A revocation lock retires a machine name, and the index rewrite
  * of this file marks it under the index key of the plate
  * (ORC-REVOKE-11, VAULT-INDEX-7).
+ *
+ * ceremony_verify() is plate verification. It compares the plate
+ * check value of a scanned plate with the config file, and it
+ * records the date of a match in the index (CER-VERIFY).
  */
 
 #ifndef CEREMONY_H
@@ -224,5 +228,30 @@ int	ceremony_provision(const struct ceremony_create *);
  */
 int	ceremony_retire(const char *, const unsigned char *, size_t,
 	    const char *);
+
+/*
+ * ceremony_verify(vault):
+ *	Plate verification, in the vault directory vault
+ *	(CER-VERIFY). The call gives 0 for a plate of this vault, and
+ *	-1 with a report on the standard error for every other case.
+ *
+ *	The call reads the config file of this machine, reads the
+ *	master from the scan helper, re-derives root and the plate
+ *	check value, and compares that value with the plate-check
+ *	line of the config (CER-VERIFY-1, KEY-MASTER-5). A mismatch
+ *	names a wrong plate or a damaged plate, and it writes no
+ *	file.
+ *
+ *	The call reads no passphrase, opens no session, and sends no
+ *	request, so it touches no oracle record and reveals no
+ *	secret (CER-VERIFY-2, PROG-REPL-6). On a match, it records
+ *	the date of the day in the index, under K_idx from root, and
+ *	it keeps every other line of the index (CER-VERIFY-5,
+ *	VAULT-INDEX-4).
+ *
+ *	M, root and K_idx leave memory before the return, on every
+ *	path (CER-VERIFY-4, SEC-MEMORY-5).
+ */
+int	ceremony_verify(const char *);
 
 #endif /* CEREMONY_H */
