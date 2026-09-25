@@ -1011,17 +1011,15 @@ reveal(struct session *s, uint32_t slot, int keep)
 	int			 n, fail, rv = -1;
 
 	/*
-	 * A record of an incomplete change holds the old pin or the
-	 * new one, so the session refuses each reveal, and the
-	 * report names the resume command (ORC-ENROLL-10). An
-	 * unknown marker state refuses as well, because it proves
-	 * no complete change (change.h).
+	 * A record of an incomplete change holds a pin of that change,
+	 * so the session refuses each reveal, and the report names the
+	 * resume of a passphrase change or the re-run of a threshold
+	 * change (ORC-ENROLL-10, CER-PROVISION-15). An unknown marker
+	 * state refuses as well, because it proves no complete change
+	 * (change.h).
 	 */
-	if (change_pending(s->vault) != 0) {
-		warnx("this vault holds an incomplete passphrase change, "
-		    "and \"%s\" completes it", CHANGE_RESUME_CMD);
+	if (change_refuse(s->vault) != 0)
 		return -1;
-	}
 
 	memset(shares, 0, sizeof(shares));
 	memset(key, 0, sizeof(key));

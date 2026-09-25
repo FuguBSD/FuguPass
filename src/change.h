@@ -50,10 +50,29 @@
 #define CHANGE_H
 
 /*
- * The command that completes an incomplete change. A session names
- * it while the marker exists (ORC-ENROLL-10).
+ * The two kinds of the change marker (VAULT-FORMAT). A passphrase
+ * change writes the first one, and a threshold change of the
+ * provisioning ceremony writes the second (ORC-ENROLL-10,
+ * CER-PROVISION-15, CER-PROVISION-18).
+ */
+#define CHANGE_KIND_PASSPHRASE	"passphrase"
+#define CHANGE_KIND_THRESHOLD	"threshold"
+
+/*
+ * The command that completes an incomplete change. A refusal names
+ * the resume of a passphrase change, or the re-run of a threshold
+ * change (ORC-ENROLL-10, CER-PROVISION-18).
  */
 #define CHANGE_RESUME_CMD	"fugupass resume"
+#define CHANGE_RERUN_CMD	"fugupass provision"
+
+/*
+ * The classification of change_kind(). A negative value is a read
+ * failure or a marker with no kind that a command reads.
+ */
+#define CHANGE_NONE		0	/* no marker */
+#define CHANGE_PASSPHRASE	1	/* an incomplete passphrase change */
+#define CHANGE_THRESHOLD	2	/* an incomplete threshold change */
 
 /*
  * change_pending(vault):
@@ -65,6 +84,50 @@
  *	state proves a complete change.
  */
 int	change_pending(const char *);
+
+/*
+ * change_kind(vault):
+ *	The kind of the change marker of the vault directory vault:
+ *	CHANGE_NONE, CHANGE_PASSPHRASE, or CHANGE_THRESHOLD
+ *	(ORC-ENROLL-10, CER-PROVISION-15). A read failure and a
+ *	marker with an unknown kind each give -1.
+ *
+ *	The call reads the first line of the marker file, so it takes
+ *	no allocation for a long marker.
+ */
+int	change_kind(const char *);
+
+/*
+ * change_refuse(vault):
+ *	1 when the vault directory vault holds a change marker, with a
+ *	report to the standard error that names the kind and the
+ *	command that completes it (ORC-ENROLL-10, CER-PROVISION-18). 0
+ *	when it holds none. A read failure and an unknown kind each
+ *	give -1, with a report. A ceremony or a session that must not
+ *	run under a marker takes this call.
+ */
+int	change_refuse(const char *);
+
+/*
+ * change_marker_write(vault, kind):
+ *	Write the change marker of the vault directory vault, with the
+ *	kind line kind and no done line (VAULT-LAYOUT-4,
+ *	VAULT-ATOMIC-1). A threshold change of the provisioning
+ *	ceremony writes the marker with this call before the first
+ *	set_pin (CER-PROVISION-15). The call gives 0, and -1 on a
+ *	failure.
+ */
+int	change_marker_write(const char *, const char *);
+
+/*
+ * change_marker_remove(vault):
+ *	Remove the change marker of the vault directory vault
+ *	(ORC-ENROLL-12, CER-PROVISION-15, CER-PROVISION-17). A full
+ *	re-enrollment run and a threshold change each take this call
+ *	after the last wrap. An absent marker gives 0. The call gives
+ *	-1 on a failure.
+ */
+int	change_marker_remove(const char *);
 
 /*
  * change_passphrase(vault):

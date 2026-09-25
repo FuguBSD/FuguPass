@@ -70,6 +70,7 @@
 #include <dirent.h>
 #include <err.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <stddef.h>
@@ -89,7 +90,7 @@
 #include "vault.h"
 
 /* The kind of the marker of a passphrase change (VAULT-FORMAT). */
-#define MARKER_KIND	"passphrase"
+#define MARKER_KIND	CHANGE_KIND_PASSPHRASE
 
 /* The first line of the marker file (VAULT-FORMAT-1). */
 #define MARKER_HEAD	"kind: " MARKER_KIND "\n"
@@ -1491,6 +1492,112 @@ change_pending(const char *vault)
 }
 
 int
+change_kind(const char *vault)
+{
+	char	 path[PATH_MAX];
+	char	 buf[64];
+	char	*nl;
+	ssize_t	 n;
+	int	 fd;
+
+	if (vault == NULL)
+		return -1;
+	if (vault_path(path, sizeof(path), vault, VAULT_FILE_CHANGE,
+	    NULL) != 0) {
+		warnx("%s: the path of the change marker does not fit", vault);
+		return -1;
+	}
+	if ((fd = open(path, O_RDONLY | O_CLOEXEC)) == -1) {
+		if (errno == ENOENT)
+			return CHANGE_NONE;
+		warn("%s", path);
+		return -1;
+	}
+	n = read(fd, buf, sizeof(buf) - 1);
+	(void)close(fd);
+	if (n <= 0)
+		return -1;
+	buf[n] = '\0';
+
+	/* The kind line is the first line of the marker (VAULT-FORMAT-1). */
+	if ((nl = strchr(buf, '\n')) == NULL)
+		return -1;
+	*nl = '\0';
+	if (strcmp(buf, "kind: " CHANGE_KIND_PASSPHRASE) == 0)
+		return CHANGE_PASSPHRASE;
+	if (strcmp(buf, "kind: " CHANGE_KIND_THRESHOLD) == 0)
+		return CHANGE_THRESHOLD;
+	return -1;
+}
+
+int
+change_refuse(const char *vault)
+{
+	int	 kind = change_kind(vault);
+
+	if (kind == CHANGE_PASSPHRASE || kind == CHANGE_THRESHOLD) {
+		warnx("this vault holds an incomplete %s change, and \"%s\" "
+		    "completes it",
+		    kind == CHANGE_THRESHOLD ? CHANGE_KIND_THRESHOLD :
+		    CHANGE_KIND_PASSPHRASE,
+		    kind == CHANGE_THRESHOLD ? CHANGE_RERUN_CMD :
+		    CHANGE_RESUME_CMD);
+		return 1;
+	}
+	if (kind != CHANGE_NONE) {
+		warnx("%s: the change marker holds no kind that this command "
+		    "reads", vault);
+		return -1;
+	}
+	return 0;
+}
+
+int
+change_marker_write(const char *vault, const char *kind)
+{
+	char	 path[PATH_MAX];
+	char	 text[VAULT_LINE_MAX];
+	int	 n;
+
+	if (vault == NULL || kind == NULL)
+		return -1;
+	n = snprintf(text, sizeof(text), "kind: %s\n", kind);
+	if (n < 0 || (size_t)n >= sizeof(text)) {
+		warnx("the change marker: the kind line does not fit");
+		return -1;
+	}
+	if (vault_path(path, sizeof(path), vault, VAULT_FILE_CHANGE,
+	    NULL) != 0) {
+		warnx("%s: the path of the change marker does not fit", vault);
+		return -1;
+	}
+	if (vault_write(path, (const unsigned char *)text, (size_t)n) != 0) {
+		warn("%s", path);
+		return -1;
+	}
+	return 0;
+}
+
+int
+change_marker_remove(const char *vault)
+{
+	char	 path[PATH_MAX];
+
+	if (vault == NULL)
+		return -1;
+	if (vault_path(path, sizeof(path), vault, VAULT_FILE_CHANGE,
+	    NULL) != 0) {
+		warnx("%s: the path of the change marker does not fit", vault);
+		return -1;
+	}
+	if (unlink(path) == -1 && errno != ENOENT) {
+		warn("%s", path);
+		return -1;
+	}
+	return 0;
+}
+
+int
 change_passphrase(const char *vault)
 {
 	struct state	*st;
@@ -1498,12 +1605,8 @@ change_passphrase(const char *vault)
 
 	if (vault == NULL)
 		return -1;
-	if ((rv = change_pending(vault)) != 0) {
-		if (rv == 1)
-			warnx("this vault holds an incomplete change, and "
-			    "\"%s\" completes it", CHANGE_RESUME_CMD);
+	if (change_refuse(vault) != 0)
 		return -1;
-	}
 	if ((st = state_new(vault)) == NULL)
 		return -1;
 	rv = run(st, 0);
@@ -1522,8 +1625,14 @@ change_resume(const char *vault)
 
 	if (vault == NULL)
 		return -1;
-	if ((rv = change_pending(vault)) != 1) {
-		if (rv == 0)
+	rv = change_kind(vault);
+	if (rv == CHANGE_THRESHOLD) {
+		warnx("this vault holds an incomplete threshold change, and "
+		    "\"%s\" completes it", CHANGE_RERUN_CMD);
+		return -1;
+	}
+	if (rv != CHANGE_PASSPHRASE) {
+		if (rv == CHANGE_NONE)
 			warnx("this vault holds no incomplete change");
 		return -1;
 	}

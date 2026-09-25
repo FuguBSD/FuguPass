@@ -47,6 +47,17 @@
  * raises that index, so the kit names each slot of the vault, and
  * no constant bounds it (CER-REFILL-2).
  *
+ * revoke_run() is the revocation from the plate (ORC-REVOKE-3,
+ * ORC-REVOKE-4). It takes the plate and the index as the kit of a
+ * named machine takes them, so the record set of the revocation is
+ * the record set of the kit. revoke_oracle() sends one request of
+ * oracle_revoke() per record at one oracle: the lock, or the
+ * replacement (ORC-REVOKE-8). A landed lock retires the name, and
+ * ceremony_retire() marks it in the registry of the index
+ * (ORC-REVOKE-11, VAULT-INDEX-7). revoke_report() then directs the
+ * owner to the remaining records, to the quorum count, and to a
+ * passphrase change (ORC-REVOKE-10, ORC-REVOKE-12).
+ *
  * The device factor of a named machine belongs to that machine, so
  * this file writes it to no file (KEY-DEVICE-2). The master, root,
  * K_idx, the plaintext of the index, each client key and each
@@ -67,9 +78,11 @@
 
 #include <openssl/sha.h>
 
+#include "ceremony.h"
 #include "derive.h"
 #include "envelope.h"
 #include "helper.h"
+#include "oracle.h"
 #include "revoke.h"
 #include "seal.h"
 #include "session.h"
@@ -100,23 +113,37 @@
 #define INDEX_RAW_MAX	(SESSION_INDEX_MAX + SEAL_OVERHEAD + 1)
 
 /*
- * The state of one kit. machine is NULL for this machine, and the
- * name of a machine that is lost otherwise. slot holds the slot
- * index of each wrap file of this machine, in the order of the
- * print and with no repeat. slots is the next free slot index of
- * the vault, from the pool-next line of the index, and haveslots
- * marks the read of that line (VAULT-INDEX-2).
+ * The state of one kit, and of one revocation. machine is NULL for
+ * this machine, and the name of a machine that is lost otherwise.
+ * slot holds the slot index of each wrap file of this machine, in
+ * the order of the print and with no repeat. slots is the next free
+ * slot index of the vault, from the pool-next line of the index,
+ * and haveslots marks the read of that line (VAULT-INDEX-2). root
+ * is the root of the plate of a named machine, and the retired
+ * mark of a revocation takes the index key from it (VAULT-INDEX-4).
  */
 struct kit {
 	const char		*vault;
 	const char		*machine;
 	struct vault_config	*config;
 	unsigned char		 factor[DERIVE_KEYLEN];
+	unsigned char		 root[DERIVE_ROOTLEN];
 	uint32_t		*slot;
 	size_t			 slotlen;
 	size_t			 slotmax;
 	uint32_t		 slots;
 	int			 haveslots;
+};
+
+/*
+ * The result of one revocation at one oracle. landed counts the
+ * requests that an answer reached, failed counts the others, and
+ * last is the state of the last failure (ORC-REVOKE-8).
+ */
+struct revoke_at {
+	unsigned int	 landed;
+	unsigned int	 failed;
+	int		 last;
 };
 
 static void	 hex(const unsigned char *, size_t, char *);
@@ -128,10 +155,17 @@ static int	 kit_wraps(struct kit *);
 static int	 kit_index_line(const struct vault_line *, void *);
 static int	 kit_index(struct kit *, const unsigned char *);
 static int	 kit_plate(struct kit *);
+static struct kit *kit_open(const char *, const char *);
+static int	 kit_load(struct kit *);
+static void	 kit_close(struct kit *);
 static int	 kit_name(const unsigned char *, unsigned int, uint32_t, int,
 		    char *, size_t);
 static int	 kit_line(const struct kit *, unsigned int, uint32_t, int);
 static int	 kit_print(const struct kit *);
+static void	 revoke_oracle(const struct kit *, unsigned int, int,
+		    struct revoke_at *);
+static void	 revoke_report(const struct kit *, int, const unsigned char *,
+		    const struct revoke_at *);
 
 /*
  * hex(in, inlen, out):
@@ -463,14 +497,15 @@ out:
  *	root then gives the factor of the name (KEY-DEVICE-1), and
  *	the slot bound of the kit comes from the index (kit_index).
  *
- *	The master and root leave memory here, and the factor leaves
- *	memory in revoke_kit() (SEC-MEMORY-5).
+ *	The master leaves memory here. root stays in the state for
+ *	the retired mark of a revocation, and it leaves memory with
+ *	the factor in kit_close() (SEC-MEMORY-5).
  */
 static int
 kit_plate(struct kit *k)
 {
 	char		 master[DERIVE_MASTER_MAX + 1];
-	unsigned char	 root[DERIVE_ROOTLEN];
+	unsigned char	*root = k->root;
 	char		 err[DERIVE_ERRLEN];
 	char		*feed;
 	size_t		 len = 0;
@@ -493,11 +528,11 @@ kit_plate(struct kit *k)
 		warnx("the master: %s", err);
 		goto out;
 	}
-	if (derive_root(master, len, root, sizeof(root)) != 0) {
+	if (derive_root(master, len, root, DERIVE_ROOTLEN) != 0) {
 		warnx("the master: the seed of it fails");
 		goto out;
 	}
-	if (derive_device_factor(root, sizeof(root), k->machine,
+	if (derive_device_factor(root, DERIVE_ROOTLEN, k->machine,
 	    strlen(k->machine), k->factor, sizeof(k->factor)) != 0) {
 		warnx("the device factor: the machine name is wrong");
 		goto out;
@@ -507,8 +542,69 @@ kit_plate(struct kit *k)
 	rv = 0;
 out:
 	explicit_bzero(master, sizeof(master));
-	explicit_bzero(root, sizeof(root));
 	return rv;
+}
+
+/*
+ * kit_open(vault, machine):
+ *	The state of one kit or one revocation, with the config of
+ *	the vault. The call gives NULL after a report. kit_load()
+ *	then takes the factor and the slot set of the machine, so a
+ *	gate of the command line can run between the two and cost no
+ *	plate scan.
+ */
+static struct kit *
+kit_open(const char *vault, const char *machine)
+{
+	struct kit	*k;
+
+	if ((k = calloc(1, sizeof(*k))) == NULL) {
+		warn("the kit");
+		return NULL;
+	}
+	if ((k->config = calloc(1, sizeof(*k->config))) == NULL) {
+		warn("the kit");
+		free(k);
+		return NULL;
+	}
+	k->vault = vault;
+	k->machine = machine;
+	if (kit_config(k) != 0) {
+		kit_close(k);
+		return NULL;
+	}
+	return k;
+}
+
+/*
+ * kit_load(k):
+ *	The factor and the slot set of the machine of k. A NULL
+ *	machine takes this machine from the factor file and the wrap
+ *	files, and a name takes the plate and the index (revoke.h).
+ */
+static int
+kit_load(struct kit *k)
+{
+	if (k->machine == NULL)
+		return kit_factor(k) != 0 || kit_wraps(k) != 0 ? -1 : 0;
+	return kit_plate(k);
+}
+
+/*
+ * kit_close(k):
+ *	The state, released. The factor of a named machine belongs to
+ *	that machine, and the factor of this machine persists on disk.
+ *	Neither one stays in memory, and root of the plate leaves with
+ *	them (KEY-DEVICE-2, SEC-MEMORY-5).
+ */
+static void
+kit_close(struct kit *k)
+{
+	explicit_bzero(k->factor, sizeof(k->factor));
+	explicit_bzero(k->root, sizeof(k->root));
+	free(k->slot);
+	free(k->config);
+	free(k);
 }
 
 /*
@@ -653,41 +749,212 @@ int
 revoke_kit(const char *vault, const char *machine)
 {
 	struct kit	*k;
-	int		 rv = -1;
+	int		 rv;
 
 	if (vault == NULL) {
 		warnx("the kit takes an incomplete argument set");
 		return -1;
 	}
-	if ((k = calloc(1, sizeof(*k))) == NULL) {
-		warn("the kit");
+	if ((k = kit_open(vault, machine)) == NULL)
 		return -1;
-	}
-	if ((k->config = calloc(1, sizeof(*k->config))) == NULL) {
-		warn("the kit");
-		free(k);
-		return -1;
-	}
-	k->vault = vault;
-	k->machine = machine;
+	rv = kit_load(k) == 0 ? kit_print(k) : -1;
+	kit_close(k);
+	return rv;
+}
 
-	if (kit_config(k) != 0)
-		goto out;
-	if (machine == NULL) {
-		if (kit_factor(k) != 0 || kit_wraps(k) != 0)
-			goto out;
-	} else if (kit_plate(k) != 0)
-		goto out;
-	rv = kit_print(k);
-out:
+/*
+ * revoke_oracle(k, oracle, replace, at):
+ *	One revocation request per record of the machine of k at the
+ *	oracle index oracle, and the counts to at (ORC-REVOKE-3,
+ *	ORC-REVOKE-8). The records are one record of each slot below
+ *	the next free slot index, and the canary record last
+ *	(ORC-RECORDS-1, ORC-RECORDS-2). replace chooses the
+ *	replacement over the lock.
+ *
+ *	The loop continues after a failed request, so one unreachable
+ *	moment stops no other record. The context holds no
+ *	passphrase, because a revocation takes none (ORC-REVOKE-4).
+ */
+static void
+revoke_oracle(const struct kit *k, unsigned int oracle, int replace,
+    struct revoke_at *at)
+{
+	struct oracle_ctx	 ctx;
+	uint32_t		 slot;
+	int			 rv;
+
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.vault = k->vault;
+	ctx.config = k->config;
+	ctx.factor = k->factor;
+	ctx.factorlen = sizeof(k->factor);
+	ctx.oracle = oracle;
+
+	memset(at, 0, sizeof(*at));
+	for (slot = 0; slot <= k->slots; slot++) {
+		if (slot < k->slots)
+			rv = oracle_revoke(&ctx, slot, 0, replace);
+		else
+			rv = oracle_revoke(&ctx, 0, 1, replace);
+		if (rv == 0)
+			at->landed++;
+		else {
+			at->failed++;
+			at->last = rv;
+		}
+	}
+}
+
+/*
+ * revoke_report(k, replace, chosen, at):
+ *	The report of one revocation, on the standard error
+ *	(ORC-REVOKE-10, ORC-REVOKE-12). chosen marks each chosen
+ *	position, and at holds the counts of each position.
+ *
+ *	The report names each position that got no complete lock or
+ *	replacement: a position that the owner did not choose, a
+ *	position of a failed request, and a retired position. The
+ *	records of the machine remain there, and the owner locks or
+ *	deletes them; the kit names each record file (ORC-REVOKE-6).
+ *	The count of locks that denies a quorum is n - k + 1 over the
+ *	live positions (ORC-REVOKE-10). The passphrase of the revoked
+ *	machine may be known, so the report names the passphrase
+ *	change on every other machine (ORC-ENROLL-4).
+ */
+static void
+revoke_report(const struct kit *k, int replace, const unsigned char *chosen,
+    const struct revoke_at *at)
+{
+	const char	*what = replace ? "replacement" : "lock";
+	unsigned int	 i, live = 0, remain = 0;
+
+	for (i = 1; i <= k->config->count; i++) {
+		if (k->config->oracle[i - 1].retired) {
+			warnx("the records of the machine %s remain at the "
+			    "retired position %u", k->machine, i);
+			remain++;
+			continue;
+		}
+		live++;
+		if (chosen[i] && at[i].failed == 0)
+			continue;
+		warnx("the records of the machine %s remain at oracle %u "
+		    "(%s)", k->machine, i, k->config->oracle[i - 1].url);
+		remain++;
+	}
+	if (remain > 0)
+		warnx("lock or delete them there: \"fugupass kit -m %s\" "
+		    "names each record file", k->machine);
+	if (!replace)
+		warnx("a quorum takes %u of the %u live oracles, so the %s "
+		    "at %u of them denies it", k->config->threshold, live,
+		    what, live - k->config->threshold + 1);
+	warnx("change the passphrase on every other machine when the "
+	    "passphrase may be known: \"fugupass passwd\"");
+}
+
+int
+revoke_run(const char *vault, const char *machine, int replace,
+    const unsigned int *position, size_t count)
+{
+	struct kit		*k;
+	struct revoke_at	*at = NULL;
+	unsigned char		*chosen = NULL;
+	const char		*what = replace ? "replacement" : "lock";
+	size_t			 n;
+	unsigned int		 i, landed = 0;
+	int			 rv = -1;
+
+	if (vault == NULL || machine == NULL || (count > 0 &&
+	    position == NULL)) {
+		warnx("the revocation takes an incomplete argument set");
+		return -1;
+	}
+	if ((k = kit_open(vault, machine)) == NULL)
+		return -1;
+
 	/*
-	 * The factor of a named machine belongs to that machine, and
-	 * the factor of this machine persists on disk. Neither one
-	 * stays in memory (KEY-DEVICE-2, SEC-MEMORY-5).
+	 * The chosen set, by position (ORC-REVOKE-3). A count of 0
+	 * chooses every live position. A named position above the
+	 * set, and a named retired position, each stop the call
+	 * before the first request (ORC-PROVISION-9).
 	 */
-	explicit_bzero(k->factor, sizeof(k->factor));
-	free(k->slot);
-	free(k->config);
-	free(k);
+	chosen = calloc((size_t)k->config->count + 1, sizeof(*chosen));
+	at = calloc((size_t)k->config->count + 1, sizeof(*at));
+	if (chosen == NULL || at == NULL) {
+		warn("the revocation");
+		goto out;
+	}
+	for (n = 0; n < count; n++) {
+		if (position[n] == 0 || position[n] > k->config->count) {
+			warnx("position %u is above the oracle set of %u "
+			    "positions", position[n], k->config->count);
+			goto out;
+		}
+		if (k->config->oracle[position[n] - 1].retired) {
+			warnx("position %u is retired, and it takes no "
+			    "request", position[n]);
+			goto out;
+		}
+		chosen[position[n]] = 1;
+	}
+	if (count == 0) {
+		for (i = 1; i <= k->config->count; i++)
+			chosen[i] = !k->config->oracle[i - 1].retired;
+	}
+
+	/* The gates above cost no plate scan: the scan comes here. */
+	if (kit_load(k) != 0)
+		goto out;
+
+	rv = 0;
+	for (i = 1; i <= k->config->count; i++) {
+		if (!chosen[i])
+			continue;
+		revoke_oracle(k, i, replace, &at[i]);
+		landed += at[i].landed;
+		if (at[i].failed == 0) {
+			warnx("the %s landed on %u records of the machine %s "
+			    "at oracle %u (%s)", what, at[i].landed, machine,
+			    i, k->config->oracle[i - 1].url);
+			continue;
+		}
+		warnx("the %s reached %u of %u records of the machine %s at "
+		    "oracle %u (%s)", what, at[i].landed,
+		    at[i].landed + at[i].failed, machine, i,
+		    k->config->oracle[i - 1].url);
+		warnx("the last failure at oracle %u: %s", i,
+		    oracle_state_text(at[i].last));
+		rv = -1;
+	}
+	for (i = 1; i <= k->config->count; i++) {
+		if (count == 0 && k->config->oracle[i - 1].retired)
+			warnx("position %u is retired, and no request goes "
+			    "there", i);
+	}
+
+	/*
+	 * A landed lock retires the name at that oracle: no later
+	 * set_pin under the name passes there, so the name never
+	 * provisions again, and the registry takes the mark
+	 * (ORC-REVOKE-11, VAULT-INDEX-7).
+	 */
+	if (!replace && landed > 0) {
+		if (ceremony_retire(k->vault, k->root, sizeof(k->root),
+		    machine) != 0) {
+			warnx("the registry of the index did not take the "
+			    "retired mark of the machine %s: run the lock "
+			    "again", machine);
+			rv = -1;
+		} else
+			warnx("the machine %s is retired, and the registry "
+			    "of the index marks it: a replacement machine "
+			    "provisions under a new name", machine);
+	}
+	revoke_report(k, replace, chosen, at);
+out:
+	free(chosen);
+	free(at);
+	kit_close(k);
 	return rv;
 }

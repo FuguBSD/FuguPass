@@ -64,7 +64,9 @@
  * (ORC-COUNTER-1, ORC-COUNTER-2). The counters file is
  * machine-local, and it holds no secret (ORC-COUNTER-3). A caller
  * therefore needs the machine-local directory of the vault for each
- * call of this file.
+ * call of this file. A revocation request is the one exception:
+ * oracle_revoke() sends the counter value 0xFFFFFFFF, and it reads
+ * no counters file and writes none (ORC-COUNTER-5, ORC-REVOKE-8).
  *
  * The passphrase enters a request as the pin secret alone
  * (ORC-CONFORM-3, KEY-PIN-3). The client key of a record takes the
@@ -306,5 +308,42 @@ int	oracle_canary_index(const struct oracle_ctx *, const char *, size_t,
  */
 int	oracle_canary_check(const struct oracle_ctx *, const unsigned char *,
 	    size_t, unsigned char *, size_t, int *);
+
+/*
+ * oracle_revoke(ctx, slot, canary, replace):
+ *	One revocation request of the record of the slot index slot
+ *	at the oracle of ctx, or of the canary record of that oracle
+ *	when canary is 1 (ORC-REVOKE-3, ORC-REVOKE-8). The call sends
+ *	the counter value 0xFFFFFFFF, and this is the one request of
+ *	this file that sends it (ORC-COUNTER-5). That value passes
+ *	anti-replay against every lower stored counter, so a raised
+ *	counter cannot block the call.
+ *
+ *	A replace of 0 is the lock: one get_pin under a random pin
+ *	secret of arc4random(3). The attempt is wrong, it burns one
+ *	strike, and the stored counter of the record takes the
+ *	highest value. No later request of that record passes
+ *	anti-replay, so the record answers junk to every caller, and
+ *	no later set_pin passes (FuguOracle OPS-GET-2, FuguOracle
+ *	OPS-SET-2). The record keeps its file at the oracle.
+ *
+ *	A replace of 1 is the replacement: one set_pin under a random
+ *	pin secret, with the fresh entropy of every enrollment
+ *	(ORC-CONFORM-5). The oracle replaces the key material of the
+ *	record and resets its stored counter (FuguOracle OPS-SET-4).
+ *	Every wrap of the old mask is then dead.
+ *
+ *	pass of ctx can be NULL: the owner types no passphrase of the
+ *	revoked machine, and the factor of ctx is the device factor
+ *	of that machine, from the plate (KEY-DEVICE-4). The call
+ *	writes no file: no wrap, no seal, and no counters file, so
+ *	the counters of this machine never hold a record of another
+ *	machine. The mask of the answer leaves memory in the call.
+ *
+ *	The call gives 0 for an answer of the oracle, and it cannot
+ *	tell junk from a mask. It gives the states of oracle.h for a
+ *	request that no answer reached, and -1 for a local failure.
+ */
+int	oracle_revoke(const struct oracle_ctx *, uint32_t, int, int);
 
 #endif /* ORACLE_H */

@@ -35,24 +35,25 @@
  * over two tables (PROG-ONESHOT-4). The table below holds the
  * subcommands of this file: the vault creation, the canary
  * re-enrollment, the passphrase change, the resume of an incomplete
- * change, the pool refill, and the revocation kit. commands_table of
- * commands.h holds the six commands of the session, and
- * commands_oneshot() runs one of them (PROG-ONESHOT-1,
- * PROG-ONESHOT-2). A name that neither
- * table holds gives the usage and the status 2. A run with no
- * subcommand starts the interactive session of iface.h, and that
- * session runs each command of the interface process
- * (PROG-IFACE-1).
+ * change, the pool refill, the machine provisioning, the revocation
+ * kit, and the revocation. commands_table of commands.h holds the six
+ * commands of the session, and commands_oneshot() runs one of them
+ * (PROG-ONESHOT-1, PROG-ONESHOT-2). A name that neither table holds
+ * gives the usage and the status 2. A run with no subcommand starts
+ * the interactive session of iface.h, and that session runs each
+ * command of the interface process (PROG-IFACE-1).
  *
  * A subcommand reads the options and the arguments of its own
  * command line, and ceremony.c holds the steps of a ceremony
- * (PROG-ONESHOT-5, PROG-ONESHOT-6, CER-CREATE). A wrong command
- * line of a subcommand gives the reason, the usage and the status
- * 2.
+ * (PROG-ONESHOT-5, PROG-ONESHOT-6, CER-CREATE, CER-PROVISION). The
+ * creation and the provisioning take one command line form, and
+ * ceremony_line() reads it for both. A wrong command line of a
+ * subcommand gives the reason, the usage and the status 2.
  *
  * The passphrase enters here, through readpassphrase(3) of the
  * terminal (SEC-MEMORY-4, PROG-IFACE-3). No argument and no
- * environment variable carries it.
+ * environment variable carries it. A confirmation of a ceremony
+ * enters the same way (CER-PROVISION-3).
  */
 
 #include <sys/param.h>
@@ -87,12 +88,16 @@ struct subcommand {
 	int		 (*run)(int, char *[], const char *);
 };
 
+static int	 ceremony_line(int, char *[], const char *, int,
+		    struct ceremony_create *);
 static int	 cmd_create(int, char *[], const char *);
 static int	 cmd_canary(int, char *[], const char *);
 static int	 cmd_passwd(int, char *[], const char *);
 static int	 cmd_resume(int, char *[], const char *);
 static int	 cmd_refill(int, char *[], const char *);
+static int	 cmd_provision(int, char *[], const char *);
 static int	 cmd_kit(int, char *[], const char *);
+static int	 cmd_revoke(int, char *[], const char *);
 static void	 usage(void);
 static int	 vault_dir(const char *, char *, size_t);
 
@@ -108,7 +113,10 @@ static const struct subcommand commands[] = {
 	{ "passwd",	"", cmd_passwd },
 	{ "resume",	"", cmd_resume },
 	{ "refill",	"", cmd_refill },
-	{ "kit",	"[-m machine]", cmd_kit }
+	{ "provision",	"[-a] [-x position] -k threshold -m machine -r rounds "
+	    "oracle ...", cmd_provision },
+	{ "kit",	"[-m machine]", cmd_kit },
+	{ "revoke",	"[-r] -m machine [position ...]", cmd_revoke }
 };
 
 /*
@@ -172,11 +180,14 @@ vault_dir(const char *opt, char *buf, size_t bufsize)
 }
 
 /*
- * cmd_create(argc, argv, vault):
- *	The vault creation ceremony of the vault directory vault
- *	(CER-CREATE). This function reads the command line of the
- *	subcommand, and ceremony.c runs the eight steps
- *	(PROG-ONESHOT-5, PROG-ONESHOT-6).
+ * ceremony_line(argc, argv, vault, pool, arg):
+ *	The command line of a ceremony that takes the oracle set, to
+ *	arg (PROG-ONESHOT-5, PROG-ONESHOT-6). The creation and the
+ *	provisioning take this one form, and pool takes 1 for the
+ *	creation: that subcommand alone takes the -p option. The
+ *	provisioning alone takes the -a option of the full run
+ *	(CER-PROVISION-17), and the -x option of a lost position
+ *	(CER-PROVISION-16).
  *
  *	The threshold comes from -k, the machine name from -m, and
  *	the round count of bcrypt_pbkdf(3) from -r. Each argument
@@ -186,32 +197,45 @@ vault_dir(const char *opt, char *buf, size_t bufsize)
  *	ORC-PROVISION-5).
  *
  *	The slots of the pool come from -p, and a run without that
- *	option takes CEREMONY_POOL_SIZE slots (ENTRY-POOL-2).
+ *	option takes CEREMONY_POOL_SIZE slots (ENTRY-POOL-2). The -a
+ *	flag of a provisioning re-enrolls every record of this machine
+ *	(CER-PROVISION-17, ORC-ENROLL-12). Each -x option names one
+ *	live position where this machine's records are lost, and the
+ *	ceremony enrolls the records of it again (CER-PROVISION-16,
+ *	REC-WIPE-2). The full run covers every position, so -a takes
+ *	no -x.
  *
  *	The config reader holds the full bounds of the threshold and
  *	of the oracle set (VAULT-CONFIG-6). This function holds the
- *	form of each number, and the two gates below.
+ *	form of each number, and the two gates below. A wrong
+ *	command line gives the usage, and the call returns for a
+ *	right one alone.
  *
  *	getopt(3) already ran over the options of the program, so
  *	this second pass resets it.
  */
 static int
-cmd_create(int argc, char *argv[], const char *vault)
+ceremony_line(int argc, char *argv[], const char *vault, int pool,
+    struct ceremony_create *arg)
 {
-	struct ceremony_create	 arg;
-	const char		*errstr;
-	int			 ch;
+	const char	*errstr;
+	unsigned int	 i, lost = 0;
+	int		 ch;
 
-	memset(&arg, 0, sizeof(arg));
-	arg.vault = vault;
-	arg.pool = CEREMONY_POOL_SIZE;
+	memset(arg, 0, sizeof(*arg));
+	arg->vault = vault;
+	arg->pool = CEREMONY_POOL_SIZE;
 
 	optreset = 1;
 	optind = 1;
-	while ((ch = getopt(argc, argv, "k:m:p:r:")) != -1) {
+	while ((ch = getopt(argc, argv, pool ? "k:m:p:r:" : "ak:m:r:x:")) !=
+	    -1) {
 		switch (ch) {
+		case 'a':
+			arg->full = 1;
+			break;
 		case 'k':
-			arg.threshold = (unsigned int)strtonum(optarg, 1,
+			arg->threshold = (unsigned int)strtonum(optarg, 1,
 			    DERIVE_ORACLE_MAX, &errstr);
 			if (errstr != NULL) {
 				warnx("the threshold is %s", errstr);
@@ -219,10 +243,10 @@ cmd_create(int argc, char *argv[], const char *vault)
 			}
 			break;
 		case 'm':
-			arg.machine = optarg;
+			arg->machine = optarg;
 			break;
 		case 'p':
-			arg.pool = (unsigned int)strtonum(optarg, 1,
+			arg->pool = (unsigned int)strtonum(optarg, 1,
 			    CEREMONY_POOL_MAX, &errstr);
 			if (errstr != NULL) {
 				warnx("the pool size is %s", errstr);
@@ -230,12 +254,22 @@ cmd_create(int argc, char *argv[], const char *vault)
 			}
 			break;
 		case 'r':
-			arg.rounds = (unsigned int)strtonum(optarg, 1,
+			arg->rounds = (unsigned int)strtonum(optarg, 1,
 			    INT_MAX, &errstr);
 			if (errstr != NULL) {
 				warnx("the round count is %s", errstr);
 				usage();
 			}
+			break;
+		case 'x':
+			i = (unsigned int)strtonum(optarg, 1,
+			    DERIVE_ORACLE_MAX, &errstr);
+			if (errstr != NULL) {
+				warnx("the lost position is %s", errstr);
+				usage();
+			}
+			arg->lost[i] = 1;
+			lost = i > lost ? i : lost;
 			break;
 		default:
 			usage();
@@ -243,10 +277,15 @@ cmd_create(int argc, char *argv[], const char *vault)
 	}
 	argc -= optind;
 	argv += optind;
-	if (argc < 1 || arg.threshold == 0 || arg.machine == NULL ||
-	    arg.rounds == 0) {
+	if (argc < 1 || arg->threshold == 0 || arg->machine == NULL ||
+	    arg->rounds == 0) {
 		warnx("the -k, -m and -r options and the oracle set are "
 		    "mandatory");
+		usage();
+	}
+	if (lost > 0 && arg->full) {
+		warnx("the -a full run covers every position, and it takes "
+		    "no -x option");
 		usage();
 	}
 
@@ -256,19 +295,40 @@ cmd_create(int argc, char *argv[], const char *vault)
 	 * full rule of each one, because a retired position counts
 	 * against the threshold there (VAULT-CONFIG-6).
 	 */
-	if (derive_machine_check(arg.machine, strlen(arg.machine)) != 0) {
+	if (derive_machine_check(arg->machine, strlen(arg->machine)) != 0) {
 		warnx("the machine name takes lowercase letters, digits "
 		    "and hyphens, 1 to %d bytes", DERIVE_MACHINE_MAX);
 		usage();
 	}
-	if (arg.threshold > (unsigned int)argc) {
+	if (arg->threshold > (unsigned int)argc) {
 		warnx("the threshold is above the count of the oracle set");
 		usage();
 	}
+	if (lost > (unsigned int)argc) {
+		warnx("the lost position %u is above the count of the oracle "
+		    "set", lost);
+		usage();
+	}
 
-	arg.oracle = (const char *const *)argv;
-	arg.count = (unsigned int)argc;
+	arg->oracle = (const char *const *)argv;
+	arg->count = (unsigned int)argc;
+	return 0;
+}
 
+/*
+ * cmd_create(argc, argv, vault):
+ *	The vault creation ceremony of the vault directory vault
+ *	(CER-CREATE). ceremony_line() reads the command line of the
+ *	subcommand, with the -p option, and ceremony.c runs the eight
+ *	steps (PROG-ONESHOT-5, PROG-ONESHOT-6).
+ */
+static int
+cmd_create(int argc, char *argv[], const char *vault)
+{
+	struct ceremony_create	 arg;
+
+	if (ceremony_line(argc, argv, vault, 1, &arg) != 0)
+		return 1;
 	return ceremony_create(&arg) == 0 ? 0 : 1;
 }
 
@@ -370,6 +430,40 @@ cmd_refill(int argc, char *argv[], const char *vault)
 }
 
 /*
+ * cmd_provision(argc, argv, vault):
+ *	The machine provisioning ceremony of the vault directory
+ *	vault (CER-PROVISION, PROG-ONESHOT-4). ceremony_line() reads
+ *	the command line, without the -p option: the ceremony makes
+ *	no pool, and the config file of this machine takes the
+ *	default pool size (ENTRY-POOL-2).
+ *
+ *	The config file is machine-local, so the ordered oracle set
+ *	and the threshold come from the command line, as create
+ *	takes them (VAULT-LAYOUT-4, VAULT-CONFIG). Every machine of a
+ *	vault must record the same list and the same threshold
+ *	(ORC-PROVISION-8), and the manual page says so. A command line
+ *	that changes the list or the threshold is a ceremony variant
+ *	(CER-PROVISION-13 to CER-PROVISION-16).
+ *
+ *	The -a flag re-enrolls every record of this machine under one
+ *	passphrase, and it removes a stopped passphrase change's marker
+ *	(CER-PROVISION-17, ORC-ENROLL-12).
+ *
+ *	The ceremony takes the master from a plate scan (CER-PROVISION-1).
+ *	While the change marker exists, it refuses to start, unless it
+ *	is the threshold re-run or the -a full run (CER-PROVISION-18).
+ */
+static int
+cmd_provision(int argc, char *argv[], const char *vault)
+{
+	struct ceremony_create	 arg;
+
+	if (ceremony_line(argc, argv, vault, 0, &arg) != 0)
+		return 1;
+	return ceremony_provision(&arg) == 0 ? 0 : 1;
+}
+
+/*
  * cmd_kit(argc, argv, vault):
  *	The revocation kit of one machine of the vault directory
  *	vault, on the standard output (ORC-REVOKE-6, PROG-ONESHOT-7).
@@ -412,6 +506,77 @@ cmd_kit(int argc, char *argv[], const char *vault)
 		usage();
 	}
 	return revoke_kit(vault, machine) == 0 ? 0 : 1;
+}
+
+/*
+ * cmd_revoke(argc, argv, vault):
+ *	The revocation of the records of one machine of the vault
+ *	directory vault, from the plate (ORC-REVOKE-3, ORC-REVOKE-4,
+ *	PROG-ONESHOT-4). The -m option names the machine, and it is
+ *	mandatory: the client keys of the machine derive from a plate
+ *	scan, and the retired mark of a lock takes the index key of
+ *	that plate (KEY-DEVICE-4, VAULT-INDEX-4). The subcommand opens
+ *	no session and reads no passphrase.
+ *
+ *	The two revocation paths are one subcommand. A run without
+ *	the -r option sends the lock, and the -r option sends the
+ *	set_pin replacement (ORC-REVOKE-8). Each argument names one
+ *	position of the oracle set, and a run without an argument
+ *	takes every live position (ORC-REVOKE-3, ORC-REVOKE-10).
+ *	revoke.c holds the loop and the report.
+ *
+ *	getopt(3) already ran over the options of the program, so
+ *	this second pass resets it.
+ */
+static int
+cmd_revoke(int argc, char *argv[], const char *vault)
+{
+	unsigned int	 position[DERIVE_ORACLE_MAX];
+	const char	*errstr, *machine = NULL;
+	size_t		 count = 0;
+	int		 ch, replace = 0;
+
+	optreset = 1;
+	optind = 1;
+	while ((ch = getopt(argc, argv, "m:r")) != -1) {
+		switch (ch) {
+		case 'm':
+			machine = optarg;
+			break;
+		case 'r':
+			replace = 1;
+			break;
+		default:
+			usage();
+		}
+	}
+	argc -= optind;
+	argv += optind;
+	if (machine == NULL) {
+		warnx("the -m option is mandatory");
+		usage();
+	}
+	if (derive_machine_check(machine, strlen(machine)) != 0) {
+		warnx("the machine name takes lowercase letters, digits "
+		    "and hyphens, 1 to %d bytes", DERIVE_MACHINE_MAX);
+		usage();
+	}
+	if (argc > (int)nitems(position)) {
+		warnx("the oracle set takes %d positions at the most",
+		    DERIVE_ORACLE_MAX);
+		usage();
+	}
+	for (; argc > 0; argc--, argv++) {
+		position[count++] = (unsigned int)strtonum(argv[0], 1,
+		    DERIVE_ORACLE_MAX, &errstr);
+		if (errstr != NULL) {
+			warnx("the oracle position is %s: %s", errstr,
+			    argv[0]);
+			usage();
+		}
+	}
+	return revoke_run(vault, machine, replace, position, count) == 0 ?
+	    0 : 1;
 }
 
 int
@@ -467,6 +632,26 @@ fugupass_passphrase_new(char *buf, size_t bufsize)
 		rv = FUGUPASS_EMISMATCH;
 	}
 	explicit_bzero(again, sizeof(again));
+	return rv;
+}
+
+int
+fugupass_confirm(const char *prompt)
+{
+	char	 buf[8];
+	int	 rv;
+
+	/*
+	 * The read takes /dev/tty, as a passphrase read does, and it
+	 * shows the typed bytes: the answer is no secret. A buffer of
+	 * this room takes the word yes, and a longer answer is not
+	 * that word.
+	 */
+	if (readpassphrase(prompt, buf, sizeof(buf),
+	    RPP_REQUIRE_TTY | RPP_ECHO_ON) == NULL)
+		return -1;
+	rv = strcmp(buf, "yes") == 0 ? 0 : -1;
+	explicit_bzero(buf, sizeof(buf));
 	return rv;
 }
 

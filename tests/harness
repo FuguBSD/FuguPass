@@ -207,11 +207,17 @@ our %VECTOR = vectors("$RealBin/vectors/derive.h");
 # The answer 'none' is the empty line. The core process takes an
 # empty read of readpassphrase(3) as a failed read, so a step names
 # this answer to stop a terminal read.
+#
+# The answers 'yes' and 'no' are the two answers of a confirmation.
+# The core process takes the word yes alone, so 'no' stops a
+# ceremony at the confirmation (CER-PROVISION-3).
 our %ANSWER = (
 	right    => 'correct horse battery staple',
 	wrong    => 'wrong horse battery staple',
 	other    => 'other horse battery staple',
 	none     => '',
+	yes      => 'yes',
+	no       => 'no',
 	secret   => 'the stored secret of one entry',
 	secret2  => 'the second stored secret of one entry',
 	totp_key => '3132333435363738393031323334353637383930' );
@@ -296,7 +302,8 @@ my @COUNTERPARTY = (
 		start   => \&upstream_start,
 		stop    => \&upstream_stop,
 		release => \&upstream_release,
-		records => \&upstream_records
+		records => \&upstream_records,
+		wipe    => \&upstream_wipe
 	} );
 
 # The counterparties that run now. The end block stops each one, so
@@ -712,6 +719,18 @@ sub upstream_records ( $, $in )
 	return map { basename($_) } glob "$in->{store}/pins/*.pin";
 }
 
+# upstream_wipe($cp, $in, $name):
+#	Remove the record file $name of the store of this instance
+#	(REC-WIPE-6). The store holds one file of each record in the
+#	pins directory, and $name is one file name of
+#	upstream_records().
+sub upstream_wipe ( $, $in, $name )
+{
+	my $path = "$in->{store}/pins/$name";
+	unlink $path or die "the harness removed no record $path: $!\n";
+	return;
+}
+
 sub upstream_stop ( $, $in )
 {
 	return if !defined $in->{pid};
@@ -810,6 +829,18 @@ sub records ( $self, $oracle = 1 )
 {
 	my $in = $self->_instance($oracle);
 	return $self->{recipe}{records}->( $self, $in );
+}
+
+# $cp->wipe($oracle, $name):
+#	Remove the record file $name from the store of one instance
+#	(REC-WIPE-6). $name is one name of records($oracle). The leg
+#	proves that a wiped record blocks no reveal while two records
+#	remain.
+sub wipe ( $self, $oracle, $name )
+{
+	my $in = $self->_instance($oracle);
+	$self->{recipe}{wipe}->( $self, $in, $name );
+	return;
 }
 
 # $cp->url($oracle), $cp->pubkey($oracle):
@@ -987,10 +1018,11 @@ sub ceremony_vault ( $self, $tag, %opt )
 #
 #	%opt takes 'pass', an array reference of passphrase names.
 #	The default is the correct passphrase. A canary enrollment
-#	reads the passphrase twice (ORC-CANARY-6). enroll() also
-#	takes 'slot' and 'oracle', and each one replaces the slot of
-#	the vault and the first position. A second enrollment of one
-#	record enrolls it under the pin of that call (ORC-ENROLL-9).
+#	reads the passphrase twice (ORC-CANARY-6). Each call also
+#	takes 'oracle', and enroll() and reveal() take 'slot': each
+#	one replaces the first position and the slot of the vault. A
+#	second enrollment of one record enrolls it under the pin of
+#	that call (ORC-ENROLL-9).
 sub enroll ( $self, $vault, %opt )
 {
 	return $self->_drive(
@@ -1005,14 +1037,35 @@ sub enroll ( $self, $vault, %opt )
 sub reveal ( $self, $vault, %opt )
 {
 	return $self->_drive(
-		[ 'reveal', $vault->{dir}, $main::ORACLE, $vault->{slot} ],
+		[
+			'reveal', $vault->{dir},
+			$opt{oracle} // $main::ORACLE,
+			$opt{slot}   // $vault->{slot}
+		],
 		$opt{pass} // ['right'] );
 }
 
 sub canary ( $self, $vault, %opt )
 {
-	return $self->_drive( [ 'canary', $vault->{dir}, $main::ORACLE ],
+	return $self->_drive(
+		[ 'canary', $vault->{dir}, $opt{oracle} // $main::ORACLE ],
 		$opt{pass} // [ 'right', 'right' ] );
+}
+
+# $cp->lock($vault, %opt):
+#	One lock of the driver: the one wrong attempt of a revocation
+#	at the revocation counter (ORC-REVOKE-8, TEST-HARNESS-3). The
+#	driver reads no passphrase for it. %opt takes 'slot' and
+#	'oracle', as enroll() takes them.
+sub lock ( $self, $vault, %opt )
+{
+	return $self->_drive(
+		[
+			'lock', $vault->{dir},
+			$opt{oracle} // $main::ORACLE,
+			$opt{slot}   // $vault->{slot}
+		],
+		[] );
 }
 
 sub _drive ( $self, $argv, $names )
@@ -1117,6 +1170,25 @@ sub copy_dir ( $, $from, $to )
 	main::guest_ok( "the copy of $from",
 		'rm -rf ' . main::_shq($to) . ' && cp -R '
 		    . main::_shq($from) . ' ' . main::_shq($to) );
+	return;
+}
+
+# $cp->copy_shared($from, $to):
+#	The shared set of the vault directory $from of the guest,
+#	into the vault directory $to: the index, and each entry or
+#	slot file (VAULT-LAYOUT-3). The machine-local set stays
+#	behind, so $to is a second machine of the vault
+#	(CER-PROVISION-2, VAULT-BACKUP-2). The name of an entry file
+#	is the hex of a hash, and the glob takes each one. The call
+#	makes $to, because the core process makes a vault directory
+#	at its first run alone.
+sub copy_shared ( $, $from, $to )
+{
+	main::guest_ok( "the copy of the shared set of $from",
+		'mkdir -p ' . main::_shq($to) . ' && cp '
+		    . main::_shq("$from/index") . ' '
+		    . main::_shq($from) . '/[0-9a-f]* '
+		    . main::_shq($to) . '/' );
 	return;
 }
 
@@ -1271,6 +1343,35 @@ sub create ( $self, $vault, %opt )
 
 	my ($run) = $self->console( $vault,
 		{ argv => \@argv, answers => \@pass } );
+	return $run;
+}
+
+# $cp->provision($vault, %opt):
+#	The machine provisioning ceremony in the vault $vault
+#	(CER-PROVISION). The hash of the call holds 'exit', 'out' and
+#	'error', as create() gives them, and the run goes over the
+#	console as well (TEST-HARNESS-8).
+#
+#	%opt takes 'answers', an array reference of answer names for
+#	the prompts of the run, and the default is the correct
+#	passphrase twice. It takes 'machine', 'threshold' and
+#	'rounds', and each one replaces the value of the vault or of
+#	the run. The oracle set is the set of the vault, as create()
+#	gives it.
+sub provision ( $self, $vault, %opt )
+{
+	my @argv = (
+		'provision', '-k', $opt{threshold} // $vault->{threshold},
+		'-m', $opt{machine} // $vault->{machine},
+		'-r', $opt{rounds} // $main::ROUNDS );
+	for my $oracle ( 1 .. $vault->{oracles} ) {
+		push @argv,
+		    $self->pubkey($oracle) . ' ' . $self->url($oracle);
+	}
+
+	my ($run) = $self->console( $vault,
+		{ argv => \@argv,
+			answers => $opt{answers} // [ 'right', 'right' ] } );
 	return $run;
 }
 

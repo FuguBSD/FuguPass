@@ -15,14 +15,15 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-# The counters leg (ORC-COUNTER-3, ORC-COUNTER-6).
+# The counters leg (ORC-COUNTER-3, ORC-COUNTER-5, ORC-COUNTER-6).
 #
 # The counter of a request is max(wall-clock seconds, stored + 1),
 # and the counters file holds the last sent value of each record.
 # The loss of that file is safe, because the wall-clock term
 # re-establishes a valid counter. A counter below the stored one
 # takes the junk path, and it burns no strike: three of them leave
-# the record whole.
+# the record whole. No ordinary request sends the value 0xFFFFFFFF,
+# so a persisted counter one below it stops the request.
 #
 # The counter has one-second resolution, so a reveal in the second
 # of its enrollment carries the same value as that enrollment. The
@@ -82,6 +83,29 @@ return sub ($t)
 	is( $t->reveal($stale)->{state},
 		'ok', 'a greater counter recovers the record, so the three '
 		    . 'junk answers burned no strike (ORC-COUNTER-6)' );
+
+	# A persisted counter one below the maximum leaves the value
+	# 0xFFFFFFFF as the next one, and an ordinary request must not
+	# send it (ORC-COUNTER-5). The client stops before the request,
+	# and the record stays untouched: a later request at a lower
+	# counter still passes. The mutation: a client that sends the
+	# maximum gets the mask with the right pin, and the record is
+	# then locked, so the later reveal answers junk.
+	my $max = $t->vault('counters-max');
+	is( $t->enroll($max)->{state}, 'ok', 'the third record enrolls' );
+	$t->write_file( $t->counters($max),
+		$t->record($max) . ': ' . ( 2**32 - 2 ) );
+	is( $t->reveal($max)->{state},
+		'error', 'a persisted counter at the maximum stops the request '
+		    . '(ORC-COUNTER-5)' );
+	like( $t->read_file( $t->counters($max) ),
+		qr/^\Q@{[ $t->record($max) ]}\E: @{[ 2**32 - 2 ]}$/m,
+		'the stopped request wrote no counter' );
+	$t->write_file( $t->counters($max),
+		$t->record($max) . ': ' . $t->high_counter );
+	is( $t->reveal($max)->{state},
+		'ok', 'the record is untouched: no request went out at the '
+		    . 'maximum (ORC-COUNTER-5)' );
 
 	return;
 };

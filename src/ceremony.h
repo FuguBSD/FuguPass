@@ -27,10 +27,24 @@
  * one vault on one machine (CER-REFILL). It runs the slot loop of
  * CER-CREATE-6 for each new slot, so the two ceremonies hold one
  * slot loop.
+ *
+ * ceremony_provision() is machine provisioning. It adds this machine
+ * to an existing vault, from a copy of the shared set and a plate
+ * scan (CER-PROVISION). It enrolls this machine's records for each
+ * existing slot with the enrollment loop of the two other
+ * ceremonies, and a re-run covers the pairs with no wrap alone
+ * (CER-PROVISION-12).
+ *
+ * ceremony_retire() is the retired mark of the machine registry.
+ * A revocation lock retires a machine name, and the index rewrite
+ * of this file marks it under the index key of the plate
+ * (ORC-REVOKE-11, VAULT-INDEX-7).
  */
 
 #ifndef CEREMONY_H
 #define CEREMONY_H
+
+#include "derive.h"
 
 /*
  * The slots of a new pool, and the low watermark of it. The pool
@@ -55,6 +69,8 @@ struct ceremony_create {
 	unsigned int		 threshold;	/* k */
 	unsigned int		 rounds;	/* kdf-rounds, KEY-PIN-5 */
 	unsigned int		 pool;		/* pool-size, ENTRY-POOL-2 */
+	int			 full;		/* provision -a, CER-PROVISION-17 */
+	unsigned char		 lost[DERIVE_ORACLE_MAX + 1]; /* provision -x */
 };
 
 /*
@@ -116,5 +132,97 @@ int	ceremony_create(const struct ceremony_create *);
  *	SEC-MEMORY-5).
  */
 int	ceremony_refill(const char *);
+
+/*
+ * ceremony_provision(arg):
+ *	The machine provisioning ceremony, in the vault directory of
+ *	arg (CER-PROVISION). The call gives 0 when each step passes,
+ *	and -1 when one step fails.
+ *
+ *	arg holds the command line form of a creation: the machine
+ *	name, the ordered oracle set, the threshold and the round
+ *	count (PROG-ONESHOT-6). The config file is machine-local, so
+ *	the list comes from the command line, and every machine of a
+ *	vault records the same list and the same threshold
+ *	(VAULT-LAYOUT-4, ORC-PROVISION-8). The pool of arg is the
+ *	pool size of the config file of this machine, and the
+ *	ceremony makes no pool.
+ *
+ *	The shared set must stand in the vault directory before the
+ *	call (CER-PROVISION-2). The call refuses a directory with no
+ *	index, and it names the copy as the path.
+ *
+ *	The call reads the master from the scan helper, and it opens
+ *	the index under K_idx of that plate (CER-PROVISION-1,
+ *	VAULT-INDEX-4). It refuses a machine name that the registry
+ *	marks retired, and it names a new machine name as the path.
+ *	It takes an explicit confirmation from the terminal before it
+ *	replaces the records of a registered name that this machine
+ *	holds no config of (CER-PROVISION-3). It reads the passphrase
+ *	twice from the terminal (CER-PROVISION-5).
+ *
+ *	A run on a provisioned machine is a re-run (CER-PROVISION-12).
+ *	It takes the config of this machine as the gate of the
+ *	command line. A command line that matches verifies the
+ *	passphrase at each sealed canary before any set_pin, heals each
+ *	dead index wrap, seals each stale canary check value again, and
+ *	enrolls the pairs with no wrap of this machine alone.
+ *
+ *	A command line that changes the config is a variant. The
+ *	ceremony writes the new config before any enrollment
+ *	(CER-PROVISION-13). An added oracle takes the next free
+ *	position, and the loop enrolls the new pairs (CER-PROVISION-14).
+ *	A retirement or a replacement deletes this machine's files of
+ *	that position first, and the report directs the owner to the
+ *	revocation kit (CER-PROVISION-16, ORC-PROVISION-6, REC-WIPE-2).
+ *	A threshold change re-splits every share and re-enrolls every
+ *	record under a threshold marker, and it re-runs from the start
+ *	(CER-PROVISION-15).
+ *
+ *	A record loss at a live position whose value stays shows in
+ *	no list change. Each position i with lost[i] of arg set names
+ *	such a loss: the ceremony deletes this machine's files of
+ *	that position first, and the loop enrolls the pairs of it
+ *	again (CER-PROVISION-16, REC-WIPE-2). A retired position
+ *	refuses, and so does a position above the count.
+ *
+ *	The -a run of full of arg re-enrolls every record of this
+ *	machine under one passphrase, and it removes a passphrase marker
+ *	at the end (CER-PROVISION-17, ORC-ENROLL-12).
+ *
+ *	While the change marker exists, the call refuses to start,
+ *	unless it is the threshold re-run or the full run
+ *	(CER-PROVISION-18). A refused call names the resume or the
+ *	re-run.
+ *
+ *	The call erases M, root, K_idx, every K_e, every share, and
+ *	every mask before it exits, on every path (CER-PROVISION-10,
+ *	SEC-MEMORY-5).
+ */
+int	ceremony_provision(const struct ceremony_create *);
+
+/*
+ * ceremony_retire(vault, root, rootlen, machine):
+ *	Mark the machine name machine retired in the machine registry
+ *	of the index of the vault directory vault (ORC-REVOKE-11,
+ *	VAULT-INDEX-7). root is the root of the plate, of rootlen
+ *	bytes, and rootlen must be DERIVE_ROOTLEN. K_idx derives from
+ *	it, so the call takes no session and sends no request
+ *	(VAULT-INDEX-4).
+ *
+ *	The rewrite keeps every other line of the index, as a
+ *	provisioning keeps it. The machine line of the name takes the
+ *	mark, and a name that the registry does not hold takes a
+ *	marked line. The mark never clears: no function of this file
+ *	removes it, and a later ceremony writes the line again as it
+ *	stands. The provisioning ceremony then refuses the name
+ *	(CER-PROVISION-3).
+ *
+ *	The call gives 0, and -1 with a report on the standard error.
+ *	K_idx and the plaintext of the index leave memory on every
+ *	path (SEC-MEMORY-5).
+ */
+int	ceremony_retire(const char *, const unsigned char *, size_t,
+	    const char *);
 
 #endif /* CEREMONY_H */

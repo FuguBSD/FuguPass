@@ -73,4 +73,18 @@ int	fugupass_passphrase(const char *, char *, size_t);
  */
 int	fugupass_passphrase_new(char *, size_t);
 
+/*
+ * fugupass_confirm(prompt):
+ *	One confirmation of the terminal. prompt stands before the
+ *	read, and the terminal shows each typed byte. The call gives
+ *	0 for the word yes, and -1 for every other answer and for
+ *	each failure of the read.
+ *
+ *	A ceremony takes an explicit confirmation before it replaces
+ *	the records of another machine (CER-PROVISION-3). The read
+ *	takes the terminal, as a passphrase read does, so no
+ *	argument and no pipe confirms in its place.
+ */
+int	fugupass_confirm(const char *);
+
 #endif /* FUGUPASS_H */
