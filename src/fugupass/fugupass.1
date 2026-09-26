@@ -596,13 +596,15 @@ That value passes the replay check against every lower stored
 counter, so a raised counter cannot block the lock.
 The attempt burns one strike, and the stored counter of the record
 takes the highest value.
+A lock that is the first or the second strike of a record keeps
+its file at the oracle.
 No later request of that record passes the replay check.
 The record then answers junk to every caller, and every later
 enrollment of it fails with an HTTP error.
-The record keeps its file at the oracle.
+A lock that is the third strike wipes the record, and the oracle
+then accepts an enrollment of it.
 .Pp
-The lock retires the machine name at that oracle, because no
-enrollment under that name passes there again.
+The lock retires the machine name at that oracle.
 The subcommand marks the name retired in the machine registry of
 the index, and the mark never clears.
 A run of
@@ -952,8 +954,8 @@ The static public key of the config file does not match the oracle
 that answered.
 Check the provisioning of that position, and the transport to it.
 .It the answer is junk
-The oracle answers junk for a wrong passphrase, for a missing or
-wiped record, and for a counter violation.
+The oracle answers junk for a wrong passphrase, for a missing, wiped
+or corrupt record, and for a counter violation.
 The response bytes hold the cause of none of them.
 .El
 .Pp

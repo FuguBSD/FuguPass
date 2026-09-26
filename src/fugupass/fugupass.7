@@ -198,8 +198,9 @@ a whole quorum.
 The section on the log coverage below gives the count of oracles
 whose logs cover every possible quorum.
 .Ss The provisioning of each oracle
-The oracle of each position is one FuguOracle instance, and its
-operator runs it with
+The oracle of each position is one instance of any oracle that
+speaks protocol v2, and FuguOracle is the reference deployment.
+The operator of a FuguOracle instance runs it with
 .Xr fuguoracle 8 .
 Do these steps for each position of the set:
 .Bl -enum
@@ -208,6 +209,15 @@ Get the two values of the oracle from its operator.
 They are the URL, and the static public key as the hex string that
 .Xr fuguoracle-keygen 8
 prints.
+The two values are sufficient for the FuguOracle deployment, because
+.Xr acme-client 1
+supplies its certificate.
+An oracle behind a private CA needs a third value, its root
+certificate.
+The client reads the trust anchors of
+.Pa /etc/ssl/cert.pem
+alone, so the root certificate must stand in that file on each
+machine.
 .It
 Check that the URL ends with no slash.
 The client appends /get_pin and /set_pin to it.
@@ -231,8 +241,11 @@ TLS at the oracle mitigates three transport risks: traffic metadata,
 availability, and envelope replay.
 Without TLS, a network observer sees which machine talks to which
 oracle and when.
-A network attacker drops or delays the answers, and a captured
-envelope reaches the oracle again as a replay.
+A network attacker drops or delays the answers.
+The oracle rejects a replayed envelope by its counter, and only an
+envelope captured before a re-enrollment replays.
+.Xr fugupass 1
+states the bound of that replay.
 Run each oracle behind TLS.
 .Ss The 2-of-3 example
 The example set is three oracles and the threshold 2.
@@ -268,8 +281,9 @@ line, and each session adds one for the canary.
 Compare the count with the reveals that you made.
 .It
 Count the lines of the class junk.
-A junk line is a wrong passphrase, a wiped record, or a counter below
-the stored one, and the line names none of them.
+A junk line is a wrong passphrase, a missing record, a corrupt
+record, or a counter at or below the stored one.
+The line names none of them.
 Your own typos give junk lines, and a burst that you did not make is
 a guess attack.
 .It
@@ -337,8 +351,13 @@ At most
 .Ar k No \- 1
 then stay unlocked, and no quorum forms.
 In the 2-of-3 example, lock at two of the three.
-A locked record keeps its file at the oracle, and no request of it
-passes again.
+A lock that is the first or the second strike of a record keeps
+its file at the oracle.
+No request of that record passes again.
+A lock that is the third strike wipes the record, and the oracle
+then accepts an enrollment of it.
+The retired mark of the machine name in the registry keeps this
+vault from that enrollment.
 .Pp
 Two operator paths exist beside the lock, and each needs a
 self-hosted or cooperative operator.
