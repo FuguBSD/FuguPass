@@ -1,0 +1,9 @@
+@bin bin/fugupass
+@bin bin/fugupass-qr
+bin/fugupass-repl
+@bin bin/fugupass-scan
+@man man/man1/fugupass-qr.1
+@man man/man1/fugupass-repl.1
+@man man/man1/fugupass-scan.1
+@man man/man1/fugupass.1
+@man man/man7/fugupass.7

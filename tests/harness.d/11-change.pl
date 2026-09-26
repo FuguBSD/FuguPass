@@ -43,9 +43,11 @@
 use v5.36;
 
 # The example topology of TEST-HARNESS-5, for every case of this
-# leg.
+# leg. The leg takes one instance for each position, and the
+# harness reads that count at the load.
 my $ORACLES   = 3;
 my $THRESHOLD = 2;
+our $INSTANCES = $ORACLES;
 
 # The greatest counter of a record (ORC-COUNTER-5). The client sends
 # the stored value plus one at least, and it never sends this value,

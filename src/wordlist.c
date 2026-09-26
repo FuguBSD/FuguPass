@@ -384,10 +384,14 @@ static const char *const wordlist[WORDLIST_COUNT] = {
 int
 wordlist_word(size_t index, char *buf, size_t buflen)
 {
-	if (index >= WORDLIST_COUNT)
+	/*
+	 * The length gate comes before the copy: a failed call writes
+	 * nothing to an output (wordlist.h). A truncating strlcpy(3)
+	 * would leave a part of the word in buf before the -1.
+	 */
+	if (index >= WORDLIST_COUNT || strlen(wordlist[index]) >= buflen)
 		return -1;
-	if (strlcpy(buf, wordlist[index], buflen) >= buflen)
-		return -1;
+	(void)strlcpy(buf, wordlist[index], buflen);
 	return 0;
 }
 

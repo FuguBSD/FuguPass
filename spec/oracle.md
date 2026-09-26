@@ -29,13 +29,15 @@ prose tokens, for example FuguOracle OPS-GET-4.
 - **ORC-CONFORM-6** — The transport must be HTTP/1.1 over a socket, or over
   `libtls` of the base system. It must run in the core process
   ([PROG-SPLIT](programs.md#prog-split)). The client must send one POST per
-  request, and must read the response with a strict reader. The reader must take
-  one JSON object that holds one `data` member. The value of that member must be
-  a base64 string, and must hold no escape sequence. The reader must step over
-  each unknown member, and must accept insignificant JSON whitespace. It must
-  treat a duplicate `data` member, and every other shape, as malformed
-  (FuguOracle PROTO-HTTP-7). A malformed body of a `200` response must be a
-  transport failure. A response of more than 4096 bytes must be a transport
+  request, and must read the response with a strict reader. The reader must
+  remove the chunked transfer coding of an answer, and must take no other
+  coding. `httpd(8)` sends a FastCGI answer with no length in that coding. The
+  reader must take one JSON object that holds one `data` member. The value of
+  that member must be a base64 string, and must hold no escape sequence. The
+  reader must step over each unknown member, and must accept insignificant JSON
+  whitespace. It must treat a duplicate `data` member, and every other shape, as
+  malformed (FuguOracle PROTO-HTTP-7). A malformed body of a `200` response must
+  be a transport failure. A response of more than 4096 bytes must be a transport
   failure.
 
 The interop harness proves conformance against every available conforming oracle

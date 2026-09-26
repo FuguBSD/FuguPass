@@ -133,7 +133,8 @@ textcheck(const char *name, const char *got, const char *want)
  * test_wordlist():
  *	The table holds the 2048 words of the pinned digest, and each
  *	word maps to its index and back. A word that is longer than
- *	every word of the list gives a failure. The digest covers the
+ *	every word of the list gives a failure, and a buffer that is
+ *	too small for a word takes no byte of it. The digest covers the
  *	words, with one line feed after each word. FuguSeed pins the
  *	same number for the same list, so the two projects agree on
  *	the list by one number.
@@ -178,6 +179,17 @@ test_wordlist(void)
 	if (wordlist_index(WORD_LONG, strlen(WORD_LONG), &index) == 0) {
 		warnx("the word list: the long word %s maps to %zu",
 		    WORD_LONG, index);
+		rv = -1;
+	}
+
+	/*
+	 * A buffer that is too small for a word takes no byte of it: a
+	 * failed call writes nothing to an output (wordlist.h). The
+	 * first word of the list holds seven letters.
+	 */
+	memset(word, 'x', sizeof(word));
+	if (wordlist_word(0, word, 3) == 0 || word[0] != 'x') {
+		warnx("the word list: a small buffer takes a part of a word");
 		rv = -1;
 	}
 	return rv;

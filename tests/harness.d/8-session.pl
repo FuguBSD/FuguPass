@@ -54,6 +54,10 @@ my @TOPOLOGY = (
 	{ tag => 'two', name => 'two of three', oracles => 3, threshold => 2 }
 );
 
+# The instances that this leg takes: one for each position of the
+# second topology. The harness reads this value at the load.
+our $INSTANCES = $TOPOLOGY[1]{oracles};
+
 # The slots of the two vaults of one topology. The entry vault takes
 # six entries, and the pool vault crosses the low watermark of 8 and
 # then empties (ENTRY-POOL-6, ENTRY-POOL-7).

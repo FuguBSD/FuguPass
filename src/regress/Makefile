@@ -77,11 +77,11 @@
 # from the ports tree, under LOCALBASE. bcrypt_pbkdf(3) comes from
 # libutil of the base system. http.c reads <tls.h> of libtls, and libtls needs
 # libssl. The vendored QR decoder comes from the archive of quirc
-# (PROG-BUILD-5). The lookup of an archive tests the obj directory
-# of it. make obj puts an archive there, and a tree without make obj
-# holds it in the source directory. This file writes the literal
-# name obj, because make reads the condition before bsd.own.mk sets
-# ${__objdir}.
+# (PROG-BUILD-5), and it calls rint(3) of libm. The lookup of an
+# archive tests the obj directory of it. make obj puts an archive
+# there, and a tree without make obj holds it in the source
+# directory. This file writes the literal name obj, because make
+# reads the condition before bsd.own.mk sets ${__objdir}.
 
 .include <bsd.own.mk>
 
@@ -130,9 +130,9 @@ LDADD+=		-L${LIBFUGUQUIRC} -lfuguquirc
 DPADD+=		${LIBFUGUQUIRC}/libfuguquirc.a
 .endif
 
-LDADD+=		-ltls -lssl -lcrypto -lutil
+LDADD+=		-ltls -lssl -lcrypto -lutil -lm
 LDADD+=		-L${LOCALBASE}/lib -lsecp256k1 -lqrencode
-DPADD+=		${LIBTLS} ${LIBSSL} ${LIBCRYPTO} ${LIBUTIL}
+DPADD+=		${LIBTLS} ${LIBSSL} ${LIBCRYPTO} ${LIBUTIL} ${LIBM}
 
 # http.t writes the request of one case, and the body of one case,
 # in the object directory.

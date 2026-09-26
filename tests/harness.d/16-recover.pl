@@ -46,9 +46,12 @@
 
 use v5.36;
 
-# The example topology of TEST-HARNESS-5.
+# The example topology of TEST-HARNESS-5. The leg takes one
+# instance for each position, and the harness reads that count at
+# the load.
 my $ORACLES   = 3;
 my $THRESHOLD = 2;
+our $INSTANCES = $ORACLES;
 
 # The slots of the creation. A small pool keeps the leg short, and
 # four entries consume four of the slots.

@@ -61,4 +61,9 @@ LDADD+=		-L${LIBFUGUQUIRC} -lfuguquirc
 DPADD+=		${LIBFUGUQUIRC}/libfuguquirc.a
 .endif
 
+# rint(3) of the vendored decoder comes from libm of the base system.
+# arm64 inlines the call, and amd64 does not.
+LDADD+=		-lm
+DPADD+=		${LIBM}
+
 .include <bsd.prog.mk>
