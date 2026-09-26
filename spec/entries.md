@@ -105,8 +105,9 @@ renders as a SeedQR code for a signer to scan ([PROG-QR](programs.md#prog-qr)).
 Rotation of a derived entry is entry creation on a new slot. It consumes the
 lowest free slot, and it performs one reveal of that slot
 ([ENTRY-POOL](entries.md#entry-pool)). An old version restores like any derived
-secret: the plate re-derives the old slot's key and candidates
-([REC-PLATE](recovery.md#rec-plate)).
+secret: the plate re-derives the old slot's candidates
+([REC-PLATE](recovery.md#rec-plate)). The plate-plus-files path re-derives the
+old slot's entry key ([REC-VAULT](recovery.md#rec-vault)).
 
 <a id="entry-pool"></a>
 
