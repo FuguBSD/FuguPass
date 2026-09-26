@@ -794,7 +794,8 @@ step_slots(struct state *st)
  *	CER-CREATE-7. The index seals under K_idx, and it holds this
  *	machine's name in the registry (VAULT-INDEX-1,
  *	VAULT-INDEX-2). A new vault holds no entry, and each slot of
- *	the pool is free.
+ *	the pool is free. The plaintext of the index leaves memory on
+ *	every path (SEC-MEMORY-1).
  */
 static int
 step_index(const struct state *st)
@@ -804,13 +805,13 @@ step_index(const struct state *st)
 	char		 path[PATH_MAX];
 	uint32_t	 slot;
 	size_t		 len = 0;
-	int		 n;
+	int		 n, rv = -1;
 
 	n = snprintf(plain, sizeof(plain), "machine: %s\npool-free: ",
 	    st->arg->machine);
 	if (n < 0 || (size_t)n >= sizeof(plain)) {
 		warnx("the index: the text does not fit");
-		return -1;
+		goto out;
 	}
 	len = (size_t)n;
 	for (slot = 0; slot < st->arg->pool; slot++) {
@@ -818,7 +819,7 @@ step_index(const struct state *st)
 		    slot == 0 ? "" : ",", slot);
 		if (n < 0 || (size_t)n >= sizeof(plain) - len) {
 			warnx("the index: the text does not fit");
-			return -1;
+			goto out;
 		}
 		len += (size_t)n;
 	}
@@ -826,7 +827,7 @@ step_index(const struct state *st)
 	    st->arg->pool);
 	if (n < 0 || (size_t)n >= sizeof(plain) - len) {
 		warnx("the index: the text does not fit");
-		return -1;
+		goto out;
 	}
 	len += (size_t)n;
 
@@ -834,14 +835,17 @@ step_index(const struct state *st)
 	    NULL) != 0) {
 		warnx("%s: the path of the index file does not fit",
 		    st->vault);
-		return -1;
+		goto out;
 	}
 	if (vault_seal_write(path, st->idxkey, sizeof(st->idxkey),
 	    (const unsigned char *)plain, len, sealed, sizeof(sealed)) != 0) {
 		warn("%s", path);
-		return -1;
+		goto out;
 	}
-	return 0;
+	rv = 0;
+out:
+	explicit_bzero(plain, sizeof(plain));
+	return rv;
 }
 
 int
