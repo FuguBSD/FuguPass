@@ -444,7 +444,9 @@ detects a passphrase mistyped the same way twice.
   index ([KEY-CLIENT](keys.md#key-client)), so each oracle holds different
   record names. Record names are not secret.
 - **ORC-REVOKE-7** — The documentation must state that the operator paths need a
-  self-hosted or cooperative operator.
+  self-hosted or cooperative operator. It must state that a saved copy of the
+  kit is a snapshot (ORC-REVOKE-6), and that the operator regenerates the kit
+  before a revocation.
 - **ORC-REVOKE-8** — A revocation request must send the counter value
   `0xFFFFFFFF`. This value passes anti-replay against every lower stored
   counter, so an attacker who raises a record's stored counter cannot block
