@@ -30,10 +30,10 @@ tokens, for example FuguOracle OPS-GET-4.
   that record must return junk. Every later `set_pin` of it must return an HTTP
   error.
 - **TEST-HARNESS-4** — The same suite must pass against every counterparty. The
-  suite must not branch on the counterparty. A leg must name the instance count
-  that it takes, and a counterparty must name the count that it hosts. The
-  harness must run each leg against every counterparty that hosts that count or
-  more.
+  suite must not branch on the counterparty. A leg that takes more than one
+  instance must name the count, and a leg that names none takes one. A
+  counterparty must name the count that it hosts. The harness must run each leg
+  against every counterparty that hosts that count or more.
 - **TEST-HARNESS-5** — The suite must run one leg against the documented example
   topology: three oracle instances with a threshold of two. The leg must prove
   the reveal on every two-oracle quorum, and the decrypt failure with one mask.
