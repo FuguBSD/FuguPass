@@ -6,7 +6,7 @@ Proposed. It waits on plan 013, so the port packages the complete programs and
 pages. The latency measurement needs real OpenBSD hardware, and the operator
 supplies it.
 
-Implements: TEST-CALIBRATE. Implements: PROG-PORT.
+Implements: TEST-CALIBRATE.
 
 ## Purpose
 
@@ -55,7 +55,6 @@ repository through the GitHub mechanism of the ports tree.
 | `tests/calibrate.c`                | The round count timer, built in the guest and on hardware |
 | `tests/harness.d/scale`            | The scaling leg                                           |
 | `src/vault.c`                      | The default round count                                   |
-| `ports/security/fugupass/`         | The port                                                  |
 | `spec/STATUS.md`                   | The cited units                                           |
 
 ## Tests

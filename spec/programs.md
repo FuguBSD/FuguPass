@@ -447,12 +447,16 @@ zone of a mnemonic code are therefore fixed values.
 - **PROG-PORT-2** — The port must build the four programs from a release tag of
   this repository, and must install them with their manual pages.
 - **PROG-PORT-3** — The port must declare `devel/p5-Fugu` as a run dependency
-  (D-16), and each library that a helper program links as a library dependency
-  ([PROG-QR](programs.md#prog-qr)).
+  (D-16). The build runs `src/unveil-paths` of that library, so the port must
+  declare it as a build dependency as well. The port must declare each library
+  that a program links as a library dependency. The render helper links
+  `graphics/libqrencode` ([PROG-QR](programs.md#prog-qr)), and the core process
+  links `security/libsecp256k1`. The FuguOracle repository holds the
+  `security/libsecp256k1` port until the ports tree takes it.
 - **PROG-PORT-4** — The developer must build the port on OpenBSD/amd64 and on
-  OpenBSD/arm64, and must run the regress target of the port there. The `fuguvm`
-  tool can supply the guest, as a command only. The port must not depend on
-  `fuguvm`.
+  OpenBSD/arm64, and must run the test target of the port (`make test`) there.
+  The `fuguvm` tool can supply the guest, as a command only. The port must not
+  depend on `fuguvm`.
 
 The Fugu repository holds the `devel/p5-Fugu` port (Fugu REL-PORT), and the
 ports tree must hold it before this port builds.

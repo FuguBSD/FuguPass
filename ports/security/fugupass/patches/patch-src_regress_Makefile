@@ -1,0 +1,18 @@
+The scan test links the vendored quirc decoder, and that decoder
+calls rint(3) of libm.
+
+Index: src/regress/Makefile
+--- src/regress/Makefile.orig
++++ src/regress/Makefile
+@@ -130,9 +130,9 @@ LDADD+=		-L${LIBFUGUQUIRC} -lfuguquirc
+ DPADD+=		${LIBFUGUQUIRC}/libfuguquirc.a
+ .endif
+ 
+-LDADD+=		-ltls -lssl -lcrypto -lutil
++LDADD+=		-ltls -lssl -lcrypto -lutil -lm
+ LDADD+=		-L${LOCALBASE}/lib -lsecp256k1 -lqrencode
+-DPADD+=		${LIBTLS} ${LIBSSL} ${LIBCRYPTO} ${LIBUTIL}
++DPADD+=		${LIBTLS} ${LIBSSL} ${LIBCRYPTO} ${LIBUTIL} ${LIBM}
+ 
+ # http.t writes the request of one case, and the body of one case,
+ # in the object directory.
