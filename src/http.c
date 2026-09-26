@@ -25,8 +25,11 @@
  *
  * One request goes out, and one answer comes back. The connection
  * carries the header Connection: close, so the server closes the
- * stream after the answer, and the reader needs no length header
- * and no decoder of a chunked body.
+ * stream after the answer, and the reader needs no length header.
+ * A server of HTTP/1.1 can send the body in the chunked transfer
+ * coding, and httpd(8) sends a FastCGI answer with no length that
+ * way, so the reader removes that coding (ORC-CONFORM-6). It takes
+ * no other coding.
  *
  * The bytes of this file travel on the wire: a sealed envelope, an
  * answer of the oracle, and the base64 of each one. envelope.c
@@ -47,6 +50,7 @@
 #include <netdb.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <tls.h>
 #include <unistd.h>
 
@@ -108,7 +112,10 @@ static ssize_t	 conn_write(struct conn *, const void *, size_t);
 static int	 write_all(struct conn *, const char *, size_t);
 static int	 read_all(struct conn *, char *, size_t, size_t *);
 static int	 status_of(const char *, size_t, int *);
-static int	 body_of(const char *, size_t, const char **, size_t *);
+static int	 coding_of(const char *, size_t);
+static int	 hexval(char);
+static int	 unchunk(char *, size_t, size_t *);
+static int	 body_of(char *, size_t, const char **, size_t *);
 static void	 skip_ws(struct scan *);
 static int	 take(struct scan *, char);
 static int	 scan_string(struct scan *, const char **, size_t *, int *);
@@ -428,16 +435,119 @@ status_of(const char *resp, size_t len, int *status)
 	return 0;
 }
 
-/* The body of one answer: the bytes after the empty line. */
+/*
+ * The transfer coding of one answer, from the len bytes of the head
+ * at resp. The answer is 1 for the chunked coding, 0 for no coding
+ * header, and -1 for a coding that the reader does not take. The
+ * header name compares without case, as an HTTP name does, and the
+ * first coding header decides.
+ */
 static int
-body_of(const char *resp, size_t len, const char **body, size_t *bodylen)
+coding_of(const char *resp, size_t len)
 {
-	const char	*p;
+	const char	*line = resp, *end = resp + len, *eol, *val, *stop;
+	size_t		 namelen = sizeof("transfer-encoding") - 1;
+
+	while (line < end &&
+	    (eol = memmem(line, (size_t)(end - line), "\r\n", 2)) != NULL) {
+		if ((size_t)(eol - line) > namelen &&
+		    strncasecmp(line, "transfer-encoding", namelen) == 0 &&
+		    line[namelen] == ':') {
+			val = line + namelen + 1;
+			while (val < eol && (*val == ' ' || *val == '\t'))
+				val++;
+			stop = eol;
+			while (stop > val &&
+			    (stop[-1] == ' ' || stop[-1] == '\t'))
+				stop--;
+			if ((size_t)(stop - val) == sizeof("chunked") - 1 &&
+			    strncasecmp(val, "chunked", (size_t)(stop - val)) == 0)
+				return 1;
+			return -1;
+		}
+		line = eol + 2;
+	}
+	return 0;
+}
+
+/* The value of one hex digit, and -1 for another byte. */
+static int
+hexval(char c)
+{
+	if (c >= '0' && c <= '9')
+		return c - '0';
+	if (c >= 'a' && c <= 'f')
+		return c - 'a' + 10;
+	if (c >= 'A' && c <= 'F')
+		return c - 'A' + 10;
+	return -1;
+}
+
+/*
+ * The chunked transfer coding, removed in place from the len bytes
+ * at body. Each chunk holds a size in hex, CRLF, the bytes, and
+ * CRLF. A size of zero ends the body, and one CRLF ends the coding.
+ * The reader takes no chunk extension and no trailer field, and
+ * every other shape answers -1. bodylen takes the bytes of the
+ * decoded body, which start at body. A size above len refuses
+ * before the next digit, so the size cannot overflow.
+ */
+static int
+unchunk(char *body, size_t len, size_t *bodylen)
+{
+	size_t	 in = 0, out = 0, size;
+	int	 digits;
+
+	for (;;) {
+		size = 0;
+		digits = 0;
+		while (in < len && hexval(body[in]) >= 0) {
+			size = size * 16 + (size_t)hexval(body[in]);
+			if (size > len)
+				return -1;
+			in++;
+			digits++;
+		}
+		if (digits == 0 || in + 2 > len || body[in] != '\r' ||
+		    body[in + 1] != '\n')
+			return -1;
+		in += 2;
+		if (size == 0)
+			break;
+		if (in + size + 2 > len)
+			return -1;
+		memmove(body + out, body + in, size);
+		out += size;
+		in += size;
+		if (body[in] != '\r' || body[in + 1] != '\n')
+			return -1;
+		in += 2;
+	}
+	if (len - in != 2 || body[in] != '\r' || body[in + 1] != '\n')
+		return -1;
+	*bodylen = out;
+	return 0;
+}
+
+/*
+ * The body of one answer: the bytes after the empty line, with the
+ * chunked transfer coding removed. The decode moves the bytes in
+ * place, so the answer is not const.
+ */
+static int
+body_of(char *resp, size_t len, const char **body, size_t *bodylen)
+{
+	char	*p;
+	int	 coding;
 
 	if ((p = memmem(resp, len, "\r\n\r\n", 4)) == NULL)
 		return -1;
 	*body = p + 4;
 	*bodylen = len - (size_t)(p + 4 - resp);
+	if ((coding = coding_of(resp, (size_t)(p + 2 - resp))) < 0)
+		return -1;
+	if (coding == 1 && unchunk(p + 4, *bodylen, bodylen) != 0)
+		return -1;
 	return 0;
 }
 

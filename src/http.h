@@ -117,9 +117,10 @@
  *	above.
  *
  *	The request carries the header Connection: close, so the
- *	answer ends at the end of the stream. The socket takes a
- *	receive timeout and a send timeout, and connect(2) keeps the
- *	timeout of the kernel.
+ *	answer ends at the end of the stream. The reader removes the
+ *	chunked transfer coding of an answer, and it takes no other
+ *	coding. The socket takes a receive timeout and a send
+ *	timeout, and connect(2) keeps the timeout of the kernel.
  */
 int	http_post(const char *, const unsigned char *, size_t,
 	    unsigned char *, size_t, size_t *, int *);
