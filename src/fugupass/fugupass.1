@@ -64,6 +64,14 @@
 .Op Ar position ...
 .Nm
 .Op Fl d Ar directory
+.Cm recover
+.Op Fl w
+.Op Fl \-ceiling Ar ceiling
+.Nm
+.Op Fl d Ar directory
+.Cm verify
+.Nm
+.Op Fl d Ar directory
 .Cm ls
 .Nm
 .Op Fl d Ar directory
@@ -128,9 +136,11 @@ Every subcommand but
 .Cm resume ,
 .Cm refill ,
 .Cm provision ,
-.Cm kit
+.Cm kit ,
+.Cm revoke ,
+.Cm recover
 and
-.Cm revoke
+.Cm verify
 opens a session of the vault first.
 The session reads the passphrase once.
 It takes the quorum of
@@ -610,6 +620,94 @@ An operator of a self-hosted oracle can stop the service, and can
 delete the record files that
 .Cm kit
 names.
+.It Xo
+.Cm recover
+.Op Fl w
+.Op Fl \-ceiling Ar ceiling
+.Xc
+Recover the entries of the vault from the plate.
+The subcommand takes the master from a plate scan of
+.Xr fugupass-scan 1 .
+It opens no session, it reads no passphrase, and it sends no oracle
+request.
+A recovered secret prints to the terminal, one entry at a time, and it
+reaches no file.
+.Pp
+A vault directory that holds a shared set takes the plate-plus-files
+path.
+For each slot from 0 to the ceiling, the subcommand re-derives the
+entry key, names the entry file by the hash of that key, and opens the
+file of that name under the key.
+It opens the index of the shared set under the index key of the plate,
+and it names each recovered entry from the index.
+It prints each entry name on the standard output, and each secret on
+the terminal, in slot order.
+A mnemonic entry prints as one QR code, in the UTF-8 half blocks of
+.Xr fugupass-qr 1 .
+A signer scans that code from the screen.
+.Pp
+A copy of the shared set restores by a file copy onto a machine that
+keeps its own machine-local set.
+The counters and the wraps of the receiving machine stay valid,
+because they bind to that machine's records, and the copy does not
+touch them.
+A restore onto a fresh machine is a machine provisioning ceremony of
+.Cm provision .
+An entry that a machine creates after the backup date is absent from
+the copy.
+A derived entry re-derives from the plate, and a stored secret sealed
+after the backup date does not return from this copy.
+.Pp
+The index of the copy can be stale.
+A stale index degrades the entry names alone: every entry file still
+matches by the hash of its key, and it still opens under that key.
+The subcommand then names each entry by its file name.
+A rewind of the machine-local set to an older copy leaves a later
+enrollment unmatched, and that stale wrap recovers by a
+.Cm provision
+ceremony.
+.Pp
+A vault directory that holds no shared set takes the plate-alone path.
+The subcommand re-materializes the two derived candidates of every
+slot from 0 to the ceiling: a password and a child mnemonic.
+Each candidate derives from the master of the plate, and the
+subcommand derives no entry key.
+It prints the two candidates of each slot on the terminal, and it
+reports the scanned range on the standard output.
+Each candidate prints as text, because a candidate is no entry.
+A scan past the last used slot is safe and costs nothing, because the
+derivation is deterministic.
+Without the vault files, the entry names and the metadata are gone,
+and a stored secret does not return.
+.Bl -tag -width Ds
+.It Fl w
+Print the words of a mnemonic entry as text, in place of the QR
+code.
+.It Fl \-ceiling Ar ceiling
+The highest slot of the scan, above the default of 1024 slots.
+The plate-alone path materializes the candidates of each slot up to
+this bound, so a large ceiling takes a long scan.
+.El
+.It Cm verify
+Verify that a plate decodes to the master of this vault.
+The subcommand takes the master from a plate scan of
+.Xr fugupass-scan 1 .
+It re-derives the plate check value of that master, and it compares
+the value with the
+.Ic plate-check
+line of the config file of this machine.
+The check value is one-way, so the config file leaks nothing about
+the master.
+.Pp
+The subcommand opens no session, it reads no passphrase, and it sends
+no oracle request.
+It touches no oracle record, and it reveals no secret.
+On a match, it records the date of the day in the index, under the
+index key of the plate, and
+.Cm audit
+reports that date.
+A mismatch names a wrong plate or a damaged plate, and it writes no
+file.
 .It Cm ls
 Print the name of each entry of the index, one name on each line.
 The subcommand reads the open index, and it sends no entry request.
@@ -704,7 +802,10 @@ own.
 Print the state of the plate verification and of the shadow entries.
 The first line holds
 .Dq verified ,
-a colon, one space, and the date of the last plate verification.
+a colon, one space, and the date of the last plate verification of
+.Cm verify .
+A vault with no verification prints no such line, and the report
+names the absent date.
 The subcommand then prints one line of each stale shadow entry: the
 verification date of it, one space, and the entry name.
 A shadow entry is stale when its verification date is older than the
@@ -906,6 +1007,14 @@ The
 .Cm provision
 subcommand refuses a retired name.
 Give a new machine name.
+.El
+.Pp
+The report below names the state of a plate verification.
+.Bl -tag -width Ds
+.It the plate check value differs from the config file
+The plate is a wrong plate, or a damaged plate.
+The config file of this machine holds the check value of the plate of
+this vault, and the subcommand wrote no date.
 .El
 .Sh SEE ALSO
 .Xr fugupass-qr 1 ,

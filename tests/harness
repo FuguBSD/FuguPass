@@ -127,9 +127,8 @@
 # The harness runs the legs against every available conforming
 # counterparty (TEST-HARNESS-1). The upstream blind_pin_server is the
 # one counterparty today (TEST-HARNESS-2). The FuguOracle leg is
-# absent, and no FuguOracle service speaks HTTP. That leg needs a
-# FuguOracle deployment, and it then becomes one entry of the
-# counterparty table.
+# absent, because the counterparty table holds no entry for a
+# FuguOracle deployment. That entry is the one part the leg needs.
 
 use v5.36;
 

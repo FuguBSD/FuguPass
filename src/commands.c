@@ -59,7 +59,8 @@
  * A mnemonic entry takes the QR code of the render helper, and the
  * -w option of show takes the words as text (PROG-OUTPUT-2). The
  * helper runs as a child of helper.h, so this file renders no code
- * of its own (PROG-SPLIT-2).
+ * of its own (PROG-SPLIT-2). commands_qr() is that one render, and
+ * the recovery of recover.c takes it as well.
  *
  * Every record goes through record(), and every report goes to the
  * standard error (PROG-ONESHOT-3). A one-shot subcommand takes its
@@ -170,7 +171,6 @@ static int	 gate(const struct vault_line *, void *);
 static int	 write_all(int, const char *, size_t);
 static int	 tty_write(const char *, size_t, int);
 static int	 secret_print(const char *);
-static int	 secret_qr(const char *);
 static void	 record(const char *, ...);
 static const struct commands_cmd *find(const char *);
 static int	 usage_cmd(const char *);
@@ -368,7 +368,7 @@ secret_print(const char *value)
 }
 
 /*
- * secret_qr(value):
+ * commands_qr(value):
  *	The QR code of one secret to the terminal, in UTF-8 half
  *	blocks (PROG-OUTPUT-2). The render helper reads the bytes of
  *	the secret on its standard input, and it writes the code back
@@ -388,10 +388,11 @@ secret_print(const char *value)
  *	value of another form takes the code of a vault file: such a
  *	code is longer, and the run of it fails here. The report
  *	therefore names the -w option. The call clears the code of
- *	the buffer (SEC-MEMORY-1).
+ *	the buffer (SEC-MEMORY-1). commands.h states the call, and
+ *	recover.c shares it.
  */
-static int
-secret_qr(const char *value)
+int
+commands_qr(const char *value)
 {
 	char	 code[CODE_MAX];
 	size_t	 len = 0;
@@ -1159,7 +1160,7 @@ show_line(const struct vault_line *line, void *arg)
 	const int	*code = arg;
 
 	if ((line->field->flags & VAULT_FIELD_SECRET) != 0)
-		return *code != 0 ? secret_qr(line->value) :
+		return *code != 0 ? commands_qr(line->value) :
 		    secret_print(line->value);
 	record("%s: %s", line->field->name, line->value);
 	return 0;

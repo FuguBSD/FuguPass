@@ -36,8 +36,9 @@
  * subcommands of this file: the vault creation, the canary
  * re-enrollment, the passphrase change, the resume of an incomplete
  * change, the pool refill, the machine provisioning, the revocation
- * kit, and the revocation. commands_table of commands.h holds the six
- * commands of the session, and commands_oneshot() runs one of them
+ * kit, the revocation, the recovery, and the plate verification.
+ * commands_table of commands.h holds the six commands of the
+ * session, and commands_oneshot() runs one of them
  * (PROG-ONESHOT-1, PROG-ONESHOT-2). A name that neither table holds
  * gives the usage and the status 2. A run with no subcommand starts
  * the interactive session of iface.h, and that session runs each
@@ -73,6 +74,7 @@
 #include "derive.h"
 #include "fugupass.h"
 #include "iface.h"
+#include "recover.h"
 #include "revoke.h"
 #include "sandbox.h"
 #include "session.h"
@@ -98,6 +100,8 @@ static int	 cmd_refill(int, char *[], const char *);
 static int	 cmd_provision(int, char *[], const char *);
 static int	 cmd_kit(int, char *[], const char *);
 static int	 cmd_revoke(int, char *[], const char *);
+static int	 cmd_recover(int, char *[], const char *);
+static int	 cmd_verify(int, char *[], const char *);
 static void	 usage(void);
 static int	 vault_dir(const char *, char *, size_t);
 
@@ -116,7 +120,9 @@ static const struct subcommand commands[] = {
 	{ "provision",	"[-a] [-x position] -k threshold -m machine -r rounds "
 	    "oracle ...", cmd_provision },
 	{ "kit",	"[-m machine]", cmd_kit },
-	{ "revoke",	"[-r] -m machine [position ...]", cmd_revoke }
+	{ "revoke",	"[-r] -m machine [position ...]", cmd_revoke },
+	{ "recover",	"[-w] [--ceiling ceiling]", cmd_recover },
+	{ "verify",	"", cmd_verify }
 };
 
 /*
@@ -577,6 +583,66 @@ cmd_revoke(int argc, char *argv[], const char *vault)
 	}
 	return revoke_run(vault, machine, replace, position, count) == 0 ?
 	    0 : 1;
+}
+
+/*
+ * cmd_recover(argc, argv, vault):
+ *	The recovery of the entries of the vault directory vault from
+ *	the plate (REC-PLATE, REC-VAULT, PROG-ONESHOT-4). The
+ *	subcommand takes the master from a plate scan, and it opens no
+ *	session and reads no passphrase (REC-PRINCIPLE-4). A vault
+ *	directory with a shared set takes the plate-plus-files path,
+ *	and a directory with none takes the plate-alone path.
+ *
+ *	The optional --ceiling option raises the scan ceiling above the
+ *	default of RECOVER_CEILING slots (REC-PLATE-2). The -w option
+ *	prints the words of a mnemonic entry as text, in place of the
+ *	QR code of the render helper, the way show does
+ *	(PROG-OUTPUT-2). recover.c holds the derivation loop of each
+ *	path.
+ */
+static int
+cmd_recover(int argc, char *argv[], const char *vault)
+{
+	unsigned int	 ceiling = RECOVER_CEILING;
+	const char	*errstr;
+	int		 i, words = 0;
+
+	for (i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "-w") == 0) {
+			words = 1;
+			continue;
+		}
+		if (strcmp(argv[i], "--ceiling") != 0)
+			usage();
+		if (++i >= argc)
+			usage();
+		ceiling = (unsigned int)strtonum(argv[i], 1, VAULT_SLOT_MAX,
+		    &errstr);
+		if (errstr != NULL) {
+			warnx("the ceiling is %s", errstr);
+			usage();
+		}
+	}
+	return recover_run(vault, ceiling, words) == 0 ? 0 : 1;
+}
+
+/*
+ * cmd_verify(argc, argv, vault):
+ *	The plate verification of the vault directory vault
+ *	(CER-VERIFY, PROG-ONESHOT-4). The subcommand takes no option
+ *	and no argument. It takes the master from a plate scan, it
+ *	opens no session, it reads no passphrase, and it sends no
+ *	request (CER-VERIFY-2, PROG-REPL-6). ceremony.c holds the
+ *	compare and the date of a match.
+ */
+static int
+cmd_verify(int argc, char *argv[], const char *vault)
+{
+	(void)argv;
+	if (argc != 1)
+		usage();
+	return ceremony_verify(vault) == 0 ? 0 : 1;
 }
 
 int

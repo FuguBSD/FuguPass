@@ -111,8 +111,8 @@ where an attacker holds both the disk and the oracle record.
   name must not enter any derivation.
 
 Entry names are mutable, and slot indexes are not. The derivation of `K_e` from
-`root` carries the plate-alone recovery path
-([REC-PLATE](recovery.md#rec-plate)): the plate re-derives every `K_e` with no
+`root` carries the plate-plus-files recovery path
+([REC-VAULT](recovery.md#rec-vault)): the plate re-derives every `K_e` with no
 oracle and no passphrase. The entry file name is the lowercase hex of `H(K_e)`
 ([VAULT-LAYOUT](vault.md#vault-layout)).
 
@@ -223,7 +223,7 @@ records the round-count calibration.
 
 The deterministic split keeps the entropy rule exact: the system RNG stores no
 secret, and the plate re-derives every share through `K_e`
-([REC-PLATE](recovery.md#rec-plate)). Per-entry domain separation comes from the
+([REC-VAULT](recovery.md#rec-vault)). Per-entry domain separation comes from the
 split secret itself: each `K_e` is unique, so no coefficient repeats across
 entries or against the index key. The coefficient label carries the threshold,
 so a threshold change derives a fresh coefficient set

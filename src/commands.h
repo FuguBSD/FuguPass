@@ -100,4 +100,18 @@ int	commands_run(struct session *, int, char *[]);
  */
 int	commands_oneshot(const char *, int, char *[]);
 
+/*
+ * commands_qr(value):
+ *	The QR code of one secret to the terminal, in the UTF-8 half
+ *	blocks of the render helper (PROG-OUTPUT-2, PROG-QR-9). show
+ *	takes the code of a mnemonic entry through this call, and the
+ *	recovery of recover.c takes the same call, so one function of
+ *	the tree renders a mnemonic entry (PROG-SPLIT-2).
+ *
+ *	The call gives 0, and -1 for a failed run of the helper and
+ *	for a failed write. A failed run leaves the terminal without
+ *	a code, and the report names the -w option.
+ */
+int	commands_qr(const char *);
+
 #endif /* COMMANDS_H */
