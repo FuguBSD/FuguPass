@@ -452,10 +452,14 @@ detects a passphrase mistyped the same way twice.
   counter, so an attacker who raises a record's stored counter cannot block
   revocation. A `set_pin` replacement at this value replaces the record's key
   material at the oracle and resets the stored counter (FuguOracle OPS-SET-4).
-  One wrong attempt at this value burns one strike and locks the record. No
-  later request passes anti-replay, and the record answers junk to every caller.
-  A locked record keeps its file, and only the operator paths remove it. The
-  lock retires the machine name at that oracle (ORC-REVOKE-11).
+  One wrong attempt at this value burns one strike and locks the record. A lock
+  that is the first or the second strike of the record keeps its file at the
+  oracle (FuguOracle OPS-GET-5). No later request of that record passes
+  anti-replay, and the record answers junk to every caller. Only the operator
+  paths remove a kept file. A lock that is the third strike wipes the record
+  (FuguOracle OPS-GET-6). The oracle then accepts an enrollment of that record
+  name (FuguOracle OPS-SET-2). The lock retires the machine name at that oracle
+  (ORC-REVOKE-11).
 - **ORC-REVOKE-9** — The runbook must state the FuguOracle restore residual. A
   filesystem restore of the records directory rewinds records to the backup
   time. A restore from a pre-revocation backup therefore revives revoked records
@@ -468,11 +472,12 @@ detects a passphrase mistyped the same way twice.
   `n − k + 1` locks. Locks at every oracle are not necessary: the locks leave at
   most `k − 1` obtainable masks per entry.
 - **ORC-REVOKE-11** — A lock retires the machine name at that oracle. The stored
-  counter of a locked record is the highest value, so no later `set_pin` under
-  that name passes anti-replay there (FuguOracle OPS-SET-2). The records of that
-  name at that oracle therefore never re-enroll. The tool must mark the name
-  retired in the machine registry ([VAULT-INDEX](vault.md#vault-index)). A
-  retired name must not provision again
+  counter of a kept record is the highest value, so no later `set_pin` of that
+  record passes anti-replay there (FuguOracle OPS-SET-2). A wiped record leaves
+  no file, so the oracle accepts a `set_pin` of that record name (FuguOracle
+  OPS-SET-2). The tool must mark the name retired in the machine registry
+  ([VAULT-INDEX](vault.md#vault-index)). The mark keeps this vault from that
+  enrollment. A retired name must not provision again
   ([CER-PROVISION](ceremonies.md#cer-provision)), and a replacement machine
   provisions under a new name.
 - **ORC-REVOKE-12** — The revocation report must direct the owner to lock or
@@ -487,7 +492,8 @@ caller. A locked record denies its mask to the attacker too. The revocation
 paths destroy or deny records, never data: every entry recovers from the plate
 ([REC-WIPE](recovery.md#rec-wipe)).
 
-A locked record is not a wiped record. A wipe unlinks the file, and a fresh
-`set_pin` re-creates the record (REC-WIPE-3). A lock keeps the file with the
-highest counter, so the oracle rejects every later request for that record. Only
-the operator paths remove it.
+A lock at the third strike of a record is a wipe (FuguOracle OPS-GET-6). A wipe
+unlinks the file, and a fresh `set_pin` re-creates the record (REC-WIPE-3). A
+lock at the first or the second strike keeps the file with the highest counter.
+The oracle then rejects every later request for that record. Only the operator
+paths remove a kept file.

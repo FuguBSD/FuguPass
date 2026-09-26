@@ -351,13 +351,10 @@ At most
 .Ar k No \- 1
 then stay unlocked, and no quorum forms.
 In the 2-of-3 example, lock at two of the three.
-A lock that is the first or the second strike of a record keeps
-its file at the oracle.
-No request of that record passes again.
-A lock that is the third strike wipes the record, and the oracle
-then accepts an enrollment of it.
-The retired mark of the machine name in the registry keeps this
-vault from that enrollment.
+A lock denies the record to every caller, and the retired machine
+name keeps this vault from a later enrollment of it.
+.Xr fugupass 1
+states the outcome of a lock.
 .Pp
 Two operator paths exist beside the lock, and each needs a
 self-hosted or cooperative operator.
