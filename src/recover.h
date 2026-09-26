@@ -29,10 +29,11 @@
  * the index under K_idx from root for the entry names, and a stale
  * or absent index degrades the names alone (REC-VAULT-3,
  * REC-RESTORE-5). A directory with no shared set takes the
- * plate-alone path: the tool re-derives the entry key of every slot
- * from 0 to the ceiling, and it re-materializes both BIP85
- * candidates of each slot (REC-PLATE-1). The default ceiling is
- * RECOVER_CEILING slots, and the caller raises it (REC-PLATE-2).
+ * plate-alone path: the tool re-derives root from the plate, and it
+ * re-materializes both BIP85 candidates of every slot from 0 to the
+ * ceiling (REC-PLATE-1). It derives no entry key there. The default
+ * ceiling is RECOVER_CEILING slots, and the caller raises it
+ * (REC-PLATE-2).
  *
  * A recovered secret prints to the terminal, one entry at a time,
  * and it reaches no file (PROG-OUTPUT-1, PROG-OUTPUT-4). A mnemonic

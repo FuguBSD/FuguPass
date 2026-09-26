@@ -32,12 +32,13 @@
  * loses no secret (REC-RESTORE-5, VAULT-INDEX-5). A free pool slot
  * file maps to no entry, and the path skips it.
  *
- * recover_plate() is the plate-alone path (REC-PLATE). It re-derives
- * the entry key of every slot from 0 to the ceiling, and it
- * re-materializes the two BIP85 candidates of each slot
- * (REC-PLATE-1, KEY-BIP85). A scan past the last used slot is safe,
- * because the derivation is deterministic (REC-PLATE-3). The report
- * names the scanned range (REC-PLATE-2).
+ * recover_plate() is the plate-alone path (REC-PLATE). It takes root
+ * from scan_plate(), and it re-materializes the two BIP85 candidates
+ * of every slot from 0 to the ceiling (REC-PLATE-1, KEY-BIP85). It
+ * derives no entry key, because the plate alone opens no entry file.
+ * A scan past the last used slot is safe, because the derivation is
+ * deterministic (REC-PLATE-3). The report names the scanned range
+ * (REC-PLATE-2).
  *
  * A recovered secret prints to the terminal through tty_secret(),
  * one entry at a time, and no secret reaches a file (PROG-OUTPUT-1,

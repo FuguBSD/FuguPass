@@ -31,10 +31,11 @@ data with no oracle. The reveal flow returns by re-enrollment at a live oracle
 
 Plate-alone recovery starts from the plate and nothing else.
 
-- **REC-PLATE-1** — From the plate, the tool must re-derive the entry key of
-  every slot from 0 up to the scan ceiling ([KEY-ENTRY](keys.md#key-entry)). It
-  must re-materialize every derived secret from BIP85
-  ([KEY-BIP85](keys.md#key-bip85)).
+- **REC-PLATE-1** — From the plate, the tool must re-derive `root`
+  ([KEY-MASTER](keys.md#key-master)). It must re-materialize both BIP85
+  candidates of every slot from 0 up to the scan ceiling
+  ([KEY-BIP85](keys.md#key-bip85)). The plate-plus-files path re-derives the
+  entry key of a slot ([REC-VAULT](recovery.md#rec-vault)).
 - **REC-PLATE-2** — The scan ceiling is 1024 slots. The tool must report the
   scanned range, and the user can raise the ceiling.
 - **REC-PLATE-3** — A scan past the last used slot is safe and costs nothing:

@@ -668,9 +668,10 @@ enrollment unmatched, and that stale wrap recovers by a
 ceremony.
 .Pp
 A vault directory that holds no shared set takes the plate-alone path.
-The subcommand re-derives the entry key of every slot from 0 to the
-ceiling, and it re-materializes the two derived candidates of each
-slot: a password and a child mnemonic.
+The subcommand re-materializes the two derived candidates of every
+slot from 0 to the ceiling: a password and a child mnemonic.
+Each candidate derives from the master of the plate, and the
+subcommand derives no entry key.
 It prints the two candidates of each slot on the terminal, and it
 reports the scanned range on the standard output.
 Each candidate prints as text, because a candidate is no entry.
