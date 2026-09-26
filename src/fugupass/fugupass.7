@@ -1,0 +1,402 @@
+.\"	$OpenBSD$
+.\"
+.\" Copyright (c) 2026 Dick Olsson <hi@senzilla.io>
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate: September 26 2026 $
+.Dt FUGUPASS 7
+.Os
+.Sh NAME
+.Nm fugupass
+.Nd the limits of a FuguPass vault, and the operator runbook
+.Sh DESCRIPTION
+A FuguPass vault keeps each entry behind a master plate, a passphrase,
+and a set of oracles.
+This page states what an attacker gets from each artifact, where the
+protection ends, and what the owner and each oracle operator do.
+.Xr fugupass 1
+holds the commands, the files, and the reports.
+.Pp
+Five artifacts exist.
+The shared set is the ciphertext of the index and of each entry file.
+The disk of a machine holds the device factor and the wraps of that
+machine.
+The passphrase is in the head of the owner.
+Each oracle holds the records of the vault and its own static key.
+The master plate holds the master, and every other secret derives
+from it.
+.Pp
+Three limits hold in every case.
+A compromised machine sees every secret that it reveals while the
+compromise lasts.
+The oracle is blind: it gates, counts, and wipes, and it does not
+verify intent.
+The oracle sees the traffic pattern of each record, never the
+content.
+.Ss What an attacker gets
+A copy of the shared set alone gives nothing.
+Every file of the set is ciphertext, and the copy holds no device
+factor, no wrap, and no verifier.
+.Pp
+A copy of the shared set plus the passphrase, without the device
+factor, gives nothing.
+The attacker derives no client key without the device factor, so no
+oracle record answers, and the copy holds no wrap to unmask.
+.Pp
+The disk of a machine, without the passphrase, gives no offline
+passphrase attack, because the disk holds no passphrase verifier.
+The config file on that disk holds the plate check value.
+That value gives an offline test of a candidate master, at the 128
+bits of the master.
+The wraps add no offline test of their own.
+An online guess burns one of the three strikes of one record at one
+oracle, and the third wrong guess wipes that record there.
+With the default pool of 64 slots and one canary, one machine holds
+65 records at each oracle.
+Each oracle therefore gives 195 distinct guesses.
+The canary seal on the disk confirms a hit at one oracle, so a guess
+needs no quorum.
+The owner revokes the machine from the plate, and the revocation
+section below gives the count of locks.
+.Pp
+The disk of a machine plus the passphrase is the case that the
+oracles cannot see.
+Malware in an unlocked session is the same case.
+To each oracle, the attacker is the owner.
+The attacker reveals entries at its own pace, leaves one log line per
+entry at each oracle of its quorum, and burns no strike.
+The window closes when the owner reads the logs and revokes the
+machine from the plate.
+The detection section below gives the bound of that reading.
+.Pp
+The disk of a machine plus the records of one oracle, with the static
+key of that oracle, gives an offline passphrase verifier.
+The section on the offline floor below gives that case and the cases
+beyond it.
+.Pp
+The master plate gives everything.
+The attacker derives every secret and the keys of every machine, with
+no oracle and no passphrase.
+Physical custody of the plate is the one countermeasure.
+.Pp
+The loss of oracle hosts, by seizure, wipe, or failure, costs no
+data.
+While
+.Ar k
+oracles of the set stay live and reachable, reveals continue on any
+.Ar k
+of them, with no ceremony.
+With every position live, the set tolerates the loss of
+.Ar n No \- Ar k
+hosts.
+The seized masks alone are meaningless strings, and fewer than
+.Ar k
+breached oracles unmask nothing.
+With fewer than
+.Ar k
+oracles reachable, reveals pause until a plate ceremony enrolls the
+records again at replacement oracles.
+.Ss The offline floor
+The disk alone holds no passphrase verifier, so no offline passphrase
+attack exists against the disk.
+The floor of the design sits one breach beyond that claim.
+.Pp
+The verifier case: an attacker holds the disk of a machine and the
+records of one oracle, with its static key.
+That attacker searches the passphrase offline.
+The record stores the hash of the pin secret of that record, and the
+disk holds every salt.
+The cost of one guess is one run of
+.Xr bcrypt_pbkdf 3
+at the round count of the config file.
+That round count and the quality of the passphrase are the floor of
+the design in that case.
+With a threshold above 1, the verifier yields the passphrase alone.
+.Pp
+The loss case: the attacker holds the disk plus the records of
+.Ar k
+oracles, with their static keys.
+That yields full offline loss of the entries that those records
+cover.
+The attacker searches the passphrase against one record hash, unmasks
+.Ar k
+shares of each entry, and reconstructs every entry key with no live
+oracle.
+.Pp
+The middle case: the attacker holds the disk, the passphrase, and the
+records of fewer than
+.Ar k
+oracles.
+That attacker must query the remaining live oracles, online and
+logged.
+With
+.Ar j
+breached oracles, each entry costs
+.Ar k No \- Ar j
+requests at live oracles.
+.Pp
+A breached record of a retired or replaced position counts toward
+the
+.Ar k
+breaches until the owner destroys it.
+Such a record is still a passphrase verifier.
+The revocation section below names the paths that destroy it.
+.Ss What the oracle does not do
+No oracle operation freezes a record, delays a reveal, or raises an alarm.
+No oracle operation limits a caller beyond the three strikes of one record.
+The oracle answers each request that passes its checks, and it counts
+a wrong pin against one record.
+The three strikes of one record are the one limit, and the oracle
+applies nothing across records.
+Revocation is the one path that closes the window, and the revocation
+section below gives it.
+The design gives no protection against a person who forces the owner
+to unlock the vault.
+.Ss Detection
+The detection story rests on the log of the oracle, and on nothing
+else.
+The oracle writes one log line per request, with the outcome class of
+that request, and it writes a prominent line for each wipe.
+The outcome classes are ok_set, ok_get, ok_live, junk, reject, and
+error.
+A log line names no record at the default level, and this page
+promises no attribution of a line to a record.
+.Pp
+Detection is manual.
+No alert exists, and the oracle sends nothing.
+Read the logs of the oracles, or revocation never happens.
+.Pp
+The signals are the request count and the wipe lines.
+Each entry reveal is one request at each of the
+.Ar k
+oracles of the session quorum.
+Each session adds one canary request at each of them.
+The daily log volume of a quorum oracle therefore tracks the reveal
+volume of the machines that use it.
+An oracle outside the session quorum sees nothing.
+.Pp
+Malware that reveals a few entries per day looks like the owner in
+the logs.
+The attacker with the disk and the passphrase burns no strike.
+It leaves one line per entry per quorum oracle, the same as the
+owner.
+The logs show a volume, and the volume is the one signal.
+.Pp
+That attacker selects its own quorum, so one unread oracle can hide
+a whole quorum.
+The section on the log coverage below gives the count of oracles
+whose logs cover every possible quorum.
+.Ss The provisioning of each oracle
+The oracle of each position is one instance of any oracle that
+speaks protocol v2, and FuguOracle is the reference deployment.
+The operator of a FuguOracle instance runs it with
+.Xr fuguoracle 8 .
+Do these steps for each position of the set:
+.Bl -enum
+.It
+Get the two values of the oracle from its operator.
+They are the URL, and the static public key as the hex string that
+.Xr fuguoracle-keygen 8
+prints.
+The two values are sufficient for the FuguOracle deployment, because
+.Xr acme-client 1
+supplies its certificate.
+An oracle behind a private CA needs a third value, its root
+certificate.
+The client reads the trust anchors of
+.Pa /etc/ssl/cert.pem
+alone, so the root certificate must stand in that file on each
+machine.
+.It
+Check that the URL ends with no slash.
+The client appends /get_pin and /set_pin to it.
+.It
+Give the two values to
+.Cm create
+on the first machine, and to
+.Cm provision
+on every other machine.
+Use the same order and the same threshold on every machine.
+The order gives each oracle its position, and a position never
+changes its index.
+.It
+Keep the operator of each oracle reachable.
+The operator paths of a revocation need that operator.
+.El
+.Pp
+The client needs no TLS, because the envelope of each request
+authenticates the oracle.
+TLS at the oracle mitigates three transport risks: traffic metadata,
+availability, and envelope replay.
+Without TLS, a network observer sees which machine talks to which
+oracle and when.
+A network attacker drops or delays the answers.
+The oracle rejects a replayed envelope by its counter, and only an
+envelope captured before a re-enrollment replays.
+.Xr fugupass 1
+states the bound of that replay.
+Run each oracle behind TLS.
+.Ss The 2-of-3 example
+The example set is three oracles and the threshold 2.
+Each machine holds one record per slot at each of the three oracles,
+and one canary at each.
+A reveal takes any two reachable oracles, in the order of the config
+file, so the loss of one oracle host pauses nothing.
+One breached oracle plus one disk is the verifier case, and two
+breached oracles plus one disk is the loss case.
+A revocation of one machine needs locks at two oracles, and logs at
+two oracles cover every quorum.
+Put the three oracles under three operators, on three hosts, and in
+three places.
+One host that runs two of them is one stolen disk from the loss
+case.
+.Ss The log reading at each oracle
+The oracle logs with
+.Xr syslog 3
+at the facility LOG_DAEMON, under the name fuguoracle.
+The default
+.Xr syslog.conf 5
+of
+.Ox
+writes that facility to
+.Pa /var/log/daemon ,
+and the operator reads it on the host of the oracle.
+Do these steps at each oracle, each day:
+.Bl -enum
+.It
+Count the lines of the class ok_get since the last reading.
+Each entry reveal of a session that used this oracle is one such
+line, and each session adds one for the canary.
+Compare the count with the reveals that you made.
+.It
+Count the lines of the class junk.
+A junk line is a wrong passphrase, a missing record, a corrupt
+record, or a counter at or below the stored one.
+The line names none of them.
+Your own typos give junk lines, and a burst that you did not make is
+a guess attack.
+.It
+Look for a wipe line.
+A wipe line marks a record that took its third strike, and the oracle
+unlinked it.
+A wipe that you did not cause is an attack in progress against the
+machine that holds that record.
+.It
+Look for lines of the class ok_set that you did not make.
+Each enrollment of a ceremony gives one, and each replacement of a
+revocation gives one.
+.El
+.Pp
+A junk answer at your own machine names no cause.
+Before you conclude a wipe from it, check the clock of the machine,
+the counters file, and the passphrase.
+Then read the log of that oracle.
+A wipe stands there as a wipe line, and a low counter stands there as
+a junk line.
+.Pp
+A count that exceeds your own reveals is the one sign of malware on a
+machine, and a small excess looks like you.
+A revocation destroys no data, so revoke a machine on a doubt.
+.Ss The log coverage of every quorum
+The attacker with the disk and the passphrase selects any
+.Ar k
+reachable oracles as its quorum.
+Guaranteed log coverage therefore needs logs at enough live oracles
+that every possible quorum intersects them: at most
+.Ar k No \- 1
+live oracles stay unread.
+With the full set of
+.Ar n
+live oracles, the count is
+.Ar n No \- Ar k No + 1
+oracles.
+.Pp
+In the 2-of-3 example, three oracles are live and the threshold is
+2.
+The count is therefore 3 \- 2 + 1 = 2 oracles.
+Logs at two of the three leave one oracle unread, and every quorum of
+two holds one read oracle at least.
+Logs at one oracle alone leave two unread, and the attacker takes
+those two as its quorum and appears in no read log.
+.Pp
+Read the logs of
+.Ar n No \- Ar k No + 1
+oracles at least.
+A set with one operator per oracle needs the reading of that many
+operators, so keep that many of them reachable.
+.Ss The revocation
+A revocation denies a lost or compromised machine every quorum.
+Run
+.Cm revoke
+of
+.Xr fugupass 1
+on a surviving machine, from the plate.
+It locks the records of that machine at each chosen oracle: one wrong
+attempt per record, at the highest counter value.
+Lock at
+.Ar n No \- Ar k No + 1
+live oracles at least.
+At most
+.Ar k No \- 1
+then stay unlocked, and no quorum forms.
+In the 2-of-3 example, lock at two of the three.
+A lock denies the record to every caller, and the retired machine
+name keeps this vault from a later enrollment of it.
+.Xr fugupass 1
+states the outcome of a lock.
+.Pp
+Two operator paths exist beside the lock, and each needs a
+self-hosted or cooperative operator.
+The operator can stop the service, and a stop is reversible and
+affects every machine.
+The operator can delete the record files that the revocation kit
+names, and no oracle operation reverses a deletion.
+Derive the kit with
+.Cm kit
+of
+.Xr fugupass 1
+at the time of the revocation.
+A saved copy of the kit is a snapshot: it names no record of a later
+refill, so derive the kit again before a revocation.
+.Pp
+A lock retires the machine name at that oracle, and a replacement
+machine provisions under a new name.
+After the revocation, change the passphrase on every other machine
+with
+.Cm passwd ,
+because the lost machine can have leaked it.
+.Pp
+A restore of the records directory of an oracle from a filesystem
+backup rewinds every record of that oracle to the backup time.
+A restore from a backup made before a revocation revives the records
+that the revocation locked or deleted there.
+Each revived record returns with its old counter and its old strike
+count.
+The operator restores the records directory only after an
+incident review, and the owner then revokes the machine again at
+that oracle.
+.Sh SEE ALSO
+.Xr fugupass 1 ,
+.Xr bcrypt_pbkdf 3 ,
+.Xr syslog 3 ,
+.Xr syslog.conf 5 ,
+.Xr fuguoracle 8 ,
+.Xr fuguoracle-keygen 8
+.Sh AUTHORS
+.An Dick Olsson Aq Mt hi@senzilla.io
+.Sh CAVEATS
+This page assumes no oracle behavior beyond protocol v2 of
+FuguOracle.
+A claim beyond the bounds of this page misleads the owner about the
+window between a theft and its revocation.

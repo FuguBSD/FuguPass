@@ -322,10 +322,13 @@ int	oracle_canary_check(const struct oracle_ctx *, const unsigned char *,
  *	A replace of 0 is the lock: one get_pin under a random pin
  *	secret of arc4random(3). The attempt is wrong, it burns one
  *	strike, and the stored counter of the record takes the
- *	highest value. No later request of that record passes
- *	anti-replay, so the record answers junk to every caller, and
- *	no later set_pin passes (FuguOracle OPS-GET-2, FuguOracle
- *	OPS-SET-2). The record keeps its file at the oracle.
+ *	highest value. A lock at the first or the second strike
+ *	keeps the record file at the oracle (FuguOracle OPS-GET-5).
+ *	No later request of that record passes anti-replay, so the
+ *	record answers junk to every caller, and no later set_pin
+ *	passes (FuguOracle OPS-GET-2, FuguOracle OPS-SET-2). A lock
+ *	at the third strike wipes the record (FuguOracle OPS-GET-6),
+ *	and the oracle then accepts a set_pin of that record name.
  *
  *	A replace of 1 is the replacement: one set_pin under a random
  *	pin secret, with the fresh entropy of every enrollment

@@ -14,7 +14,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: September 25 2026 $
+.Dd $Mdocdate: September 26 2026 $
 .Dt FUGUPASS 1
 .Os
 .Sh NAME
@@ -103,6 +103,10 @@
 is the core process of FuguPass.
 It holds the vault, the one-shot subcommands, and the ceremonies.
 One vault is one directory of files.
+This page holds the commands, the files, and the reports.
+.Xr fugupass 7
+holds the limits of the design, and the runbook of the owner and of
+each oracle operator.
 .Pp
 .Nm
 reads each passphrase from the terminal.
@@ -151,6 +155,13 @@ It then verifies the passphrase at the canary record of each quorum
 oracle, one oracle at a time, and it stops at the first failure.
 The same answers open the index of the vault.
 .Pp
+The two reads of a ceremony stop a single typo, and no read stops
+the same typo twice.
+A ceremony that enrolls canaries under a mistyped passphrase accepts
+that passphrase at every canary of that ceremony.
+The entry records hold the other passphrase, so each entry reveal of
+a session under it burns one strike at each quorum oracle.
+.Pp
 A reveal of one entry sends one request to each quorum oracle.
 The session unmasks one share of each answer, it reconstructs the
 key of the entry, and it opens the entry file of that key.
@@ -162,6 +173,20 @@ One record is one slot at one oracle, and one session sends two
 requests at most to one record.
 The third wrong request destroys the key material of that record at
 the oracle.
+.Pp
+The load at the oracles is
+.Ar threshold
+requests per revealed entry, one at each quorum oracle.
+Each session adds one canary request at each quorum oracle.
+An enrollment sends one request per slot of this machine to each
+live oracle, at a creation, a provisioning, and a refill.
+A session that reveals ten entries therefore sends eleven requests
+to each quorum oracle.
+One oracle sees one request per event, and the multiplier spreads
+across the oracles.
+That load can exceed the workload assumption of a self-hosted
+oracle, a few requests per day.
+That is a posture mismatch, not a fault.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
@@ -382,6 +407,8 @@ Every machine of a vault must record the same ordered oracle list
 and the same threshold.
 A revocation from the plate derives the client keys of a machine
 from this list, so a divergent list breaks it.
+A divergent list on a ceremony machine enrolls records that no other
+flow addresses.
 The config file takes the default pool size, and the ceremony makes
 no pool.
 .Pp
@@ -419,6 +446,11 @@ variant of the ceremony.
 The ceremony writes the new config file before any enrollment, so a
 stopped ceremony leaves a config that names the target state.
 Run the same variant on each machine of the vault.
+Until every machine runs it, each machine reveals against its own
+recorded list and threshold.
+The offline-loss bound of the vault is then the threshold of the
+weakest machine, and the one-breach passphrase verifier stays as it
+is.
 .Pp
 An added oracle takes the next free position, and the loop enrolls
 the new pairs.
@@ -503,8 +535,6 @@ the machine at that position, and the canary record comes last.
 .Pp
 The subcommand derives the kit at each run, and no file of the
 vault holds a kit.
-A saved copy of the kit names no record of a later refill, so
-derive the kit again before a revocation.
 .Pp
 A run without the
 .Fl m
@@ -566,13 +596,15 @@ That value passes the replay check against every lower stored
 counter, so a raised counter cannot block the lock.
 The attempt burns one strike, and the stored counter of the record
 takes the highest value.
+A lock that is the first or the second strike of a record keeps
+its file at the oracle.
 No later request of that record passes the replay check.
 The record then answers junk to every caller, and every later
 enrollment of it fails with an HTTP error.
-The record keeps its file at the oracle.
+A lock that is the third strike wipes the record, and the oracle
+then accepts an enrollment of it.
 .Pp
-The lock retires the machine name at that oracle, because no
-enrollment under that name passes there again.
+The lock retires the machine name at that oracle.
 The subcommand marks the name retired in the machine registry of
 the index, and the mark never clears.
 A run of
@@ -614,12 +646,10 @@ directs the owner to
 .Cm passwd
 on every other machine.
 .Pp
-No oracle operation freezes a record, and no oracle operation
-reverses a lock or a replacement.
-An operator of a self-hosted oracle can stop the service, and can
-delete the record files that
-.Cm kit
-names.
+No oracle operation reverses a lock or a replacement.
+.Xr fugupass 7
+holds the paths of an oracle operator, and the runbook of a
+revocation.
 .It Xo
 .Cm recover
 .Op Fl w
@@ -829,6 +859,17 @@ live oracles or more.
 Each one writes the index with the slot consumed, and it writes the
 entry file after that.
 The records and the wraps of the slot stay as they are.
+.Pp
+FuguPass defines no sync protocol and no write coordination between
+machines.
+Two machines that create an entry at the same time can consume one
+slot twice.
+A later file copy then overwrites the file of one entry.
+A refill on a machine with a stale index can reserve the slot indexes
+that a refill of another machine reserved.
+Create each entry and run each refill on one machine,
+the minting machine.
+Copy the shared set from that machine to every other machine.
 .Sh ENVIRONMENT
 .Bl -tag -width HOME
 .It Ev HOME
@@ -869,6 +910,26 @@ The sealed file of one entry, and the sealed file of one free slot,
 each take the lowercase hex of the hash of the slot key as the file
 name.
 A listing of the vault directory therefore names no entry.
+.Pp
+The config file is plaintext, and it holds no secret.
+A copy of it leaks the oracle list, the threshold, the machine name,
+the plate check value, and the tunables.
+A holder of the plate check value can confirm that a candidate plate
+belongs to this vault.
+.Pp
+The counters file holds the last counter of each record of this
+machine, and it holds no secret.
+The next request of a record sends the wall clock or the stored
+value plus one, whichever is higher.
+The loss of the file is therefore safe.
+Three residual risks remain.
+A machine with a stale clock and a lost counters file sends a counter
+below the stored one.
+The oracle then answers junk, and it burns no strike.
+A junk answer names no cause: a low counter, a wrong passphrase, and
+a wiped record give the same bytes.
+An envelope captured before a re-enrollment replays until the stored
+counter passes its value.
 .Sh EXIT STATUS
 The
 .Nm
@@ -893,8 +954,8 @@ The static public key of the config file does not match the oracle
 that answered.
 Check the provisioning of that position, and the transport to it.
 .It the answer is junk
-The oracle answers junk for a wrong passphrase, for a missing or
-wiped record, and for a counter violation.
+The oracle answers junk for a wrong passphrase, for a missing, wiped
+or corrupt record, and for a counter violation.
 The response bytes hold the cause of none of them.
 .El
 .Pp
@@ -1019,6 +1080,7 @@ this vault, and the subcommand wrote no date.
 .Sh SEE ALSO
 .Xr fugupass-qr 1 ,
 .Xr fugupass-repl 1 ,
-.Xr fugupass-scan 1
+.Xr fugupass-scan 1 ,
+.Xr fugupass 7
 .Sh AUTHORS
 .An Dick Olsson Aq Mt hi@senzilla.io

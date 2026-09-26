@@ -322,8 +322,8 @@ return sub ($t)
 		'the report directs the owner to the passphrase change '
 		    . '(ORC-REVOKE-12)' );
 	is_deeply( records_of($t), $before,
-		'the lock removed no record file and added none: a locked '
-		    . 'record keeps its file (ORC-REVOKE-8)' );
+		'the lock removed no record file and added none: a lock at '
+		    . 'the first strike keeps the record file (ORC-REVOKE-8)' );
 	is( $t->read_file( $t->counters($plate) ),
 		$counters, 'the lock wrote no counter of another machine into '
 		    . 'the counters file of this machine (ORC-COUNTER-2)' );

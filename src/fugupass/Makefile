@@ -21,8 +21,10 @@
 # than one directory shares belongs to the archive of lib, and
 # src/lib/Makefile names it there.
 #
-# bsd.prog.mk derives the manual page name from PROG, so this
-# directory holds fugupass.1 and this file holds no MAN line.
+# bsd.prog.mk derives the manual page name from PROG, and that
+# default names fugupass.1 alone. This directory also holds
+# fugupass.7, the limits of the design and the operator runbook, so
+# MAN names the two pages.
 #
 # The archive of lib holds every other source of the program, and
 # this file links it with the library list of that archive.
@@ -38,6 +40,7 @@
 
 PROG=		fugupass
 SRCS=		fugupass.c
+MAN=		fugupass.1 fugupass.7
 
 .PATH:		${.CURDIR}/..
 

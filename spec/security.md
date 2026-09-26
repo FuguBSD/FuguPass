@@ -149,4 +149,7 @@ The word "freeze" names no oracle operation. The honest term is revocation, and
 [ORC-REVOKE](oracle.md#orc-revoke) lists the three paths that exist. The
 FuguOracle specification defines the junk, strike, and wipe semantics exactly. A
 claim beyond that behavior misleads the user about the window between theft and
-revocation.
+revocation. A test reads every manual page and every document under `docs/` for
+the words of the prohibited claims. It skips a record under `docs/research/`, as
+OVW-VOCABULARY-3 does, and it exempts each line that holds the words "No oracle
+operation".
