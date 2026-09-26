@@ -30,18 +30,23 @@ tokens, for example FuguOracle OPS-GET-4.
   that record must return junk. Every later `set_pin` of it must return an HTTP
   error.
 - **TEST-HARNESS-4** — The same suite must pass against every counterparty. The
-  suite must not branch on the counterparty.
+  suite must not branch on the counterparty. A leg must name the instance count
+  that it takes, and a counterparty must name the count that it hosts. The
+  harness must run each leg against every counterparty that hosts that count or
+  more.
 - **TEST-HARNESS-5** — The suite must run one leg against the documented example
   topology: three oracle instances with a threshold of two. The leg must prove
   the reveal on every two-oracle quorum, and the decrypt failure with one mask.
   It must prove the passphrase change over three oracles, and the provisioning
   loop ([ORC-QUORUM](oracle.md#orc-quorum), [ORC-ENROLL](oracle.md#orc-enroll)).
 - **TEST-HARNESS-6** — The harness must start and stop each counterparty with
-  `Fugu::Process`. It must never run a shell: a command is a list. It must wait
-  for readiness with `Fugu::Timeout::wait_until`. It must give each counterparty
-  its own record store, and must remove the store after the run. The start
-  recipe is data, so the suite does not branch on the counterparty
-  (TEST-HARNESS-4).
+  `Fugu::Process`. The host must run each command as a list through
+  `Fugu::Process`, and never through a host shell. A guest step is one list
+  command, `fuguvm ssh -- sh -c <script>`, and the shell runs inside the guest.
+  The harness must wait for readiness with `Fugu::Timeout::wait_until`. It must
+  give each counterparty its own record store, and must remove the store after
+  the run. The start recipe is data, so the suite does not branch on the
+  counterparty (TEST-HARNESS-4).
 - **TEST-HARNESS-7** — The FuguPass programs run on OpenBSD only, so on an other
   host every leg of the suite runs in an OpenBSD guest. The `fuguvm` tool must
   build and operate that guest, as a command only. The harness must copy the
@@ -49,7 +54,9 @@ tokens, for example FuguOracle OPS-GET-4.
   `fuguvm ssh`. The upstream Python counterparty can run on the host, and the
   client in the guest reaches it at the QEMU gateway address. A FuguOracle
   counterparty can run in the guest from the fuguoracle package, and the client
-  reaches it on a loopback port.
+  reaches it on a loopback port. The CGI program of that package reads one store
+  at one fixed path, so the package counterparty hosts one instance at that
+  store.
 - **TEST-HARNESS-8** — A test of an interactive ceremony must drive the terminal
   of the guest. `fuguvm expect` runs a caller-supplied expect(1) script against
   the serial console of the guest, so a test can answer a `readpassphrase(3)`
