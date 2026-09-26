@@ -18,6 +18,10 @@ tool bin gitleaks https://github.com/gitleaks/gitleaks/releases/download/v8.30.1
 # (PROG-PORT-3).
 runtime dist https://github.com/FuguBSD/Fugu/releases/latest/download/Fugu.tar.gz
 
+# t/fugupass/man.t lints each manual page with mandoc. macOS ships
+# mandoc in the base system, so Darwin.txt holds no such line.
+test pkg mandoc
+
 # make lint and make format read the Perl sources of bin/ and t/,
 # so the test environment carries the two gate modules.
 test cpan Perl::Critic
