@@ -323,7 +323,9 @@ detect_type(const char *plain, size_t len, enum entry_type *out)
  *	type of the line whose file name is the file of arg
  *	(VAULT-INDEX-2). The value holds the file name, the type name,
  *	the slot list, and the entry name, with one space between two
- *	parts. The entry name comes last, so it can hold a space.
+ *	parts. The entry name comes last, so it can hold a space. The
+ *	copy of the line leaves memory on every path, and the caller
+ *	erases the name and the type that it keeps (SEC-MEMORY-1).
  */
 static int
 idx_find_line(const struct vault_line *line, void *arg)
@@ -340,23 +342,25 @@ idx_find_line(const struct vault_line *line, void *arg)
 	buf[line->valuelen] = '\0';
 
 	if ((space = strchr(buf, ' ')) == NULL)
-		return 0;
+		goto out;
 	*space = '\0';
 	if (strcmp(buf, f->file) != 0)
-		return 0;
+		goto out;
 	type = &space[1];
 	if ((space = strchr(type, ' ')) == NULL)
-		return 0;
+		goto out;
 	*space = '\0';
 	slots = &space[1];
 	if ((space = strchr(slots, ' ')) == NULL)
-		return 0;
+		goto out;
 	name = &space[1];
 	if (strlen(type) >= sizeof(f->type) || strlen(name) >= sizeof(f->name))
-		return 0;
+		goto out;
 	strlcpy(f->type, type, sizeof(f->type));
 	strlcpy(f->name, name, sizeof(f->name));
 	f->found = 1;
+out:
+	explicit_bzero(buf, sizeof(buf));
 	return 0;
 }
 
@@ -460,7 +464,8 @@ out:
  *	text, the way show does (PROG-OUTPUT-2). A free pool slot file
  *	maps to no entry, so the call skips it and gives 0
  *	(ENTRY-POOL-9). The call gives -1 for a malformed file, for a
- *	failed render, and for a failed write.
+ *	failed render, and for a failed write. The entry name and the
+ *	type of the index leave memory on every path (SEC-MEMORY-1).
  */
 static int
 emit_entry(const char *idx, size_t idxlen, const char *name,
@@ -470,6 +475,7 @@ emit_entry(const char *idx, size_t idxlen, const char *name,
 	struct print_state	 ps;
 	enum entry_type		 type;
 	const char		*disp;
+	int			 rv = -1;
 
 	memset(&find, 0, sizeof(find));
 	find.file = name;
@@ -485,14 +491,16 @@ emit_entry(const char *idx, size_t idxlen, const char *name,
 	else {
 		if (vault_scan(plain, plainlen, vault_slot_fields, gate,
 		    NULL) == 0)
-			return 0;
-		warnx("%s: the file holds no entry of a known type", name);
-		return -1;
+			rv = 0;
+		else
+			warnx("%s: the file holds no entry of a known type",
+			    name);
+		goto out;
 	}
 
 	if (printf("%s\n", disp) < 0) {
 		warn("the recovery: the standard output");
-		return -1;
+		goto out;
 	}
 	memset(&ps, 0, sizeof(ps));
 	ps.code = type == ENTRY_TYPE_MNEMONIC && words == 0;
@@ -500,9 +508,12 @@ emit_entry(const char *idx, size_t idxlen, const char *name,
 	    &ps) != 0 || ps.fail != 0) {
 		if (ps.fail == 0)
 			warnx("%s: the file disagrees with its type", name);
-		return -1;
+		goto out;
 	}
-	return 0;
+	rv = 0;
+out:
+	explicit_bzero(&find, sizeof(find));
+	return rv;
 }
 
 /*
