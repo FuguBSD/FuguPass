@@ -47,7 +47,9 @@ tokens, for example FuguOracle OPS-GET-4.
   build and operate that guest, as a command only. The harness must copy the
   build and the vectors in with `fuguvm put`, and must run each step with
   `fuguvm ssh`. The upstream Python counterparty can run on the host, and the
-  client in the guest reaches it at the QEMU gateway address.
+  client in the guest reaches it at the QEMU gateway address. A FuguOracle
+  counterparty can run in the guest from the fuguoracle package, and the client
+  reaches it on a loopback port.
 - **TEST-HARNESS-8** — A test of an interactive ceremony must drive the terminal
   of the guest. `fuguvm expect` runs a caller-supplied expect(1) script against
   the serial console of the guest, so a test can answer a `readpassphrase(3)`

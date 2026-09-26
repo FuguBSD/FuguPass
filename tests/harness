@@ -125,10 +125,14 @@
 #		variable.
 #
 # The harness runs the legs against every available conforming
-# counterparty (TEST-HARNESS-1). The upstream blind_pin_server is the
-# one counterparty today (TEST-HARNESS-2). The FuguOracle leg is
-# absent, because the counterparty table holds no entry for a
-# FuguOracle deployment. That entry is the one part the leg needs.
+# counterparty (TEST-HARNESS-1). The upstream blind_pin_server runs
+# on the host, and a FuguOracle instance runs in the guest from the
+# fuguoracle package, on a loopback port (TEST-HARNESS-2). The CGI
+# program of that package reads one store at one fixed path, so the
+# package gives one instance, and that counterparty serves the legs
+# that its table entry names. The other legs take the three
+# instances of the example topology (TEST-HARNESS-5), so they run
+# against the upstream counterparty alone.
 
 use v5.36;
 
@@ -294,6 +298,13 @@ PYTHON
 # records_at_start of that instance, and records() gives the record
 # file names of the store of that instance of the moment. A leg
 # reads no member of this table.
+#
+# Three fields are optional. instances is the count of the instances
+# of the counterparty, and the default is $INSTANCES. legs names the
+# legs that run against it, and the default is every leg. store()
+# takes the counterparty and one instance, and it gives the size of
+# the store of that instance; a counterparty without it gives no
+# measurement, and the scaling leg skips it.
 my @COUNTERPARTY = (
 	{
 		name    => 'blind_pin_server',
@@ -303,6 +314,18 @@ my @COUNTERPARTY = (
 		release => \&upstream_release,
 		records => \&upstream_records,
 		wipe    => \&upstream_wipe
+	},
+	{
+		name      => 'fuguoracle',
+		instances => 1,
+		legs      => ['scale'],
+		probe     => \&oracle_probe,
+		start     => \&oracle_start,
+		stop      => \&oracle_stop,
+		release   => \&oracle_release,
+		records   => \&oracle_records,
+		wipe      => \&oracle_wipe,
+		store     => \&oracle_store
 	} );
 
 # The counterparties that run now. The end block stops each one, so
@@ -744,6 +767,158 @@ sub upstream_release ( $, $in )
 	return;
 }
 
+#
+# The FuguOracle counterparty. It runs in the guest from the
+# fuguoracle package, and the client reaches it on a loopback port
+# (TEST-HARNESS-2, TEST-HARNESS-7). The bring-up is the one of the
+# pkg-readme of the package: the static key of fuguoracle-keygen, a
+# server block of httpd(8) at the three endpoints, and the two
+# services under rcctl(8). The block listens on the loopback port
+# without TLS, as the upstream counterparty does: the envelope
+# authenticates the oracle (ORC-PROVISION-3).
+#
+# The CGI program reads its store at one fixed path of the /var/www
+# chroot, so the package gives one instance. The store of a run is
+# the pins directory of that path under a key of the run: the start
+# empties it, and the release empties it again (TEST-HARNESS-6).
+#
+
+# The store of the package, and the loopback port of the block.
+my $ORACLE_STORE = '/var/www/fuguoracle';
+my $ORACLE_PORT  = 8080;
+
+# The server block of the run. The example block of the package
+# listens on egress with TLS, and this one listens on the loopback
+# port without it. Each endpoint goes to the slowcgi(8) socket of
+# the fuguoracle rc.d script.
+my $ORACLE_HTTPD = <<"HTTPD";
+server "fuguoracle" {
+	listen on 127.0.0.1 port $ORACLE_PORT
+	connection max request body 4096
+	location "/get_pin" {
+		fastcgi {
+			socket "/run/fuguoracle.sock"
+			param SCRIPT_FILENAME "/cgi-bin/fuguoracle"
+		}
+	}
+	location "/set_pin" {
+		fastcgi {
+			socket "/run/fuguoracle.sock"
+			param SCRIPT_FILENAME "/cgi-bin/fuguoracle"
+		}
+	}
+	location "/" {
+		fastcgi {
+			socket "/run/fuguoracle.sock"
+			param SCRIPT_FILENAME "/cgi-bin/fuguoracle"
+		}
+	}
+	location match ".*" { block }
+}
+HTTPD
+
+sub oracle_probe ($)
+{
+	my $result = guest( 'test -x /usr/local/sbin/fuguoracle-keygen && '
+		    . "test -x /etc/rc.d/fuguoracle && test -d $ORACLE_STORE/pins" );
+	return undef if ( $result->{exit_code} // -1 ) == 0;
+	return 'the guest holds no fuguoracle package, or the guest is down';
+}
+
+sub oracle_start ( $, $in )
+{
+	if ( !defined $in->{store} ) {
+		$in->{store} = $ORACLE_STORE;
+		$in->{url}   = "http://127.0.0.1:$ORACLE_PORT";
+
+		# A key of the run, over an empty pins directory. The
+		# generator refuses an existing key, so the old one goes
+		# first. It prints the public key as 66 hex digits.
+		my $hex = guest_ok( 'fuguoracle-keygen',
+			"rm -f $ORACLE_STORE/private.key $ORACLE_STORE/pins/*.pin "
+			    . '&& fuguoracle-keygen' );
+		chomp $hex;
+		die "fuguoracle-keygen printed no public key: $hex\n"
+		    if $hex !~ /\A[0-9a-f]{66}\z/;
+		$in->{pubkey} = $hex;
+
+		# The server block. guest_script() writes lines, and a
+		# config is lines. httpd -n checks the file before the
+		# start.
+		my $path = guest_script( 'httpd.conf', split /\n/, $ORACLE_HTTPD );
+		guest_ok( 'httpd.conf', "cp $path /etc/httpd.conf && httpd -n" );
+	}
+
+	# rcctl(8) takes a running service as started, and a stopped
+	# one as stopped, so each call below holds on a restart.
+	guest_ok( 'the services',
+		'rcctl enable fuguoracle httpd && rcctl start fuguoracle && '
+		    . 'rcctl restart httpd' );
+	Fugu::Timeout::wait_until(
+		60, 1,
+		sub {
+			return ( guest("nc -z 127.0.0.1 $ORACLE_PORT")->{exit_code}
+				    // -1 ) == 0;
+		} )
+	    or die "the FuguOracle instance never answered on port "
+	    . "$ORACLE_PORT\n";
+
+	$in->{records_at_start} //= scalar( () = oracle_records( undef, $in ) );
+	return;
+}
+
+# oracle_records($cp, $in):
+#	The record file names of the store of this instance. The
+#	service holds one file of each record in the pins directory
+#	(FuguOracle STORE-KEYS-3).
+sub oracle_records ( $, $in )
+{
+	my $text = guest_ok( 'the records of the store', "ls -1 $in->{store}/pins" );
+	return grep { /\.pin\z/ } split /\n/, $text;
+}
+
+sub oracle_wipe ( $, $in, $name )
+{
+	guest_ok( "the wipe of $name", 'rm ' . _shq("$in->{store}/pins/$name") );
+	return;
+}
+
+sub oracle_stop ( $, $ )
+{
+	guest_ok( 'the stop of the services', 'rcctl stop httpd fuguoracle' );
+	return;
+}
+
+sub oracle_release ( $, $in )
+{
+	return if !defined $in->{store};
+	my $store = delete $in->{store};
+	guest_ok( 'the release of the store',
+		"rm -f $store/private.key $store/pins/*.pin /etc/httpd.conf && "
+		    . 'rcctl disable httpd fuguoracle' );
+	return;
+}
+
+# oracle_store($cp, $in):
+#	The size of the store of this instance: the directory of it,
+#	the disk use of the pins directory in kilobytes, and the
+#	record count. The count takes the .pin entries alone, as
+#	oracle_records() does: ls(1) of the superuser lists the lock
+#	file of the service as well.
+sub oracle_store ( $, $in )
+{
+	my $text = guest_ok( 'the size of the store',
+		"du -sk $in->{store}/pins && ls -1 $in->{store}/pins | "
+		    . q{grep '\.pin$' | wc -l} );
+	my ( $kilobytes, $records ) =
+	    $text =~ /\A\s*([0-9]+)\s+\S+\s+([0-9]+)\s*\z/
+	    or die "the store gave no size: $text";
+	return {
+		dir       => $in->{store},
+		kilobytes => $kilobytes + 0,
+		records   => $records + 0 };
+}
+
 package Counterparty;
 
 # The counterparty of one run. A leg reads it through these methods
@@ -759,13 +934,39 @@ sub new ( $class, $recipe )
 	return bless {
 		recipe   => $recipe,
 		name     => $recipe->{name},
-		instance => [ map { {} } 1 .. $main::INSTANCES ]
+		instance => [
+			map { {} } 1 .. ( $recipe->{instances} // $main::INSTANCES )
+		]
 	}, $class;
 }
 
 sub name ($self) { return $self->{name} }
 
 sub probe ($self) { return $self->{recipe}{probe}->($self) }
+
+# $cp->instances:
+#	The count of the instances of this counterparty.
+sub instances ($self) { return scalar @{ $self->{instance} } }
+
+# $cp->serves($leg):
+#	True when the leg $leg runs against this counterparty. An
+#	entry of the table without a leg list serves every leg.
+sub serves ( $self, $leg )
+{
+	my $legs = $self->{recipe}{legs} // return 1;
+	return scalar grep { $_ eq $leg } @$legs;
+}
+
+# $cp->store($oracle):
+#	The size of the store of one instance, and the default is the
+#	first one: 'dir', the directory of it, 'kilobytes', the disk
+#	use of the records, and 'records', the count of them. A
+#	counterparty whose entry holds no store step gives undef.
+sub store ( $self, $oracle = 1 )
+{
+	my $step = $self->{recipe}{store} // return undef;
+	return $step->( $self, $self->_instance($oracle) );
+}
 
 # $cp->start, $cp->stop, $cp->release:
 #	Every instance of this counterparty. start_oracle() and
@@ -1568,9 +1769,15 @@ for my $cp (@available) {
 		. ' answers at '
 		. join( ', ',
 			map { $cp->url($_) . ' (' . $cp->pubkey($_) . ')' }
-			    1 .. $INSTANCES ) );
+			    1 .. $cp->instances ) );
 
 	for my $leg (@legs) {
+		if ( !$cp->serves( $leg->{name} ) ) {
+			note( 'the counterparty '
+				. $cp->name
+				. " serves no leg $leg->{name}" );
+			next;
+		}
 		subtest $cp->name . ": $leg->{name}" => sub {
 			$leg->{run}->($cp);
 		};
