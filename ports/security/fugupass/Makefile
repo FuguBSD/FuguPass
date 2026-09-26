@@ -18,13 +18,14 @@ WANTLIB =	c crypto m qrencode secp256k1 ssl tls util
 
 # The core process links libsecp256k1, and the render helper links
 # libqrencode (PROG-PORT-3). The FuguOracle repository holds the
-# security/libsecp256k1 port until the ports tree takes it.
+# security/libsecp256k1 port.
 LIB_DEPENDS =	graphics/libqrencode \
 		security/libsecp256k1
 
-# The interface program is Perl on the Fugu library (PROG-PORT-3),
-# and the build runs src/unveil-paths of that library, so the port
-# takes p5-Fugu at build time as well.
+# The interface program is Perl on the Fugu library (PROG-PORT-3).
+# The build runs src/unveil-paths of this tree, and that script
+# loads Fugu::Sandbox of the library, so the port takes p5-Fugu at
+# build time as well.
 RUN_DEPENDS =	devel/p5-Fugu
 BUILD_DEPENDS =	${RUN_DEPENDS}
 
