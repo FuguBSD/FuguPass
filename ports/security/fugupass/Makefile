@@ -2,7 +2,7 @@ COMMENT =	password manager for any secret on seed-phrase standards
 
 GH_ACCOUNT =	FuguBSD
 GH_PROJECT =	FuguPass
-GH_TAGNAME =	v0.1.0
+GH_TAGNAME =	v0.1.1
 PKGNAME =	${DISTNAME:L}
 
 CATEGORIES =	security
