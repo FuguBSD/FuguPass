@@ -48,6 +48,14 @@ main(int argc, char *argv[])
 	 */
 	if (scan_nocore() != 0)
 		err(1, "the core limit of fugupass-scan");
+	/*
+	 * The standard output takes no buffer: the write of the 12
+	 * words goes from the line of scan_frames() to the pipe, and
+	 * no copy of the master stays in a buffer of the stream
+	 * (SEC-MEMORY-1).
+	 */
+	if (setvbuf(stdout, NULL, _IONBF, 0) != 0)
+		err(1, "the standard output of fugupass-scan");
 	if (argc == 2)
 		device = argv[1];
 	else if (argc != 1)
