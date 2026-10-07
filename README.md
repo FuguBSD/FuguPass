@@ -1,8 +1,8 @@
 # FuguPass
 
-A password manager for any secret, built on proven seed-phrase standards and
-air-gapped custody patterns. FuguPass derives every vault key from one master: a
-BIP39 mnemonic of 12 words on a SeedQR plate.
+A password manager for any secret, with one 12-word seed phrase as the master
+key. FuguPass derives every vault key from that BIP39 mnemonic on a SeedQR
+plate, after proven seed-phrase standards and air-gapped custody patterns.
 
 It seals every entry as one flat ciphertext file. Per-entry records at an
 ordered set of blind PIN oracles gate each reveal. The passphrase plus any k of
