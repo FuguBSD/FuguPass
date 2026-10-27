@@ -43,18 +43,22 @@ shape, the append-only numbers, the retire procedure, and the citation forms.
 Each document specifies one area of work. The code of a document prefixes the
 IDs of its units.
 
-| Code  | Document                       | Area                                  |
-| ----- | ------------------------------ | ------------------------------------- |
-| OVW   | [overview.md](overview.md)     | Purpose, scope, vocabulary, and risks |
-| KEY   | [keys.md](keys.md)             | Key derivation                        |
-| VAULT | [vault.md](vault.md)           | Vault storage                         |
-| ENTRY | [entries.md](entries.md)       | Entry model                           |
-| ORC   | [oracle.md](oracle.md)         | Blind-oracle client                   |
-| CER   | [ceremonies.md](ceremonies.md) | Ceremonies                            |
-| REC   | [recovery.md](recovery.md)     | Recovery                              |
-| PROG  | [programs.md](programs.md)     | Programs                              |
-| SEC   | [security.md](security.md)     | Security design                       |
-| TEST  | [testing.md](testing.md)       | Test strategy                         |
+| Code  | Document                                     | Area                                                                  |
+| ----- | -------------------------------------------- | --------------------------------------------------------------------- |
+| OVW   | [overview.md](overview.md)                   | Purpose, scope, vocabulary, and risks                                 |
+| KEY   | [keys.md](keys.md)                           | Key derivation                                                        |
+| VAULT | [vault.md](vault.md)                         | Vault storage                                                         |
+| ENTRY | [entries.md](entries.md)                     | Entry model                                                           |
+| ORC   | [oracle.md](oracle.md)                       | Blind-oracle client: conformance, provisioning, records, and counters |
+| ORC   | [oracle-enrollment.md](oracle-enrollment.md) | Oracle enrollment and the reveal                                      |
+| ORC   | [oracle-quorum.md](oracle-quorum.md)         | Oracle quorum, canary, and revocation                                 |
+| CER   | [ceremonies.md](ceremonies.md)               | Ceremonies                                                            |
+| REC   | [recovery.md](recovery.md)                   | Recovery                                                              |
+| PROG  | [programs.md](programs.md)                   | Programs: the split, the interface boundary, the port, and the build  |
+| PROG  | [programs-commands.md](programs-commands.md) | The REPL, the one-shot subcommands, and the secret output             |
+| PROG  | [programs-helpers.md](programs-helpers.md)   | The scan helper and the QR render helper                              |
+| SEC   | [security.md](security.md)                   | Security design                                                       |
+| TEST  | [testing.md](testing.md)                     | Test strategy                                                         |
 
 ## Governance documents
 

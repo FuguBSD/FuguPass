@@ -1,0 +1,280 @@
+.\"	$OpenBSD$
+.\"
+.\" Copyright (c) 2026 Dick Olsson <hi@senzilla.io>
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate: October 27 2026 $
+.Dt FUGUPASS-CEREMONY 7
+.Os
+.Sh NAME
+.Nm fugupass-ceremony
+.Nd the FuguPass ceremonies, the passphrase change, and their reports
+.Sh DESCRIPTION
+This page describes the steps of the ceremonies of
+.Xr fugupass 1 ,
+and of the passphrase change.
+.Xr fugupass 1
+holds the command line of each one.
+.Ss Vault creation
+.Cm create
+runs this ceremony.
+The ceremony writes these files of the vault directory: the device
+factor, the config file, the counters file, one canary seal of each
+oracle, and one index wrap of each oracle.
+It writes one sealed file of each slot of the pool, one wrap of each
+slot at each oracle, and the index.
+.Ss The passphrase change
+.Cm passwd
+runs the change.
+The change verifies the old passphrase at the canary record of
+each live oracle.
+It re-enrolls a canary that fails for record-side causes, after the
+check of the reachable oracles.
+A mistyped old passphrase stops the change at the first canary of
+that passphrase, and no record of the vault changes.
+A change that starts with fewer than the threshold of reachable
+oracles stops before the first record, and it writes no marker.
+.Pp
+The change takes each slot in turn, and each live oracle of a slot
+in the order of the config file.
+It opens the file of a slot through the quorum before the first
+record of that slot.
+A file that no quorum opens stops the change there, and the report
+names the slot and each quorum.
+The canary records come last.
+.Pp
+The change writes the change marker before the first record, and it
+removes the marker after the last one.
+While the marker exists, a session refuses each reveal, and the
+report names the
+.Cm resume
+subcommand.
+An unreachable live oracle leaves the change incomplete, and the
+marker stays.
+.Ss Pool refill
+.Cm refill
+runs this ceremony.
+The new slots take the slot indexes after the pool, so the ceremony
+writes no file of an existing entry.
+.Pp
+The index takes the new pool state after the last new slot.
+An interrupted refill therefore leaves the index as it was, and a
+second run is safe.
+The ceremony refuses to start while the change marker exists, and
+the report names the
+.Cm resume
+subcommand.
+.Ss Machine provisioning
+.Cm provision
+runs this ceremony.
+The registry of the index holds each provisioned machine name.
+A name that the registry marks retired stops the ceremony, and the
+report names a new machine name as the path.
+A name of the registry with no config of that name in the vault
+directory names another machine.
+The ceremony then warns that it replaces the records of that
+machine, and it reads a confirmation at the prompt
+.Dq Replace the records of that machine? Type yes: .
+The word
+.Dq yes
+alone confirms.
+A config of another machine name in the vault directory stops the
+ceremony, because two machines must not run from one machine-local
+set.
+.Pp
+The ceremony can run again on a provisioned machine.
+A re-run of the same command line verifies the passphrase at the
+canary record of each live oracle that holds a seal on this machine,
+before any enrollment.
+The check walks the canaries one oracle at a time, in list order.
+A canary that fails before any pass names the passphrase and the
+record-side causes of that oracle, and the ceremony stops there.
+It sends no request to a later canary, and no enrollment.
+A canary that fails after a pass at another oracle enrolls again,
+with a fresh seal and a fresh index wrap.
+The re-run writes a dead index wrap again.
+It enrolls the record of each slot that holds no wrap of this
+machine at an oracle, and a record with a wrap stays as it is.
+.Pp
+A command line that changes the oracle list or the threshold is a
+variant of the ceremony.
+The ceremony writes the new config file before any enrollment, so a
+stopped ceremony leaves a config that names the target state.
+Run the same variant on each machine of the vault.
+Until every machine runs it, each machine reveals against its own
+recorded list and threshold.
+The offline-loss bound of the vault is then the threshold of the
+weakest machine, and the one-breach passphrase verifier stays as it
+is.
+.Pp
+An added oracle takes the next free position, and the loop enrolls
+the new pairs.
+A position takes the word
+.Dq retired
+in place of an oracle argument, and the ceremony deletes this
+machine's wrap files, canary seal, and index wrap of that position.
+The same deletion precedes a replacement of a position: a new static
+public key and URL at the same index.
+The report then names the
+.Cm kit
+subcommand, so the owner destroys this vault's records at the
+departing oracle.
+A retired position keeps its index, and no oracle takes it again.
+The threshold must not exceed the count of the live positions.
+.Pp
+A threshold change re-splits every share with the new threshold, and
+it re-enrolls every record of this machine with a fresh mask.
+It writes the change marker before the first record, and it removes
+the marker after the last one.
+An interrupted threshold change re-runs from the start under
+.Cm provision .
+.Pp
+The ceremony refuses to start while the change marker exists, unless
+it is the threshold re-run or the
+.Fl a
+full run.
+The refusal names the
+.Cm resume
+subcommand for a passphrase change, and the
+.Cm provision
+subcommand for a threshold change.
+.Ss Revocation
+A lock of
+.Cm revoke
+retires the machine name at the oracle where it lands.
+The subcommand marks the name retired in the machine registry of
+the index, and the mark never clears.
+A run of
+.Cm provision
+under that name refuses, and a replacement machine takes a new
+name.
+.Pp
+To deny the lost machine a quorum, lock its records at enough
+oracles.
+With
+.Ar n
+live oracles and the threshold
+.Ar k ,
+locks at
+.Ar n No \- Ar k No + 1
+of them deny every quorum.
+The report states that count.
+.Pp
+The report names each oracle where the lock or the replacement
+landed, with the record count.
+It names each oracle where a request failed, with the state of the
+last failure, and the subcommand then exits 1.
+It names each position that got no complete lock, so the owner
+locks or deletes the remaining records of the machine there.
+.Cm kit
+names each record file for an operator.
+The passphrase of a lost machine may be known, so the report
+directs the owner to
+.Cm passwd
+on every other machine.
+.Pp
+No oracle operation reverses a lock or a replacement.
+.Xr fugupass 7
+holds the paths of an oracle operator, and the runbook of a
+revocation.
+.Ss Restore from a copy
+A copy of the shared set restores by a file copy onto a machine that
+keeps its own machine-local set.
+The counters and the wraps of the receiving machine stay valid,
+because they bind to that machine's records, and the copy does not
+touch them.
+A restore onto a fresh machine is a machine provisioning ceremony of
+.Cm provision .
+An entry that a machine creates after the backup date is absent from
+the copy.
+A derived entry re-derives from the plate, and a stored secret sealed
+after the backup date does not return from this copy.
+.Pp
+The index of the copy can be stale.
+A stale index degrades the entry names alone: every entry file still
+matches by the hash of its key, and it still opens under that key.
+.Cm recover
+then names each entry by its file name.
+A rewind of the machine-local set to an older copy leaves a later
+enrollment unmatched, and that stale wrap recovers by a
+.Cm provision
+ceremony.
+.Sh DIAGNOSTICS
+.Xr fugupass-session 7
+holds the four states of a failed request.
+.Pp
+The reports below name a state of the provisioning ceremony.
+.Bl -tag -width Ds
+.It this machine's records at oracle Ar i No are orphaned
+A retirement or a replacement of a position deletes this machine's
+files of that position.
+The records at that oracle stay, so the report names the
+.Cm kit
+subcommand, and the owner destroys them there.
+.It this ceremony re-enrolled every record of this machine and removed the change marker
+The
+.Fl a
+full run, or the re-run of a threshold change, completed and cleared
+the marker.
+The vault reveals again.
+.It the round count of this machine differs from the command line
+A re-run takes the config of this machine, and this ceremony changes
+no round count.
+A list change that breaks the position rule, a list change under a
+marker, and a change of the list and the threshold in one run each
+stop the ceremony as well, and the report names the cause.
+.El
+.Pp
+The reports below name a state of a revocation.
+.Bl -tag -width Ds
+.It the lock landed on Ar c No records of the machine Ar m No at oracle Ar i
+Every request of the machine at that oracle got an answer, and the
+records of it there answer junk from now on.
+A replacement reports the same line with the word
+.Dq replacement .
+.It the lock reached Ar c No of Ar t No records of the machine Ar m No at oracle Ar i
+A request failed at that oracle, and the next line names the state
+of the last failure.
+The records that no request reached stay as they were.
+Run the subcommand again for that position.
+.It the machine Ar m No is retired, and the registry of the index marks it
+A lock landed at one oracle at least.
+A replacement machine provisions under a new name.
+.It the records of the machine Ar m No remain at oracle Ar i
+That position got no complete lock.
+Lock or delete the records there, and
+.Cm kit
+names each record file.
+.It the registry of the index marks the machine Ar m No retired
+The
+.Cm provision
+subcommand refuses a retired name.
+Give a new machine name.
+.El
+.Pp
+The report below names the state of a plate verification.
+.Bl -tag -width Ds
+.It the plate check value differs from the config file
+The plate is a wrong plate, or a damaged plate.
+The config file of this machine holds the check value of the plate of
+this vault, and the subcommand wrote no date.
+.El
+.Sh SEE ALSO
+.Xr fugupass 1 ,
+.Xr fugupass-scan 1 ,
+.Xr fugupass 5 ,
+.Xr fugupass 7 ,
+.Xr fugupass-session 7
+.Sh AUTHORS
+.An Dick Olsson Aq Mt hi@senzilla.io

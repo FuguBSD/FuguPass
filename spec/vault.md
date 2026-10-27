@@ -72,8 +72,8 @@ A sealed file has this exact byte layout:
 - **VAULT-SEAL-3** — Every write must draw a fresh nonce from `arc4random(3)`
   (D-13).
 - **VAULT-SEAL-4** — The decrypt failure of the seal is the client's junk
-  detector ([ORC-REVEAL](oracle.md#orc-reveal)). No other failure signal exists
-  for a junk oracle answer.
+  detector ([ORC-REVEAL](oracle-enrollment.md#orc-reveal)). No other failure
+  signal exists for a junk oracle answer.
 - **VAULT-SEAL-5** — The AEAD must take the version byte as the additional
   authenticated data.
 
@@ -90,8 +90,8 @@ The client can never learn the cause from the seal
   of the index is a sequence of `field: value` lines. A line is the field name,
   one colon, one space, then the value. The canary check seals are exempt: their
   plaintext is the raw 32-byte canary check value
-  ([ORC-CANARY](oracle.md#orc-canary)). The counters file and the change marker
-  are plaintext files in the same line format.
+  ([ORC-CANARY](oracle-quorum.md#orc-canary)). The counters file and the change
+  marker are plaintext files in the same line format.
 - **VAULT-FORMAT-2** — The encoding is UTF-8, and every line ends with one line
   feed.
 - **VAULT-FORMAT-3** — A field name holds lowercase ASCII letters, digits, and
@@ -155,7 +155,7 @@ The change marker fields are:
 | `done` | one re-enrolled record per line: the record name `<e>-<i>` or `canary-<i>` |
 
 One marker file covers both change kinds: a passphrase change
-([ORC-ENROLL](oracle.md#orc-enroll)) and a threshold change
+([ORC-ENROLL](oracle-enrollment.md#orc-enroll)) and a threshold change
 ([CER-PROVISION](ceremonies.md#cer-provision)). The `kind` field names the
 change kind.
 
@@ -172,15 +172,15 @@ scanner discipline of the oracle service.
   type. It records each entry's slot list, the pool state, the machine registry,
   and the date of the last plate verification. The machine registry holds the
   provisioned machine names and marks each retired name
-  ([ORC-REVOKE](oracle.md#orc-revoke)). The entry file owns the type, and the
-  index holds a copy of it ([ENTRY-TYPES](entries.md#entry-types)). A command
-  reads the type of an entry from that copy, and it sends no oracle request for
-  the value.
+  ([ORC-REVOKE](oracle-quorum.md#orc-revoke)). The entry file owns the type, and
+  the index holds a copy of it ([ENTRY-TYPES](entries.md#entry-types)). A
+  command reads the type of an entry from that copy, and it sends no oracle
+  request for the value.
 - **VAULT-INDEX-3** — A daily read unwraps `k` index shares through this
   machine's index wraps and reconstructs `K_idx`
   ([KEY-SHARE](keys.md#key-share), [KEY-MASK](keys.md#key-mask)). The read uses
   the session's canary masks and sends no extra oracle request
-  ([ORC-CANARY](oracle.md#orc-canary)).
+  ([ORC-CANARY](oracle-quorum.md#orc-canary)).
 - **VAULT-INDEX-4** — A plate ceremony re-derives `K_idx` directly from `root`
   ([KEY-MASK](keys.md#key-mask)).
 - **VAULT-INDEX-5** — The loss of the index degrades convenience only. No
@@ -191,7 +191,7 @@ scanner discipline of the oracle service.
   not report this failure as a junk answer.
 - **VAULT-INDEX-7** — The revocation path must mark the revoked machine name
   retired in the registry, and the mark must never clear
-  ([ORC-REVOKE](oracle.md#orc-revoke)).
+  ([ORC-REVOKE](oracle-quorum.md#orc-revoke)).
 
 The index plaintext uses the line format
 ([VAULT-FORMAT](vault.md#vault-format)).
@@ -237,7 +237,7 @@ threshold. [KEY-PIN](keys.md#key-pin) governs the round count, and
 [KEY-MASTER](keys.md#key-master) defines the plate check value.
 [ENTRY-POOL](entries.md#entry-pool) sets the pool defaults, and
 [ENTRY-SHADOW](entries.md#entry-shadow) uses the audit age.
-[PROG-REPL](programs.md#prog-repl) uses the lock timeout.
+[PROG-REPL](programs-commands.md#prog-repl) uses the lock timeout.
 
 <a id="vault-atomic"></a>
 
@@ -271,8 +271,9 @@ STORE-ATOMIC-3).
   recommend one minting machine for entry creation and for refills
   ([OVW-RISKS](overview.md#ovw-risks)).
 - **VAULT-BACKUP-4** — The tool can render a vault file up to the one-code QR
-  capacity as one QR code for paper backup ([PROG-QR](programs.md#prog-qr)). The
-  tool must report a file that exceeds the capacity.
+  capacity as one QR code for paper backup
+  ([PROG-QR](programs-helpers.md#prog-qr)). The tool must report a file that
+  exceeds the capacity.
 
 A vault restored from an old copy stays able to address its oracle records,
 because the counter policy uses the wall clock

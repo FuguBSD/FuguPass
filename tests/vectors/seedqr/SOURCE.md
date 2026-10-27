@@ -3,9 +3,9 @@
 `vector4.picture` is test vector 4 of the SeedQR specification. It is the one
 public reference image of the handoff between FuguSeed and FuguPass. FuguSeed
 draws the code, and FuguPass renders the same modules
-([PROG-QR](../../../spec/programs.md#prog-qr), D-22). `src/regress/scan.c` reads
-the same picture, so the scan helper decodes what the render helper draws
-([PROG-SCAN](../../../spec/programs.md#prog-scan)).
+([PROG-QR](../../../spec/programs-helpers.md#prog-qr), D-22).
+`src/regress/scan.c` reads the same picture, so the scan helper decodes what the
+render helper draws ([PROG-SCAN](../../../spec/programs-helpers.md#prog-scan)).
 
 The three other pictures are the negative fixtures of the scan helper. Each one
 is a QR code that a decoder reads, and each one fails one gate of D-22.

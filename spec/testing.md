@@ -17,18 +17,18 @@ tokens, for example FuguOracle OPS-GET-4.
 - **TEST-HARNESS-3** — The suite must cover the client behavior end to end. The
   suite must cover the conformance rules ([ORC-CONFORM](oracle.md#orc-conform)).
   The suite must cover enrollment and re-enrollment
-  ([ORC-ENROLL](oracle.md#orc-enroll)). The suite must cover the reveal
-  ([ORC-REVEAL](oracle.md#orc-reveal)). The suite must cover the canary round
-  trip ([ORC-CANARY](oracle.md#orc-canary)). The suite must cover the counter
-  policy ([ORC-COUNTER](oracle.md#orc-counter)). The suite must cover the report
-  distinction between an HTTP error, a transport failure, an
-  oracle-authentication failure, and a junk answer
-  ([ORC-REVEAL](oracle.md#orc-reveal)). The suite must cover the quorum reveal
-  and the quorum failure reports ([ORC-QUORUM](oracle.md#orc-quorum)). The suite
-  must cover the lock of a revocation ([ORC-REVOKE](oracle.md#orc-revoke)).
-  After one wrong attempt at the revocation counter, every later `get_pin` of
-  that record must return junk. Every later `set_pin` of it must return an HTTP
-  error.
+  ([ORC-ENROLL](oracle-enrollment.md#orc-enroll)). The suite must cover the
+  reveal ([ORC-REVEAL](oracle-enrollment.md#orc-reveal)). The suite must cover
+  the canary round trip ([ORC-CANARY](oracle-quorum.md#orc-canary)). The suite
+  must cover the counter policy ([ORC-COUNTER](oracle.md#orc-counter)). The
+  suite must cover the report distinction between an HTTP error, a transport
+  failure, an oracle-authentication failure, and a junk answer
+  ([ORC-REVEAL](oracle-enrollment.md#orc-reveal)). The suite must cover the
+  quorum reveal and the quorum failure reports
+  ([ORC-QUORUM](oracle-quorum.md#orc-quorum)). The suite must cover the lock of
+  a revocation ([ORC-REVOKE](oracle-quorum.md#orc-revoke)). After one wrong
+  attempt at the revocation counter, every later `get_pin` of that record must
+  return junk. Every later `set_pin` of it must return an HTTP error.
 - **TEST-HARNESS-4** — The same suite must pass against every counterparty. The
   suite must not branch on the counterparty. A leg that takes more than one
   instance must name the count, and a leg that names none takes one. A
@@ -38,7 +38,8 @@ tokens, for example FuguOracle OPS-GET-4.
   topology: three oracle instances with a threshold of two. The leg must prove
   the reveal on every two-oracle quorum, and the decrypt failure with one mask.
   It must prove the passphrase change over three oracles, and the provisioning
-  loop ([ORC-QUORUM](oracle.md#orc-quorum), [ORC-ENROLL](oracle.md#orc-enroll)).
+  loop ([ORC-QUORUM](oracle-quorum.md#orc-quorum),
+  [ORC-ENROLL](oracle-enrollment.md#orc-enroll)).
 - **TEST-HARNESS-6** — The harness must start and stop each counterparty with
   `Fugu::Process`. The host must run each command as a list through
   `Fugu::Process`, and never through a host shell. A guest step is one list
@@ -185,9 +186,9 @@ the pool size and with the machine count.
   decrypt, and a decrypt failure on a modified byte
   ([VAULT-SEAL](vault.md#vault-seal)).
 - **TEST-KAT-3** — Standard SeedQR vectors for 12 words must match the
-  SeedSigner specification ([PROG-SCAN](programs.md#prog-scan)). Negative
-  vectors must cover a Compact SeedQR and a 24-word Standard SeedQR, and the
-  scan helper must reject both (D-22).
+  SeedSigner specification ([PROG-SCAN](programs-helpers.md#prog-scan)).
+  Negative vectors must cover a Compact SeedQR and a 24-word Standard SeedQR,
+  and the scan helper must reject both (D-22).
 - **TEST-KAT-4** — A fixed test master must provide a vector for every
   derivation label in [keys.md](keys.md).
 - **TEST-KAT-5** — The repository must hold the vectors. The known-answer tests

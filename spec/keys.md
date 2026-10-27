@@ -129,13 +129,13 @@ oracle and no passphrase. The entry file name is the lowercase hex of `H(K_e)`
   records it, and the revocation kit carries it. The machine name is not secret.
   The machine name holds lowercase ASCII letters, digits, and hyphens only, with
   1 to 64 bytes. A retired name is not reused
-  ([ORC-REVOKE](oracle.md#orc-revoke)).
+  ([ORC-REVOKE](oracle-quorum.md#orc-revoke)).
 - **KEY-DEVICE-4** — The plate regenerates `X` for any machine name.
 
 KEY-DEVICE-4 carries provisioning and revocation (D-10). A plate ceremony
 re-derives a stolen machine's `X` and client keys on a surviving machine. The
 owner revokes the stolen machine's records from the plate alone
-([ORC-REVOKE](oracle.md#orc-revoke)).
+([ORC-REVOKE](oracle-quorum.md#orc-revoke)).
 
 <a id="key-client"></a>
 
@@ -215,7 +215,7 @@ records the round-count calibration.
 - **KEY-SHARE-8** — A share must not persist on disk, and the tool must not
   retain a share between uses. Every use re-derives the coefficients from the
   split secret and evaluates the polynomial at the oracle index
-  ([ORC-ENROLL](oracle.md#orc-enroll),
+  ([ORC-ENROLL](oracle-enrollment.md#orc-enroll),
   [CER-PROVISION](ceremonies.md#cer-provision)).
 - **KEY-SHARE-9** — A written soundness analysis of the deterministic
   coefficients gates the custody layer ([TEST-SPLIT](testing.md#test-split),
@@ -250,7 +250,7 @@ own analysis ([TEST-SPLIT](testing.md#test-split)).
 - **KEY-MASK-5** — The seal key of the canary check of oracle `i` is
   `f(s_canary_i, "fugupass/v1/canary-check" ‖ i)`, where `s_canary_i` is that
   machine's canary mask at oracle `i`. The canary check value seals under this
-  key ([ORC-CANARY](oracle.md#orc-canary)).
+  key ([ORC-CANARY](oracle-quorum.md#orc-canary)).
 - **KEY-MASK-6** — The index key is `K_idx = f(root, "fugupass/v1/index-key")`.
   The index file is a shared ciphertext object sealed under `K_idx`
   ([VAULT-INDEX](vault.md#vault-index)).
@@ -270,7 +270,7 @@ own analysis ([TEST-SPLIT](testing.md#test-split)).
 `c_ei` alone is ciphertext, and `s_ei` alone is a meaningless string at the
 oracle (D-06). A daily index read unwraps `k` index shares through the session's
 canary masks. The read needs no oracle request beyond the session's `k` canary
-`get_pin` requests ([ORC-CANARY](oracle.md#orc-canary)). The composition
+`get_pin` requests ([ORC-CANARY](oracle-quorum.md#orc-canary)). The composition
 `c_ei = share(K_e, i) ⊕ wk_ei` uses the oracle answer beyond the protocol's
 analyzed purpose, and the deterministic split replaces the uniform-coefficient
 assumption. A written analysis gates each construction

@@ -5,8 +5,8 @@ recovery root: the SeedQR plate holds the master `M`. [keys.md](keys.md) defines
 the notation `M`, `root`, `f(k, label)`, `H(x)`, `K_e`, `K_idx`, the slot index
 `e`, the oracle count `n`, and the threshold `k`. This document cites FuguOracle
 rules as prose tokens, for example FuguOracle OPS-SET-3.
-[PROG-SCAN](programs.md#prog-scan) states the video-device requirement of a
-plate scan.
+[PROG-SCAN](programs-helpers.md#prog-scan) states the video-device requirement
+of a plate scan.
 
 <a id="rec-principle"></a>
 
@@ -47,7 +47,7 @@ Plate-alone recovery starts from the plate and nothing else.
   limit.
 - **REC-PLATE-6** — The plate-alone scan must print each candidate as text. A
   candidate is no entry, and the QR default of PROG-OUTPUT-2
-  ([PROG-OUTPUT](programs.md#prog-output)) applies to an entry.
+  ([PROG-OUTPUT](programs-commands.md#prog-output)) applies to an entry.
 
 The ceiling of 1024 slots covers sixteen ceremonies at the default pool size of
 64 slots ([ENTRY-POOL](entries.md#entry-pool)). The paper QR export and the
@@ -69,7 +69,7 @@ Plate-plus-files recovery starts from the plate and a copy of the shared set.
   no oracle and no passphrase ([KEY-MASK](keys.md#key-mask)).
 - **REC-VAULT-4** — A lost passphrase loses no data. The plate restores the
   entries and the index, and a plate ceremony re-enrolls this machine's records
-  under a new passphrase ([ORC-ENROLL](oracle.md#orc-enroll)).
+  under a new passphrase ([ORC-ENROLL](oracle-enrollment.md#orc-enroll)).
 
 A stored entry has no derivation, so this path is its restore path
 ([ENTRY-MODEL](entries.md#entry-model)). A `set_pin` needs no old passphrase, so
@@ -93,7 +93,7 @@ of the oracle static key.
   the wraps, in the loop of [CER-PROVISION](ceremonies.md#cer-provision). A
   record locked by revocation is outside this unit: its machine name is retired
   at that oracle, and the tool never re-enrolls it
-  ([ORC-REVOKE](oracle.md#orc-revoke)).
+  ([ORC-REVOKE](oracle-quorum.md#orc-revoke)).
 - **REC-WIPE-3** — A fresh `set_pin` creates a fresh record with fresh key
   material, and no old mask returns (FuguOracle OPS-SET-3 and FuguOracle
   OPS-SET-4).
@@ -103,7 +103,7 @@ of the oracle static key.
   continue while `k` oracles of the set stay live and reachable.
 - **REC-WIPE-5** — Reveals continue while `k` oracles of the set stay live and
   reachable: any `k` reachable oracles serve every reveal, with no ceremony
-  ([ORC-QUORUM](oracle.md#orc-quorum)). With every position live, the set
+  ([ORC-QUORUM](oracle-quorum.md#orc-quorum)). With every position live, the set
   tolerates the loss, seizure, or wipe of up to `n − k` oracles. Reveals pause
   while fewer than `k` oracles are reachable. After a loss, seizure, or wipe
   that leaves fewer than `k` oracles reachable, a plate ceremony re-enrolls at

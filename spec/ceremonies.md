@@ -6,8 +6,8 @@ present. Between ceremonies the master exists only on plates (D-12). The
 notation `M`, `root`, `f(k, label)`, `K_e`, `K_idx`, `c_ei`, `share(S, i)`, the
 slot index `e`, the oracle index `i`, and the threshold `k` comes from
 [keys.md](keys.md). The recovery procedures are in [recovery.md](recovery.md).
-[PROG-SCAN](programs.md#prog-scan) states the video-device requirement of a
-plate scan.
+[PROG-SCAN](programs-helpers.md#prog-scan) states the video-device requirement
+of a plate scan.
 
 <a id="cer-create"></a>
 
@@ -29,8 +29,8 @@ are the steps of the ceremony. The tool must run the steps in rule order.
   `readpassphrase(3)` and must require a match.
 - **CER-CREATE-5** — The tool must enroll this machine's canary record at each
   oracle and must verify each canary with one immediate `get_pin` round trip
-  ([ORC-CANARY](oracle.md#orc-canary)). The tool must then seal each oracle's
-  canary check value. The tool must derive `K_idx`, must split it
+  ([ORC-CANARY](oracle-quorum.md#orc-canary)). The tool must then seal each
+  oracle's canary check value. The tool must derive `K_idx`, must split it
   ([KEY-SHARE](keys.md#key-share)), and must persist this machine's index wrap
   of each oracle ([KEY-MASK](keys.md#key-mask)).
 - **CER-CREATE-6** — The tool must run the slot loop for each slot of the pool
@@ -38,9 +38,9 @@ are the steps of the ceremony. The tool must run the steps in rule order.
   order. The tool must derive `K_e`. The tool must materialize both BIP85
   candidates ([KEY-BIP85](keys.md#key-bip85)). Then the tool must run these
   steps for each oracle in list order. It must enroll this machine's record with
-  `set_pin` ([ORC-ENROLL](oracle.md#orc-enroll)), and must verify the HTTP
-  success of the enrollment. It must compute and persist this machine's wrap
-  `c_ei` from the re-derived share ([KEY-SHARE](keys.md#key-share),
+  `set_pin` ([ORC-ENROLL](oracle-enrollment.md#orc-enroll)), and must verify the
+  HTTP success of the enrollment. It must compute and persist this machine's
+  wrap `c_ei` from the re-derived share ([KEY-SHARE](keys.md#key-share),
   [KEY-MASK](keys.md#key-mask)). Last, the tool must seal the slot file under
   `K_e`. An enrollment failure at any oracle must stop the ceremony with a
   report that names the oracle.
@@ -53,9 +53,10 @@ Every `set_pin` failure is an HTTP error (FuguOracle OPS-SET-7), so the slot
 loop verifies each enrollment by its HTTP status. A stopped slot loop leaves a
 slot with wraps at some oracles only. An oracle addition and a crash between a
 `set_pin` and its wrap write create the same partial-wrap state
-([ORC-ENROLL](oracle.md#orc-enroll)). A stopped creation or refill runs again. A
-new `set_pin` replaces the record's key material at the oracle, and the tool
-recomputes the wrap from the re-derived share. The re-run is therefore safe.
+([ORC-ENROLL](oracle-enrollment.md#orc-enroll)). A stopped creation or refill
+runs again. A new `set_pin` replaces the record's key material at the oracle,
+and the tool recomputes the wrap from the re-derived share. The re-run is
+therefore safe.
 
 <a id="cer-refill"></a>
 
@@ -81,7 +82,7 @@ A pool refill extends the pool of free slots on one machine.
   ceremony.
 - **CER-REFILL-7** — The tool must read the passphrase with `readpassphrase(3)`.
   It must verify the passphrase against the canary record of each live oracle
-  before the slot loop ([ORC-CANARY](oracle.md#orc-canary)).
+  before the slot loop ([ORC-CANARY](oracle-quorum.md#orc-canary)).
 - **CER-REFILL-8** — While the change marker exists, the refill ceremony must
   refuse to start (CER-PROVISION-18).
 
@@ -111,14 +112,14 @@ run these steps in rule order.
   `readpassphrase(3)` and must require a match.
 - **CER-PROVISION-6** — The tool must enroll this machine's canary record at
   each oracle and must verify each canary with one immediate `get_pin` round
-  trip ([ORC-CANARY](oracle.md#orc-canary)). The tool must then seal each
+  trip ([ORC-CANARY](oracle-quorum.md#orc-canary)). The tool must then seal each
   oracle's canary check value. The tool must derive `K_idx`, must split it
   ([KEY-SHARE](keys.md#key-share)), and must persist this machine's index wrap
   of each oracle ([KEY-MASK](keys.md#key-mask)).
 - **CER-PROVISION-7** — For each existing slot, the tool must derive `K_e`. For
   each live oracle in list order, it must enroll this machine's record with
-  `set_pin` ([ORC-ENROLL](oracle.md#orc-enroll)). It must compute and persist
-  this machine's wrap `c_ei` from the re-derived share
+  `set_pin` ([ORC-ENROLL](oracle-enrollment.md#orc-enroll)). It must compute and
+  persist this machine's wrap `c_ei` from the re-derived share
   ([KEY-SHARE](keys.md#key-share)). The cost is one `set_pin` request per live
   oracle, per slot.
 - **CER-PROVISION-8** — The tool must register this machine's name in the index
@@ -127,12 +128,12 @@ run these steps in rule order.
   every share, and every mask with `explicit_bzero(3)`.
 - **CER-PROVISION-11** — Each machine holds its own records and wraps. The owner
   can revoke one machine and keep every other machine in service (D-07,
-  [ORC-REVOKE](oracle.md#orc-revoke)).
+  [ORC-REVOKE](oracle-quorum.md#orc-revoke)).
 - **CER-PROVISION-12** — Machine provisioning can run again on a provisioned
   machine. On such a machine, the loop of CER-PROVISION-7 covers each
   slot-oracle pair for which this machine holds no wrap. The tool re-wraps each
-  dead index wrap ([ORC-CANARY](oracle.md#orc-canary)), and it re-seals each
-  stale canary check value. A retired machine name never runs this ceremony
+  dead index wrap ([ORC-CANARY](oracle-quorum.md#orc-canary)), and it re-seals
+  each stale canary check value. A retired machine name never runs this ceremony
   (CER-PROVISION-3).
 - **CER-PROVISION-13** — A change of the oracle list or of the threshold is this
   ceremony, run on each machine of the vault. The ceremony records the new list
@@ -182,14 +183,14 @@ run these steps in rule order.
   so nothing is lost ([KEY-SHARE](keys.md#key-share)). At a retirement, the
   ceremony report must direct the owner to destroy this vault's records at the
   departing oracle. The owner derives the revocation kit
-  ([ORC-REVOKE](oracle.md#orc-revoke)) to name those records.
+  ([ORC-REVOKE](oracle-quorum.md#orc-revoke)) to name those records.
 - **CER-PROVISION-17** — A full re-enrollment run re-enrolls every record of
   this machine under one passphrase. It runs the loop of CER-PROVISION-7 over
   every slot and every live oracle, with a fresh `set_pin` per record and every
   wrap recomputed. It enrolls the canary and the index wrap of each live oracle
   per CER-PROVISION-6. The run must remove the change marker at the end
-  ([ORC-ENROLL](oracle.md#orc-enroll)). The full run overrides the no-wrap
-  criterion of CER-PROVISION-12.
+  ([ORC-ENROLL](oracle-enrollment.md#orc-enroll)). The full run overrides the
+  no-wrap criterion of CER-PROVISION-12.
 - **CER-PROVISION-18** — While the change marker exists, a ceremony that enrolls
   or re-enrolls a record must refuse to start. The refusal must name the resume
   command for the kind `passphrase`, or the ceremony re-run for the kind
@@ -220,8 +221,9 @@ Plate verification confirms that a plate decodes to the master of this vault.
   ([VAULT-CONFIG](vault.md#vault-config)).
 - **CER-VERIFY-2** — Verification must not touch any oracle record and must not
   reveal any secret.
-- **CER-VERIFY-3** — The audit command ([PROG-REPL](programs.md#prog-repl)) must
-  report the date of the last plate verification.
+- **CER-VERIFY-3** — The audit command
+  ([PROG-REPL](programs-commands.md#prog-repl)) must report the date of the last
+  plate verification.
 - **CER-VERIFY-4** — The tool must erase `M`, `root`, and `K_idx` with
   `explicit_bzero(3)` at the end of the verification.
 - **CER-VERIFY-5** — On a match, the tool must record the verification date in

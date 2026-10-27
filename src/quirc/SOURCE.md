@@ -1,7 +1,7 @@
 # The vendored QR decoder
 
 This directory holds `quirc`, the QR decoder of `fugupass-scan`
-([PROG-SCAN](../../spec/programs.md#prog-scan),
+([PROG-SCAN](../../spec/programs-helpers.md#prog-scan),
 [PROG-BUILD](../../spec/programs.md#prog-build)). The six files below are the
 `lib/` directory of the release, byte for byte. `LICENSE` is the license file of
 the same release.

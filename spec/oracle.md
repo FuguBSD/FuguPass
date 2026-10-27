@@ -7,6 +7,11 @@ notation `K_e`, `ck_ei`, `pin_ei`, `s_ei`, `c_ei`, `s_canary_i`, `c_idx_i`,
 `K_idx`, `share(S, i)`, `n`, and `k`. This document cites FuguOracle rules as
 prose tokens, for example FuguOracle OPS-GET-4.
 
+Two more documents specify the oracle client.
+[oracle-enrollment.md](oracle-enrollment.md) specifies the enrollment and the
+reveal. [oracle-quorum.md](oracle-quorum.md) specifies the quorum, the canary,
+and the revocation.
+
 <a id="orc-conform"></a>
 
 ## Protocol conformance
@@ -78,15 +83,16 @@ The interop harness proves conformance against every available conforming oracle
   shares re-derive from the plate, so nothing is lost
   ([KEY-SHARE](keys.md#key-share)). The documentation must direct the owner to
   destroy this vault's records at the departing oracle. The owner derives the
-  revocation kit ([ORC-REVOKE](oracle.md#orc-revoke)) to name those records.
+  revocation kit ([ORC-REVOKE](oracle-quorum.md#orc-revoke)) to name those
+  records.
 - **ORC-PROVISION-7** — A change of the oracle list or of the threshold is a
   plate ceremony ([CER-PROVISION](ceremonies.md#cer-provision)).
 - **ORC-PROVISION-8** — The documentation must state that every machine of a
   vault must record the same ordered oracle list and the same threshold.
   Revocation from the plate re-derives a stolen machine's client keys from this
-  list ([ORC-REVOKE](oracle.md#orc-revoke)). A divergent list therefore breaks
-  revocation. A divergent list on a ceremony machine enrolls records that other
-  flows cannot address.
+  list ([ORC-REVOKE](oracle-quorum.md#orc-revoke)). A divergent list therefore
+  breaks revocation. A divergent list on a ceremony machine enrolls records that
+  other flows cannot address.
 - **ORC-PROVISION-9** — A live position is a config position that is not retired
   ([VAULT-CONFIG](vault.md#vault-config)). A live oracle is the oracle of a live
   position. A reachable oracle is a live oracle that answers.
@@ -98,7 +104,7 @@ The interop harness proves conformance against every available conforming oracle
 - **ORC-RECORDS-1** — Each entry must use one oracle record at each oracle of
   the set, on each machine (D-07).
 - **ORC-RECORDS-2** — Each machine must hold one canary record at each oracle
-  ([ORC-CANARY](oracle.md#orc-canary)).
+  ([ORC-CANARY](oracle-quorum.md#orc-canary)).
 - **ORC-RECORDS-3** — To the oracle, every record is an independent client.
   FuguOracle OVW-PURPOSE-4 permits many clients on one instance. Each record
   burns its own three strikes, so a wipe destroys one record and touches no
@@ -124,7 +130,7 @@ check in [TEST-CALIBRATE](testing.md#test-calibrate) records the result.
 - **ORC-COUNTER-1** — The counter sent for a record must be
   `max(wall-clock Unix seconds, stored + 1)`, encoded as uint32 LE (FuguOracle
   PROTO-ENVELOPE). A revocation request is the one exception
-  ([ORC-REVOKE](oracle.md#orc-revoke)).
+  ([ORC-REVOKE](oracle-quorum.md#orc-revoke)).
 - **ORC-COUNTER-2** — The client must persist the last-sent counter of each
   record in the plaintext counters file, keyed by record name. The record names
   are `<e>-<i>` and `canary-<i>` ([VAULT-FORMAT](vault.md#vault-format)). The
@@ -135,7 +141,7 @@ check in [TEST-CALIBRATE](testing.md#test-calibrate) records the result.
 - **ORC-COUNTER-4** — A vault restored from an old copy must stay able to
   address its records. The wall clock exceeds any stale stored counter.
 - **ORC-COUNTER-5** — The client must not send the counter value `0xFFFFFFFF`,
-  except in a revocation request ([ORC-REVOKE](oracle.md#orc-revoke)). A
+  except in a revocation request ([ORC-REVOKE](oracle-quorum.md#orc-revoke)). A
   persisted counter of `0xFFFFFFFF` leaves no strictly greater value, so the
   record becomes unaddressable by any later request (FuguOracle OPS-GET-2,
   FuguOracle OPS-SET-2). The Unix-seconds scheme stays below this value until
@@ -155,347 +161,3 @@ states what to check before the operator concludes a wipe
 ([SEC-DETECT](security.md#sec-detect)). Envelopes captured before a
 re-enrollment stay replayable until the stored counter passes their values. This
 is an accepted FuguOracle transport risk, and TLS mitigates it.
-
-<a id="orc-enroll"></a>
-
-## Enrollment and re-enrollment
-
-- **ORC-ENROLL-1** — The enrollment of a record at oracle `i` is one `set_pin`
-  request under the record's client key `ck_ei`, with `pin_ei` as `pin_secret`.
-  The response is the mask `s_ei` (FuguOracle OPS-SET-5). The enrollment of a
-  slot covers each live oracle of the set: one `set_pin` request per live
-  oracle.
-- **ORC-ENROLL-2** — Every `set_pin` failure returns an HTTP error status
-  (FuguOracle OPS-SET-7). The client must verify the HTTP success of every
-  enrollment.
-- **ORC-ENROLL-3** — After a successful enrollment at oracle `i`, the client
-  must compute the wrap `c_ei` from the re-derived share
-  ([KEY-SHARE](keys.md#key-share), [KEY-MASK](keys.md#key-mask)). It must
-  persist the wrap in the machine-local set. It must then erase `s_ei` and the
-  share from memory. The client must erase `K_e` directly after its last use
-  ([SEC-MEMORY](security.md#sec-memory)).
-- **ORC-ENROLL-4** — A passphrase change must re-enroll every record of the
-  machine at every live oracle, without the master. For each slot, `get_pin`
-  with the old pins at any `k` oracles unmasks `k` shares, and the
-  reconstruction yields `K_e` ([ORC-QUORUM](oracle.md#orc-quorum),
-  [KEY-SHARE](keys.md#key-share)). A `set_pin` with the new `pin_ei` at each
-  oracle yields a fresh mask. The client recomputes that oracle's wrap from the
-  re-derived share.
-- **ORC-ENROLL-5** — The client must persist the new wrap of a record before the
-  next `set_pin`. The loop order is each slot in turn, and inside a slot each
-  oracle in list order. The canary records come last (ORC-ENROLL-10).
-- **ORC-ENROLL-6** — The client must re-enroll the canary record of each oracle
-  the same way. It must seal that oracle's canary check value under the fresh
-  canary check seal key ([KEY-MASK](keys.md#key-mask)). It must re-wrap that
-  oracle's index share from the re-derived `share(K_idx, i)` under the fresh
-  canary mask. `K_idx` is in session memory from the index read
-  ([KEY-MASK](keys.md#key-mask)). Without `K_idx`, the client must delete each
-  affected index wrap file (ORC-CANARY-8), and the report must name the
-  provisioning ceremony ([CER-PROVISION](ceremonies.md#cer-provision)).
-- **ORC-ENROLL-7** — A passphrase change runs on one machine, over that
-  machine's own records. Each other machine keeps the old passphrase on its own
-  records until the change runs on that machine.
-- **ORC-ENROLL-8** — The passphrase change must read the new passphrase twice
-  with `readpassphrase(3)` and must require a match. On the initial run, the
-  change must verify the old passphrase against the canary record of each live
-  oracle before the first re-enrollment ([ORC-CANARY](oracle.md#orc-canary)). A
-  resumed run verifies per ORC-ENROLL-10. The client must re-enroll a canary
-  that fails for record-side causes (ORC-CANARY-5) before the change starts.
-- **ORC-ENROLL-9** — Before the first `set_pin` of a slot, the client must
-  verify the reconstructed `K_e`. The check is a decrypt of that slot's entry or
-  slot file ([VAULT-SEAL](vault.md#vault-seal)). For the canary phase, the
-  verification is the canary check decrypt of ORC-ENROLL-8. On a decrypt failure
-  with an untried reachable oracle, the tool can retry with a different quorum.
-  It runs the canary check of each substitute oracle first (ORC-QUORUM-5). A
-  decrypt failure with no untried reachable oracle must stop the change before
-  any `set_pin` of that slot. The client must report the failing slot and each
-  quorum used. The change stays incomplete, and the marker records the progress
-  (ORC-ENROLL-10).
-- **ORC-ENROLL-10** — The client must persist the change marker with the kind
-  `passphrase` in the machine-local set ([VAULT-LAYOUT](vault.md#vault-layout)).
-  The marker holds the list of re-enrolled records by record name
-  ([VAULT-FORMAT](vault.md#vault-format)). The client must persist the marker
-  before the first `set_pin` of the change. The client must append a record's
-  done line after that record's persisted writes, and before the next `set_pin`.
-  Those writes are the wrap (ORC-ENROLL-5). For a canary, they also are the seal
-  and the index wrap (ORC-ENROLL-6, ORC-CANARY-11). While the marker exists, a
-  session must refuse reveals and must name the resume command. A restarted
-  change must resume at the first unmigrated record. It uses the new pin for
-  every record in the marker list, and the old pin for every other record. A
-  resumed change must read both passphrases again. It must verify the old
-  passphrase at the canary of each oracle whose canary is not in the marker
-  list. It must verify the new passphrase at each canary in the marker list. The
-  client must remove the marker after the last re-enrollment. The canary records
-  re-enroll last, one per oracle. An interrupted change therefore still verifies
-  with the old passphrase at every oracle whose canary is unmigrated.
-- **ORC-ENROLL-11** — A passphrase change needs every live oracle reachable.
-  With a live oracle unreachable, the change stays incomplete, and the marker
-  stays. A change that starts with fewer than `k` reachable oracles must stop
-  before the marker write and before the first re-enrollment
-  ([ORC-QUORUM](oracle.md#orc-quorum)). Sessions refuse reveals until the change
-  completes, or until a plate ceremony removes the marker (ORC-ENROLL-12). The
-  quorum availability claim covers reveals only
-  ([OVW-RISKS](overview.md#ovw-risks)).
-- **ORC-ENROLL-12** — A plate ceremony that re-enrolls every record of this
-  machine under one passphrase must remove the change marker. The ceremony
-  report must name the removal (CER-PROVISION-17). This ceremony is the recovery
-  path for a change blocked by a lost oracle.
-
-A `set_pin` on an existing record replaces the record's key material at the
-oracle. No oracle operation returns an old mask of that record (FuguOracle
-OPS-SET-3 and FuguOracle OPS-SET-4). A `set_pin` also re-creates a missing
-record: to the oracle, the request is a normal enrollment (FuguOracle
-OPS-SET-2). A crash between a re-enrollment and its wrap write therefore loses
-the wrap of one record at one oracle. The record recovers from the plate, never
-from an oracle ([REC-WIPE](recovery.md#rec-wipe)). A crash between a record's
-persisted writes and its done line leaves that one record migrated but unlisted.
-The resume then addresses it with the old pin, and each attempt burns one strike
-(FuguOracle OPS-GET-5). The record recovers by quorum substitution and a fresh
-`set_pin` (ORC-ENROLL-9). The ordering rule ORC-ENROLL-5 bounds the loss to one
-record at one oracle.
-
-<a id="orc-reveal"></a>
-
-## The reveal
-
-- **ORC-REVEAL-1** — A reveal of a record at oracle `i` is one `get_pin` request
-  under the record's client key `ck_ei`, with `pin_ei` as `pin_secret`.
-- **ORC-REVEAL-2** — On a correct pin, the answer is the mask `s_ei`, stable for
-  an unchanged record: identical bytes on every correct request. Stability is a
-  consequence of FuguOracle OPS-GET-4, never a stated interface guarantee.
-  [TEST-MASK](testing.md#test-mask) pins it by test.
-- **ORC-REVEAL-3** — The client must unmask oracle `i`'s share as
-  `share(K_e, i) = c_ei ⊕ f(s_ei, "fugupass/v1/wrap" ‖ i/e)`
-  ([KEY-MASK](keys.md#key-mask)). [ORC-QUORUM](oracle.md#orc-quorum) governs the
-  reconstruction and the entry decrypt.
-- **ORC-REVEAL-4** — A wrong passphrase, a missing or wiped record, and a
-  counter violation all return junk, indistinguishable by response bytes
-  (FuguOracle OPS-JUNK-2). The only failure signal is the client's own decrypt
-  failure, and the client cannot learn the cause from the response bytes.
-- **ORC-REVEAL-5** — The third wrong attempt on a record destroys that record's
-  key material at the oracle (FuguOracle OPS-GET-6). The entry still reveals
-  while `k` live records remain for it ([ORC-QUORUM](oracle.md#orc-quorum)).
-  Recovery of the record is a plate ceremony or the re-enrollment loop of a
-  passphrase change ([REC-WIPE](recovery.md#rec-wipe)).
-- **ORC-REVEAL-6** — An HTTP error status is not an attempt, and the request is
-  retryable. An attempt that the oracle cannot count receives no answer
-  (FuguOracle OPS-GET-7). A transport failure after the client sends the request
-  is ambiguous. The oracle persists a record change before it sends the response
-  (FuguOracle OPS-GET-7), so a lost response can follow a counted attempt. The
-  client must report an HTTP error, a transport failure, and a junk answer as
-  distinct states, with distinct user reports.
-- **ORC-REVEAL-7** — `K_e` must exist in memory for seconds only, and `M` must
-  not appear in a reveal ([SEC-MEMORY](security.md#sec-memory)).
-- **ORC-REVEAL-8** — A `200` response whose envelope MAC or decrypt fails is an
-  oracle-authentication failure. It is a distinct client state: it is not a junk
-  answer, and it does not prove that the oracle skipped the attempt. The tool
-  must report it as a provisioning or transport fault, distinct from the junk
-  report and from the HTTP-error report.
-
-<a id="orc-quorum"></a>
-
-## The quorum
-
-- **ORC-QUORUM-1** — A reveal of an entry needs the typed passphrase plus the
-  masks of any `k` oracles of the set (D-06, D-20,
-  [KEY-SHARE](keys.md#key-share)).
-- **ORC-QUORUM-2** — The client must select the session quorum from the
-  reachable oracles, in list order. While `k` or more reachable oracles hold
-  live index wraps on this machine, the client must prefer those oracles
-  (ORC-CANARY-8). The client must verify the canary of each quorum oracle before
-  any entry record of that oracle ([ORC-CANARY](oracle.md#orc-canary)).
-- **ORC-QUORUM-3** — For each quorum oracle `i`, an entry reveal sends one
-  `get_pin` under `ck_ei` with `pin_ei` ([ORC-REVEAL](oracle.md#orc-reveal)) and
-  unmasks that oracle's share ([KEY-MASK](keys.md#key-mask)).
-- **ORC-QUORUM-4** — After `k` unmasked shares, the client must reconstruct
-  `K_e` by interpolation at `x = 0` ([KEY-SHARE](keys.md#key-share)) and must
-  decrypt the entry file under `K_e` ([VAULT-SEAL](vault.md#vault-seal)). The
-  decrypt failure is the only junk detector, and it does not name the failing
-  oracle.
-- **ORC-QUORUM-5** — A decrypt failure or a failed request can happen at a
-  quorum oracle. A request fails at the oracle
-  ([ORC-REVEAL](oracle.md#orc-reveal)). It also fails at this machine, at a
-  record with no greater counter (ORC-COUNTER-5). The tool can then substitute
-  the next reachable oracle, after the canary check of that oracle. The tool
-  must try each reachable oracle at most once per reveal as a substitute. It
-  must stop the substitutions when no untried reachable oracle remains. Every
-  failure report must name the quorum oracles of the attempt.
-- **ORC-QUORUM-6** — With fewer than `k` reachable oracles, the tool must
-  perform no reveal. It must report the state of each oracle, with the distinct
-  states of [ORC-REVEAL](oracle.md#orc-reveal).
-- **ORC-QUORUM-7** — With `k = 1`, the quorum is one oracle, and the reveal is
-  one `get_pin`. This is the general rule, not a special case.
-- **ORC-QUORUM-8** — A record of this machine is one slot at one oracle
-  ([ORC-RECORDS](oracle.md#orc-records)). The tool must count one request of
-  each quorum record, before it sends that request. One session must send no
-  third request to one record, because the third wrong attempt destroys that
-  record (ORC-REVEAL-5). The tool must stop the reveal before the third request,
-  and the report must name the slot and the oracle of that record.
-
-A junk answer from one quorum oracle yields a wrong share, and the
-reconstruction then fails the entry decrypt. The response bytes attribute
-nothing (FuguOracle OPS-JUNK-2). The canary check verifies the passphrase at
-each quorum oracle. An entry decrypt failure therefore signals a missing, wiped,
-or desynchronized record, or a stale wrap on this machine. Strikes move only on
-a pin that the record was not enrolled under (FuguOracle OPS-GET-2, FuguOracle
-OPS-GET-5). A retry with the session's verified pin therefore burns no strike at
-a healthy record. A record enrolled under a different pin burns one strike per
-attempt, and ORC-QUORUM-8 bounds the requests per record per session.
-
-<a id="orc-canary"></a>
-
-## The canary
-
-- **ORC-CANARY-1** — The client must verify the typed passphrase against the
-  canary record of each oracle that the session uses. It must do this before any
-  entry record of that oracle (D-08). A typo burns canary strikes only, per
-  oracle.
-- **ORC-CANARY-2** — The canary check value is a fixed constant of 32 zero
-  bytes. The tool seals it once per oracle, in the vault seal format
-  ([VAULT-SEAL](vault.md#vault-seal)), under that oracle's canary check seal key
-  ([KEY-MASK](keys.md#key-mask)). It stores each seal in the machine-local set
-  ([VAULT-LAYOUT](vault.md#vault-layout)).
-- **ORC-CANARY-3** — The canary masks also wrap the index-key shares
-  ([KEY-MASK](keys.md#key-mask)). The session's `k` canary `get_pin` requests
-  verify the passphrase. While the session quorum covers `k` live index wraps of
-  this machine, the same requests also open the index.
-- **ORC-CANARY-4** — The client must verify the canaries one oracle at a time,
-  in quorum order. It must stop at the first canary decrypt failure, before it
-  touches any entry record. A failure at the first canary is cause-ambiguous:
-  the report must name the typo case and the per-oracle causes (ORC-CANARY-9). A
-  failure after a pass at another oracle excludes the typo: the report must name
-  the record-side causes of that oracle only. A re-run can exclude a suspect
-  oracle from the quorum when more than `k` oracles are reachable.
-- **ORC-CANARY-5** — A canary record guards nothing derived from the master. The
-  client can re-enroll a wiped canary with `set_pin` at any time, without a
-  ceremony.
-- **ORC-CANARY-6** — A canary enrollment must read the passphrase twice and must
-  require a match. The tool must warn that no verifier exists when this session
-  verified the typed passphrase against no canary record. The tool must not warn
-  when the unlock of this session verified that passphrase (ORC-CANARY-1).
-- **ORC-CANARY-7** — The client must verify a fresh canary with one immediate
-  `get_pin` round trip before the session proceeds.
-- **ORC-CANARY-8** — A canary re-enrollment at oracle `i` replaces that oracle's
-  canary mask. This machine's index wrap of oracle `i` is then dead. A client
-  that holds `K_idx` in session memory must re-wrap at once. It must re-derive
-  `share(K_idx, i)` ([KEY-SHARE](keys.md#key-share)) and must wrap it under the
-  fresh canary mask ([KEY-MASK](keys.md#key-mask)). A session that opens the
-  index and holds `K_idx` must re-wrap every dead index wrap of this machine at
-  once. A client without `K_idx` must delete this machine's index wrap file of
-  oracle `i` ([VAULT-LAYOUT](vault.md#vault-layout)), so the dead state is
-  detectable. A re-enrollment that fails after the `set_pin` must also delete
-  that file. The index opens while the session quorum covers `k` live index
-  wraps of this machine (ORC-QUORUM-2). While the quorum cannot cover `k` live
-  index wraps, the session cannot resolve an entry name. The tool must report
-  each dead or unreachable index wrap, and must name the provisioning ceremony
-  ([CER-PROVISION](ceremonies.md#cer-provision)). Entry records and entry wraps
-  stay valid throughout.
-- **ORC-CANARY-9** — A canary junk answer is cause-ambiguous like every junk
-  answer. The tool must report the ambiguity. A wrong passphrase, a wiped
-  canary, and a counter desync look identical by response bytes. A stale canary
-  check seal on this machine yields the same decrypt failure.
-- **ORC-CANARY-10** — The documentation must state the mass-strike consequence
-  of a poisoned canary enrollment. A ceremony that enrolls canaries under a
-  mistyped passphrase accepts that mistyped passphrase at every canary of that
-  ceremony. The entry reveals of the session then burn strikes at each quorum
-  oracle.
-- **ORC-CANARY-11** — After a canary enrollment at oracle `i` and its
-  verification round trip, the client must seal the canary check value. The seal
-  key is that oracle's fresh canary check seal key
-  ([KEY-MASK](keys.md#key-mask)). The client must persist the seal
-  ([VAULT-ATOMIC](vault.md#vault-atomic)). This rule applies to every canary
-  enrollment: at a ceremony, after a wipe, and at a passphrase change.
-
-The double read stops a single typo at enrollment. The immediate `get_pin` round
-trip proves that the record answers with the enrolled mask. Neither check
-detects a passphrase mistyped the same way twice.
-
-<a id="orc-revoke"></a>
-
-## Revocation
-
-- **ORC-REVOKE-1** — No oracle operation freezes a record. The specification and
-  the documentation must not claim a freeze capability (D-03).
-- **ORC-REVOKE-2** — Revocation has exactly three paths. The first is a
-  deliberate strike-burn, or a `set_pin` replacement under regenerated client
-  keys. The others are an operator service stop, and operator deletion of named
-  record files.
-- **ORC-REVOKE-3** — An owner who can derive a machine's client keys can destroy
-  or lock that machine's records at each oracle over the wire. The paths are one
-  wrong attempt per record at the revocation counter, or one `set_pin`
-  replacement per record (ORC-REVOKE-8). The owner chooses each oracle. No
-  oracle operation reverses either path.
-- **ORC-REVOKE-4** — The plate regenerates the device factor and the client keys
-  of any machine name ([KEY-DEVICE](keys.md#key-device)). The owner can
-  therefore run the strike-burn path from the plate, after a total loss of the
-  stolen machine. The strike-burn path retires that machine name at each oracle
-  where it lands (ORC-REVOKE-11).
-- **ORC-REVOKE-5** — An operator of a self-hosted oracle can stop the service. A
-  service stop is reversible, and it affects every machine. The operator can
-  delete named record files. No oracle operation reverses a deletion, and a
-  deletion needs the revocation kit.
-- **ORC-REVOKE-6** — The tool must produce the revocation kit of a machine on
-  demand, on the standard output. The tool must not store a kit. A stored kit is
-  a copy of derived data, and each refill makes it stale
-  ([CER-REFILL](ceremonies.md#cer-refill)). The kit holds the machine name, and
-  the record file names of each position of the config, live or retired
-  ([VAULT-CONFIG](vault.md#vault-config)). Each live position carries its URL,
-  and a retired position carries the word `retired` in its place. A record file
-  name is the lowercase hex of the hash of the record's compressed public key,
-  with the suffix `.pin` (FuguOracle STORE-KEYS-3). Client keys carry the oracle
-  index ([KEY-CLIENT](keys.md#key-client)), so each oracle holds different
-  record names. Record names are not secret.
-- **ORC-REVOKE-7** — The documentation must state that the operator paths need a
-  self-hosted or cooperative operator. It must state that a saved copy of the
-  kit is a snapshot (ORC-REVOKE-6), and that the operator regenerates the kit
-  before a revocation.
-- **ORC-REVOKE-8** — A revocation request must send the counter value
-  `0xFFFFFFFF`. This value passes anti-replay against every lower stored
-  counter, so an attacker who raises a record's stored counter cannot block
-  revocation. A `set_pin` replacement at this value replaces the record's key
-  material at the oracle and resets the stored counter (FuguOracle OPS-SET-4).
-  One wrong attempt at this value burns one strike and locks the record. A lock
-  that is the first or the second strike of the record keeps its file at the
-  oracle (FuguOracle OPS-GET-5). No later request of that record passes
-  anti-replay, and the record answers junk to every caller. Only the operator
-  paths remove a kept file. A lock that is the third strike wipes the record
-  (FuguOracle OPS-GET-6). The oracle then accepts an enrollment of that record
-  name (FuguOracle OPS-SET-2). The lock retires the machine name at that oracle
-  (ORC-REVOKE-11).
-- **ORC-REVOKE-9** — The runbook must state the FuguOracle restore residual. A
-  filesystem restore of the records directory rewinds records to the backup
-  time. A restore from a pre-revocation backup therefore revives revoked records
-  (FuguOracle DEPLOY-BACKUP-4). The operator restores records only after an
-  incident review.
-- **ORC-REVOKE-10** — To deny a stolen machine a quorum, the owner locks that
-  machine's records at enough live oracles. At most `k − 1` live oracles must
-  stay unlocked. The owner uses the counter-sentinel path of ORC-REVOKE-8 at
-  each of those oracles. With the full set of `n` live oracles, the count is
-  `n − k + 1` locks. Locks at every oracle are not necessary: the locks leave at
-  most `k − 1` obtainable masks per entry.
-- **ORC-REVOKE-11** — A lock retires the machine name at that oracle. The stored
-  counter of a kept record is the highest value, so no later `set_pin` of that
-  record passes anti-replay there (FuguOracle OPS-SET-2). A wiped record leaves
-  no file, so the oracle accepts a `set_pin` of that record name (FuguOracle
-  OPS-SET-2). The tool must mark the name retired in the machine registry
-  ([VAULT-INDEX](vault.md#vault-index)). The mark keeps this vault from that
-  enrollment. A retired name must not provision again
-  ([CER-PROVISION](ceremonies.md#cer-provision)), and a replacement machine
-  provisions under a new name.
-- **ORC-REVOKE-12** — The revocation report must direct the owner to lock or
-  delete the remaining records of the retired name at every other oracle. It
-  must also direct the owner to a passphrase change on every other machine when
-  the passphrase may be known ([ORC-ENROLL](oracle.md#orc-enroll)).
-
-The `kit` subcommand of [PROG-ONESHOT](programs.md#prog-oneshot) produces the
-kit of this machine, or of a named machine from the plate. An attacker who first
-raises a record's stored counter to `0xFFFFFFFF` locks that record for every
-caller. A locked record denies its mask to the attacker too. The revocation
-paths destroy or deny records, never data: every entry recovers from the plate
-([REC-WIPE](recovery.md#rec-wipe)).
-
-A lock at the third strike of a record is a wipe (FuguOracle OPS-GET-6). A wipe
-unlinks the file, and a fresh `set_pin` re-creates the record (REC-WIPE-3). A
-lock at the first or the second strike keeps the file with the highest counter.
-The oracle then rejects every later request for that record. Only the operator
-paths remove a kept file.

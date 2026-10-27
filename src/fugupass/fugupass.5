@@ -1,0 +1,92 @@
+.\"	$OpenBSD$
+.\"
+.\" Copyright (c) 2026 Dick Olsson <hi@senzilla.io>
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate: October 27 2026 $
+.Dt FUGUPASS 5
+.Os
+.Sh NAME
+.Nm fugupass
+.Nd FuguPass vault directory
+.Sh DESCRIPTION
+This page describes each file of a vault directory of
+.Xr fugupass 1 .
+Each path below sits inside the vault directory.
+.Bl -tag -width "machine/wrap.index.i" -compact
+.It Pa index
+the sealed index of the vault
+.It Pa machine/canary.\& Ns Ar i
+the canary check seal of oracle
+.Ar i
+.It Pa machine/change
+the marker of an incomplete passphrase change or threshold change
+.It Pa machine/config
+the config file of this machine, plaintext
+.It Pa machine/counters
+the last counter of each record of this machine
+.It Pa machine/factor
+the device factor of this machine
+.It Pa machine/wrap.index.\& Ns Ar i
+this machine's index wrap of oracle
+.Ar i
+.It Pa machine/wrap.\& Ns Ar e Ns Pa \&.\& Ns Ar i
+this machine's wrap of slot
+.Ar e
+at oracle
+.Ar i
+.El
+.Pp
+The sealed file of one entry, and the sealed file of one free slot,
+each take the lowercase hex of the hash of the slot key as the file
+name.
+A listing of the vault directory therefore names no entry.
+.Ss The config file
+The config file is plaintext, and it holds no secret.
+A copy of it leaks the oracle list, the threshold, the machine name,
+the plate check value, and the tunables.
+A holder of the plate check value can confirm that a candidate plate
+belongs to this vault.
+.Ss The counters file
+The counters file holds the last counter of each record of this
+machine, and it holds no secret.
+The next request of a record sends the wall clock or the stored
+value plus one, whichever is higher.
+The loss of the file is therefore safe.
+Three residual risks remain.
+A machine with a stale clock and a lost counters file sends a counter
+below the stored one.
+The oracle then answers junk, and it burns no strike.
+A junk answer names no cause: a low counter, a wrong passphrase, and
+a wiped record give the same bytes.
+An envelope captured before a re-enrollment replays until the stored
+counter passes its value.
+.Ss Copies between machines
+FuguPass defines no sync protocol and no write coordination between
+machines.
+Two machines that create an entry at the same time can consume one
+slot twice.
+A later file copy then overwrites the file of one entry.
+A refill on a machine with a stale index can reserve the slot indexes
+that a refill of another machine reserved.
+Create each entry and run each refill on one machine,
+the minting machine.
+Copy the shared set from that machine to every other machine.
+.Sh SEE ALSO
+.Xr fugupass 1 ,
+.Xr fugupass 7 ,
+.Xr fugupass-ceremony 7 ,
+.Xr fugupass-session 7
+.Sh AUTHORS
+.An Dick Olsson Aq Mt hi@senzilla.io

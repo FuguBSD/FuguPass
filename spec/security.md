@@ -33,7 +33,7 @@ needs an ephemeral keypair and a fresh IV. Every seal write needs a fresh nonce.
 That randomness is ephemeral or public, never a stored secret. The derived
 device factor lets the plate regenerate the client keys of every machine.
 Revocation from the plate rests on that property (see
-[ORC-REVOKE](oracle.md#orc-revoke)).
+[ORC-REVOKE](oracle-quorum.md#orc-revoke)).
 
 <a id="sec-memory"></a>
 
@@ -96,8 +96,8 @@ and the client public keys, and one decrypted record hash tests every guess. The
 verifier case (SEC-FLOOR-2) assumes this breach at one oracle, and the loss case
 (SEC-FLOOR-3) assumes the same breach at `k` oracles. A breached record of a
 retired or removed oracle counts toward the `k`-breach bound until the owner
-destroys it by the revocation paths ([ORC-REVOKE](oracle.md#orc-revoke)). A
-breached record of a retired position is still a passphrase verifier.
+destroys it by the revocation paths ([ORC-REVOKE](oracle-quorum.md#orc-revoke)).
+A breached record of a retired position is still a passphrase verifier.
 `bcrypt_pbkdf(3)` sets the cost of one guess, with the tunable round count of
 [KEY-PIN](keys.md#key-pin). The round-count calibration is a test duty
 ([TEST-CALIBRATE](testing.md#test-calibrate)).
@@ -120,7 +120,7 @@ breached record of a retired position is still a passphrase verifier.
   runbook must cover the provisioning of each oracle of the set, the example
   2-of-3 topology, and log reading at each oracle. It must also cover the log
   coverage of every possible quorum (SEC-DETECT-6), and revocation
-  ([ORC-REVOKE](oracle.md#orc-revoke)).
+  ([ORC-REVOKE](oracle-quorum.md#orc-revoke)).
 - **SEC-DETECT-6** — The documentation must state the coverage bound: an
   attacker with the machine's disk and the passphrase selects its own quorum.
   Guaranteed log coverage therefore needs logs at enough live oracles that every
@@ -129,9 +129,9 @@ breached record of a retired position is still a passphrase verifier.
 
 The observable signals are the request count and the wipe events. Each entry
 reveal is one `get_pin` request at each of `k` quorum oracles
-([ORC-QUORUM](oracle.md#orc-quorum)). Each quorum oracle's daily log volume
-therefore tracks the full reveal volume. An oracle outside the session quorum
-sees nothing. A prominent wipe line marks a burned record.
+([ORC-QUORUM](oracle-quorum.md#orc-quorum)). Each quorum oracle's daily log
+volume therefore tracks the full reveal volume. An oracle outside the session
+quorum sees nothing. A prominent wipe line marks a burned record.
 
 <a id="sec-claims"></a>
 
@@ -146,7 +146,7 @@ sees nothing. A prominent wipe line marks a burned record.
   beyond protocol v2 as the FuguOracle specification states it (D-03).
 
 The word "freeze" names no oracle operation. The honest term is revocation, and
-[ORC-REVOKE](oracle.md#orc-revoke) lists the three paths that exist. The
+[ORC-REVOKE](oracle-quorum.md#orc-revoke) lists the three paths that exist. The
 FuguOracle specification defines the junk, strike, and wipe semantics exactly. A
 claim beyond that behavior misleads the user about the window between theft and
 revocation. A test reads every manual page and every document under `docs/` for

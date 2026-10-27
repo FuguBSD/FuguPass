@@ -23,7 +23,8 @@ This document cites it and does not restate it.
   medium, and the restore path. The table above is the complete list.
 - **ENTRY-MODEL-3** — An entry has no policy attribute. Every entry reveal is
   the vault passphrase plus any `k` of the `n` oracle masks for that entry,
-  through this machine's records (D-06, [ORC-QUORUM](oracle.md#orc-quorum)).
+  through this machine's records (D-06,
+  [ORC-QUORUM](oracle-quorum.md#orc-quorum)).
 
 Origin and custody stay orthogonal: the classes differ in backup and in restore,
 and every class reveals through the same oracle gate. A derived secret restores
@@ -73,7 +74,8 @@ and the oracles are all gone.
 A site can reject the PWD BASE64 character set. The site policy transform in the
 password metadata maps the derived password onto the site's rules. As an
 alternative, the user creates the entry as stored-origin. A mnemonic entry
-renders as a SeedQR code for a signer to scan ([PROG-QR](programs.md#prog-qr)).
+renders as a SeedQR code for a signer to scan
+([PROG-QR](programs-helpers.md#prog-qr)).
 [ENTRY-SHADOW](entries.md#entry-shadow) specifies shadow entries and the audit.
 
 <a id="entry-rotation"></a>
@@ -92,9 +94,9 @@ renders as a SeedQR code for a signer to scan ([PROG-QR](programs.md#prog-qr)).
 - **ENTRY-ROTATION-4** — Rotation of a stored entry seals the new secret in
   place, in the entry's own slot.
 - **ENTRY-ROTATION-5** — The `gen` command must rotate a derived entry of a name
-  that the index holds ([PROG-REPL](programs.md#prog-repl)). The `add` command
-  must rotate a stored entry of such a name. FuguPass holds no other rotation
-  command.
+  that the index holds ([PROG-REPL](programs-commands.md#prog-repl)). The `add`
+  command must rotate a stored entry of such a name. FuguPass holds no other
+  rotation command.
 - **ENTRY-ROTATION-6** — A rotation must carry each metadata field of the
   current version into the entry file of the new version. A field of the command
   line replaces the carried value of that field. The tool writes the type, the
@@ -118,22 +120,23 @@ old slot's entry key ([REC-VAULT](recovery.md#rec-vault)).
   [CER-REFILL](ceremonies.md#cer-refill)). A pooled slot consists of a reserved
   slot index, and a sealed slot file with both materialized candidates
   ([KEY-BIP85](keys.md#key-bip85)). It also holds an enrolled record at each
-  oracle ([ORC-ENROLL](oracle.md#orc-enroll)), and this machine's wraps, one per
-  oracle ([KEY-MASK](keys.md#key-mask)). The slot index is also the BIP85 index.
+  oracle ([ORC-ENROLL](oracle-enrollment.md#orc-enroll)), and this machine's
+  wraps, one per oracle ([KEY-MASK](keys.md#key-mask)). The slot index is also
+  the BIP85 index.
 - **ENTRY-POOL-2** — The default pool size is 64 slots. The pool size is tunable
   (D-12).
 - **ENTRY-POOL-3** — Every new entry, of any origin class, consumes the lowest
   free slot. This machine must hold wraps at `k` or more live oracles for that
-  slot ([KEY-MASK](keys.md#key-mask), [ORC-QUORUM](oracle.md#orc-quorum)). When
-  free slots remain and no such slot exists on this machine, the tool must
-  refuse the entry. The refusal must name machine provisioning
-  ([CER-PROVISION](ceremonies.md#cer-provision)) or the refill ceremony
-  ([CER-REFILL](ceremonies.md#cer-refill)).
+  slot ([KEY-MASK](keys.md#key-mask),
+  [ORC-QUORUM](oracle-quorum.md#orc-quorum)). When free slots remain and no such
+  slot exists on this machine, the tool must refuse the entry. The refusal must
+  name machine provisioning ([CER-PROVISION](ceremonies.md#cer-provision)) or
+  the refill ceremony ([CER-REFILL](ceremonies.md#cer-refill)).
 - **ENTRY-POOL-4** — Entry creation performs one reveal of the consumed slot
-  ([ORC-QUORUM](oracle.md#orc-quorum)): `k` `get_pin` requests, one per quorum
-  oracle. The reveal opens the slot file. The tool must keep the candidate that
-  the entry type needs. The tool must then seal the secret and the metadata as
-  the entry file. Entry creation is one quorum event.
+  ([ORC-QUORUM](oracle-quorum.md#orc-quorum)): `k` `get_pin` requests, one per
+  quorum oracle. The reveal opens the slot file. The tool must keep the
+  candidate that the entry type needs. The tool must then seal the secret and
+  the metadata as the entry file. Entry creation is one quorum event.
 - **ENTRY-POOL-5** — The slot's oracle records continue unchanged as the entry's
   records, one per oracle. Consumption must not change a record. Consumption
   must not change a wrap.
@@ -166,11 +169,11 @@ it discards both candidates.
 - **ENTRY-SHADOW-2** — Shadow metadata seals under the slot key `K_e` with the
   oracle-gated wraps, like every other entry ([KEY-MASK](keys.md#key-mask)).
 - **ENTRY-SHADOW-3** — A read of shadow metadata is an oracle-gated reveal
-  ([ORC-QUORUM](oracle.md#orc-quorum)). The plate audit therefore needs a
+  ([ORC-QUORUM](oracle-quorum.md#orc-quorum)). The plate audit therefore needs a
   reachable oracle quorum.
 - **ENTRY-SHADOW-4** — The audit command lists the shadow entries whose
   verification date is older than a tunable age
-  ([PROG-REPL](programs.md#prog-repl)).
+  ([PROG-REPL](programs-commands.md#prog-repl)).
 - **ENTRY-SHADOW-5** — The audit reads shadow metadata only.
 - **ENTRY-SHADOW-6** — The default audit age is 365 days. The config file holds
   the tunable value ([VAULT-CONFIG](vault.md#vault-config)).

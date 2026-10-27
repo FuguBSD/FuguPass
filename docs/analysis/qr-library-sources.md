@@ -15,8 +15,9 @@ for the record of each library, with the provenance of it and the license of it.
 This record owns the evaluation: the candidates, the ports provenance of each,
 the license of each, and the reason of each pick. `src/quirc/SOURCE.md` owns the
 copy of the decoder in this tree: the release, the files and the digest of each
-one (PROG-BUILD-5). `spec/programs.md` owns each rule. The manual page of each
-helper states what its program does, and it points at these records.
+one (PROG-BUILD-5). `spec/programs.md` and `spec/programs-helpers.md` own each
+rule. The manual page of each helper states what its program does, and it points
+at these records.
 
 FuguPass runs on an air-gapped machine (PROG-PORT). A package of the ports tree
 costs the run dependencies of it as well, and each dependency reaches that

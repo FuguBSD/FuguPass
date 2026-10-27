@@ -23,8 +23,10 @@
 #
 # bsd.prog.mk derives the manual page name from PROG, and that
 # default names fugupass.1 alone. This directory also holds
-# fugupass.7, the limits of the design and the operator runbook, so
-# MAN names the two pages.
+# fugupass.5, the files of the vault directory, fugupass.7, the
+# limits of the design and the operator runbook, fugupass-session.7,
+# the session, and fugupass-ceremony.7, the steps of each ceremony.
+# MAN therefore names the five pages.
 #
 # The archive of lib holds every other source of the program, and
 # this file links it with the library list of that archive.
@@ -40,7 +42,8 @@
 
 PROG=		fugupass
 SRCS=		fugupass.c
-MAN=		fugupass.1 fugupass.7
+MAN=		fugupass.1 fugupass.5 fugupass.7 fugupass-session.7 \
+		fugupass-ceremony.7
 
 .PATH:		${.CURDIR}/..
 

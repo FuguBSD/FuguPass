@@ -14,7 +14,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: September 26 2026 $
+.Dd $Mdocdate: October 27 2026 $
 .Dt FUGUPASS 7
 .Os
 .Sh NAME
@@ -26,7 +26,13 @@ and a set of oracles.
 This page states what an attacker gets from each artifact, where the
 protection ends, and what the owner and each oracle operator do.
 .Xr fugupass 1
-holds the commands, the files, and the reports.
+holds the commands, and
+.Xr fugupass 5
+holds the files.
+.Xr fugupass-session 7
+and
+.Xr fugupass-ceremony 7
+hold the session, the ceremonies, and the reports.
 .Pp
 Five artifacts exist.
 The shared set is the ciphertext of the index and of each entry file.
@@ -244,7 +250,7 @@ oracle and when.
 A network attacker drops or delays the answers.
 The oracle rejects a replayed envelope by its counter, and only an
 envelope captured before a re-enrollment replays.
-.Xr fugupass 1
+.Xr fugupass 5
 states the bound of that replay.
 Run each oracle behind TLS.
 .Ss The 2-of-3 example
@@ -390,7 +396,10 @@ that oracle.
 .Xr fugupass 1 ,
 .Xr bcrypt_pbkdf 3 ,
 .Xr syslog 3 ,
+.Xr fugupass 5 ,
 .Xr syslog.conf 5 ,
+.Xr fugupass-ceremony 7 ,
+.Xr fugupass-session 7 ,
 .Xr fuguoracle 8 ,
 .Xr fuguoracle-keygen 8
 .Sh AUTHORS
